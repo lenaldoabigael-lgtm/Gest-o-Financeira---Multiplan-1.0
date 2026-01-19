@@ -18,21 +18,30 @@ const App: React.FC = () => {
   const [appUsers, setAppUsers] = useState<User[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [dbNeedsSetup, setDbNeedsSetup] = useState(false);
-  
-  // Novo Estado: Conta Bancária Ativa para as abas
+  const [errorType, setErrorType] = useState<'SCHEMA_HIDDEN' | 'TABLES_MISSING' | null>(null);
   const [activeAccount, setActiveAccount] = useState<string>('TODAS');
 
   const fetchData = async () => {
     setIsLoading(true);
-    setDbNeedsSetup(false);
+    setErrorType(null);
     try {
-      const { data: usersData, error: uErr } = await supabase.from('users').select('*');
+      // Teste de conexão básico
+      const { data: usersData, error: uErr, status } = await supabase.from('users').select('*');
       
-      if (uErr && (uErr.code === '42P01' || uErr.message.includes('schema cache'))) {
-        setDbNeedsSetup(true);
-        setIsLoading(false);
-        return;
+      if (uErr) {
+        console.error("Erro Supabase:", uErr);
+        // PGRST106 significa que o esquema 'public' não está exposto nas configurações da API
+        if (uErr.code === 'PGRST106' || uErr.message.includes('Invalid schema')) {
+          setErrorType('SCHEMA_HIDDEN');
+          setIsLoading(false);
+          return;
+        }
+        // 42P01 significa que a tabela não existe
+        if (uErr.code === '42P01' || status === 406) {
+          setErrorType('TABLES_MISSING');
+          setIsLoading(false);
+          return;
+        }
       }
 
       const [transactionsRes, costCentersRes] = await Promise.all([
@@ -42,6 +51,7 @@ const App: React.FC = () => {
 
       let currentUsers = usersData || [];
       const hasAdmin = currentUsers.some(u => u.login === 'admin');
+      
       if (!hasAdmin && !uErr) {
         const adminUser: User = {
           login: 'admin',
@@ -64,7 +74,8 @@ const App: React.FC = () => {
         })));
       }
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      console.error('Erro crítico:', error);
+      setErrorType('TABLES_MISSING');
     } finally {
       setIsLoading(false);
     }
@@ -74,13 +85,11 @@ const App: React.FC = () => {
     fetchData();
   }, []);
 
-  // Extrair contas únicas das transações para criar as abas
   const accounts = useMemo(() => {
     const unique = Array.from(new Set(transactions.map(t => t.conta || 'GERAL')));
     return ['TODAS', ...unique.sort()];
   }, [transactions]);
 
-  // Filtrar transações baseado na conta selecionada
   const filteredTransactions = useMemo(() => {
     if (activeAccount === 'TODAS') return transactions;
     return transactions.filter(t => (t.conta || 'GERAL') === activeAccount);
@@ -104,69 +113,134 @@ const App: React.FC = () => {
     };
     const { error } = await supabase.from('users').insert(newUser);
     if (error) {
-      alert('Erro no cadastro. Verifique se o SQL de desabilitação de RLS foi executado.');
+      alert('Erro no cadastro. Verifique as configurações do banco.');
       return false;
     }
-    setAppUsers(p => [...p, newUser]);
+    await fetchData();
     alert('Conta criada!');
     return true;
   };
 
-  if (dbNeedsSetup) {
+  if (errorType === 'SCHEMA_HIDDEN') {
     return (
-      <div className="min-h-screen bg-slate-900 text-white p-8 flex flex-col items-center">
-        <div className="max-w-2xl w-full space-y-6">
-          <div className="text-center">
-             <i className="fa-solid fa-triangle-exclamation text-5xl text-yellow-500 mb-4"></i>
-             <h1 className="text-2xl font-bold uppercase">Configuração Inicial Supabase</h1>
-             <p className="text-slate-400 text-sm mt-2">As tabelas ainda não foram criadas no seu projeto Supabase.</p>
+      <div className="min-h-screen bg-slate-900 text-white p-8 flex flex-col items-center justify-center font-sans">
+        <div className="max-w-2xl w-full space-y-8 animate-in fade-in zoom-in duration-500">
+          <div className="text-center space-y-4">
+            <i className="fa-solid fa-lock-open text-6xl text-orange-500 mb-4 animate-bounce"></i>
+            <h1 className="text-3xl font-black uppercase tracking-tighter">Esquema Bloqueado (PGRST106)</h1>
+            <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-xl text-orange-200 text-sm">
+              Sua API do Supabase não está configurada para mostrar o esquema <strong>public</strong>.
+            </div>
           </div>
-          <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-            <pre className="text-[10px] text-green-400 overflow-x-auto whitespace-pre-wrap">
-{`-- COPIE E COLE NO SQL EDITOR DO SUPABASE
-CREATE TABLE IF NOT EXISTS users (login TEXT PRIMARY KEY, senha TEXT NOT NULL, email TEXT, permissions JSONB NOT NULL);
-CREATE TABLE IF NOT EXISTS cost_centers (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), nome TEXT NOT NULL, tipo TEXT NOT NULL, sub_itens TEXT[] DEFAULT '{}');
-CREATE TABLE IF NOT EXISTS transactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), type TEXT NOT NULL, vencimento DATE NOT NULL, pagamento DATE, descricao TEXT NOT NULL, valor NUMERIC(15,2) NOT NULL, "formaPagamento" TEXT NOT NULL, status TEXT NOT NULL, "centroCusto" TEXT NOT NULL, "subItem" TEXT NOT NULL, cliente TEXT, conta TEXT DEFAULT 'GERAL');
 
--- DESABILITAR RLS PARA TESTES (EVITA O ERRO DE SEGURANÇA)
-ALTER TABLE users DISABLE ROW LEVEL SECURITY;
-ALTER TABLE cost_centers DISABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;`}
-            </pre>
+          <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 space-y-6 shadow-2xl">
+            <h2 className="text-xl font-bold flex items-center gap-3">
+              <span className="bg-blue-600 w-8 h-8 rounded-full flex items-center justify-center text-xs">1</span>
+              Como resolver no Painel Supabase:
+            </h2>
+            <ol className="space-y-4 text-slate-300 text-sm list-decimal list-inside">
+              <li>No menu lateral, clique em <i className="fa-solid fa-cog mx-1 text-blue-400"></i> <strong>Settings</strong>.</li>
+              <li>Clique na aba <i className="fa-solid fa-link mx-1 text-blue-400"></i> <strong>API</strong>.</li>
+              <li>Desça até a seção <strong>Data API</strong>.</li>
+              <li>No campo <strong>Exposed schemas</strong>, adicione <strong>"public"</strong>.</li>
+              <li>Clique em <strong>Save</strong> (topo ou rodapé da página).</li>
+            </ol>
+            <p className="text-xs text-slate-500 italic">Após salvar, aguarde 10 segundos e clique no botão abaixo.</p>
           </div>
-          <button onClick={fetchData} className="w-full bg-blue-600 py-3 rounded-lg font-bold uppercase hover:bg-blue-500 transition-all">Verificar Novamente</button>
+
+          <button onClick={fetchData} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-3">
+            <i className="fa-solid fa-sync"></i> Configuração Concluída. Recarregar!
+          </button>
         </div>
       </div>
     );
   }
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><i className="fa-solid fa-spinner fa-spin text-3xl text-blue-900"></i></div>;
+  if (errorType === 'TABLES_MISSING') {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white p-8 flex flex-col items-center justify-center font-sans">
+        <div className="max-w-3xl w-full space-y-8 animate-in fade-in zoom-in duration-500">
+          <div className="text-center space-y-4">
+            <i className="fa-solid fa-database text-6xl text-blue-500 mb-4"></i>
+            <h1 className="text-3xl font-black uppercase tracking-tighter">Tabelas não encontradas</h1>
+            <p className="text-slate-400">Execute o script abaixo no SQL Editor do Supabase para criar a estrutura:</p>
+          </div>
+
+          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4 shadow-2xl">
+            <pre className="bg-black/50 p-4 rounded-lg text-[11px] text-green-400 overflow-x-auto border border-white/5 max-h-64 leading-relaxed font-mono">
+{`CREATE TABLE IF NOT EXISTS users (login TEXT PRIMARY KEY, senha TEXT NOT NULL, email TEXT, permissions JSONB NOT NULL);
+CREATE TABLE IF NOT EXISTS cost_centers (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), nome TEXT NOT NULL, tipo TEXT NOT NULL, sub_itens TEXT[] DEFAULT '{}');
+CREATE TABLE IF NOT EXISTS transactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), type TEXT NOT NULL, vencimento DATE NOT NULL, pagamento DATE, descricao TEXT NOT NULL, valor NUMERIC(15,2) NOT NULL, "formaPagamento" TEXT NOT NULL, status TEXT NOT NULL, "centroCusto" TEXT NOT NULL, "subItem" TEXT NOT NULL, cliente TEXT, conta TEXT DEFAULT 'GERAL');
+
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE cost_centers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;`}
+            </pre>
+          </div>
+
+          <button onClick={fetchData} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-xl uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-3">
+            <i className="fa-solid fa-sync"></i> Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-white text-blue-900 gap-4">
+      <i className="fa-solid fa-circle-notch fa-spin text-4xl"></i>
+      <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">Sincronizando Multiplan...</span>
+    </div>
+  );
+
   if (!user) return <Login onLogin={handleLogin} onRegister={handleRegister} />;
 
   return (
     <Layout user={user} activeTab={activeTab} setActiveTab={setActiveTab} onLogout={() => setUser(null)}>
-      {/* Seletor de Abas de Conta */}
-      <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-        <span className="text-[10px] font-black text-gray-400 uppercase mr-2"><i className="fa-solid fa-wallet"></i> Contas:</span>
-        {accounts.map(acc => (
-          <button
-            key={acc}
-            onClick={() => setActiveAccount(acc)}
-            className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all whitespace-nowrap border-2 ${
-              activeAccount === acc 
-              ? 'bg-blue-900 text-white border-blue-900 shadow-md' 
-              : 'bg-white text-gray-500 border-gray-200 hover:border-blue-200'
-            }`}
-          >
-            {acc}
-          </button>
-        ))}
+      <div className="mb-6">
+        <div className="flex items-center gap-4 mb-3">
+          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+            <i className="fa-solid fa-building-columns"></i> Filtro por Conta
+          </h3>
+          <div className="h-px bg-slate-200 flex-1"></div>
+        </div>
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {accounts.map(acc => (
+            <button
+              key={acc}
+              onClick={() => setActiveAccount(acc)}
+              className={`px-5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border-2 ${
+                activeAccount === acc 
+                ? 'bg-blue-900 text-white border-blue-900 shadow-lg shadow-blue-900/20' 
+                : 'bg-white text-slate-500 border-slate-100 hover:border-blue-200 hover:text-blue-900 shadow-sm'
+              }`}
+            >
+              {acc}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
         {activeTab === Tab.DASHBOARD && <Dashboard transactions={filteredTransactions} />}
-        {activeTab === Tab.CONTAS_PAGAR && <TransactionTable type="PAGAR" transactions={filteredTransactions.filter(t => t.type === 'PAGAR')} onAdd={async t => { await supabase.from('transactions').insert(t); fetchData(); }} onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }} onDelete={async ids => { await supabase.from('transactions').delete().in('id', ids); fetchData(); }} />}
-        {activeTab === Tab.CONTAS_RECEBER && <TransactionTable type="RECEBER" transactions={filteredTransactions.filter(t => t.type === 'RECEBER')} onAdd={async t => { await supabase.from('transactions').insert(t); fetchData(); }} onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }} onDelete={async ids => { await supabase.from('transactions').delete().in('id', ids); fetchData(); }} />}
+        {activeTab === Tab.CONTAS_PAGAR && (
+          <TransactionTable 
+            type="PAGAR" 
+            transactions={filteredTransactions.filter(t => t.type === 'PAGAR')} 
+            onAdd={async t => { await supabase.from('transactions').insert(t); fetchData(); }} 
+            onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }} 
+            onDelete={async ids => { await supabase.from('transactions').delete().in('id', ids); fetchData(); }} 
+          />
+        )}
+        {activeTab === Tab.CONTAS_RECEBER && (
+          <TransactionTable 
+            type="RECEBER" 
+            transactions={filteredTransactions.filter(t => t.type === 'RECEBER')} 
+            onAdd={async t => { await supabase.from('transactions').insert(t); fetchData(); }} 
+            onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }} 
+            onDelete={async ids => { await supabase.from('transactions').delete().in('id', ids); fetchData(); }} 
+          />
+        )}
         {activeTab === Tab.CENTRO_CUSTO && <CostCentersView costCenters={costCenters} onSave={async cc => { await supabase.from('cost_centers').upsert({id: cc.id, nome: cc.nome, tipo: cc.tipo, sub_itens: cc.subItens}); fetchData(); }} onDelete={async id => { await supabase.from('cost_centers').delete().eq('id', id); fetchData(); }} />}
         {activeTab === Tab.FLUXO_CAIXA && <CashFlow transactions={filteredTransactions} />}
         {activeTab === Tab.DETALHES && <Details transactions={filteredTransactions} />}

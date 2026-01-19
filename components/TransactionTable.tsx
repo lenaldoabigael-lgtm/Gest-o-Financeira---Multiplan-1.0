@@ -17,7 +17,6 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
-  // Form State
   const [formData, setFormData] = useState({
     vencimento: '',
     pagamento: '',
@@ -38,45 +37,6 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
       (t.conta || '').toLowerCase().includes(search)
     );
   });
-
-  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) setSelectedIds(filtered.map(t => t.id));
-    else setSelectedIds([]);
-  };
-
-  const handleSelectOne = (id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  const handleDeleteSelected = () => {
-    if (selectedIds.length === 0) return;
-    if (window.confirm(`Excluir ${selectedIds.length} registros?`)) {
-      onDelete(selectedIds);
-      setSelectedIds([]);
-    }
-  };
-
-  const handleOpenNew = () => {
-    setEditingId(null);
-    setFormData({ vencimento: '', pagamento: '', descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', status: 'PENDENTE', conta: 'GERAL' });
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEdit = (t: Transaction) => {
-    setEditingId(t.id);
-    setFormData({
-      vencimento: t.vencimento,
-      pagamento: t.pagamento || '',
-      descricao: t.descricao,
-      valor: t.valor.toString(),
-      formaPagamento: t.formaPagamento,
-      centroCusto: t.centroCusto,
-      subItem: t.subItem,
-      status: t.status,
-      conta: t.conta || 'GERAL'
-    });
-    setIsModalOpen(true);
-  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,31 +60,29 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     setIsModalOpen(false);
   };
 
-  const selectedCC = COST_CENTERS.find(cc => cc.nome === formData.centroCusto);
-
   return (
-    <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-      <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h2 className="text-xl font-bold text-blue-900 uppercase">
+    <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
+      <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+        <h2 className="text-xl font-black text-blue-900 uppercase tracking-tighter">
           {type === 'PAGAR' ? 'Contas a Pagar' : 'Contas a Receber'}
         </h2>
         <div className="flex items-center gap-2">
-           <button onClick={handleOpenNew} className="bg-blue-900 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-blue-800 transition-colors">
-             <i className="fa-solid fa-plus"></i> Novo
+           <button onClick={() => { setEditingId(null); setIsModalOpen(true); }} className="bg-blue-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20">
+             <i className="fa-solid fa-plus"></i> Novo Registro
            </button>
-           <button onClick={handleDeleteSelected} disabled={selectedIds.length === 0} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${selectedIds.length > 0 ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
+           <button onClick={() => onDelete(selectedIds)} disabled={selectedIds.length === 0} className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all ${selectedIds.length > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
              <i className="fa-solid fa-trash-can"></i> {selectedIds.length > 0 ? `Excluir (${selectedIds.length})` : 'Excluir'}
            </button>
         </div>
       </div>
 
-      <div className="p-4 bg-gray-50">
-        <div className="relative">
-          <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+      <div className="p-4 bg-white border-b border-slate-50">
+        <div className="relative group">
+          <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-900 transition-colors"></i>
           <input 
             type="text" 
-            placeholder="Pesquisar descrição, conta, centro de custo..." 
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+            placeholder="Pesquisar por descrição, conta, categoria..." 
+            className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-900/5 focus:border-blue-900 outline-none text-sm transition-all"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -134,47 +92,56 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-gray-100 text-gray-600 text-[10px] uppercase tracking-wider">
-              <th className="p-4 w-12 text-center">
-                <input type="checkbox" onChange={handleSelectAll} checked={filtered.length > 0 && selectedIds.length === filtered.length} />
+            <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest">
+              <th className="p-5 w-12 text-center">
+                <input type="checkbox" onChange={(e) => e.target.checked ? setSelectedIds(filtered.map(t => t.id)) : setSelectedIds([])} />
               </th>
-              <th className="p-4">Vencimento</th>
-              <th className="p-4">Descrição / Conta</th>
-              <th className="p-4 text-right">Valor</th>
-              <th className="p-4">Centro Custo</th>
-              <th className="p-4">Status</th>
-              <th className="p-4 text-center">Ações</th>
+              <th className="p-5">Data</th>
+              <th className="p-5">Descrição / Conta</th>
+              <th className="p-5 text-right">Valor</th>
+              <th className="p-5">Categoria</th>
+              <th className="p-5">Status</th>
+              <th className="p-5 text-center">Ações</th>
             </tr>
           </thead>
-          <tbody className="text-sm divide-y divide-gray-100">
+          <tbody className="text-sm divide-y divide-slate-100">
             {filtered.map((t) => (
-              <tr key={t.id} className={`${selectedIds.includes(t.id) ? 'bg-blue-50' : 'hover:bg-gray-50'} transition-colors`}>
-                <td className="p-4 text-center">
-                   <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => handleSelectOne(t.id)} />
+              <tr key={t.id} className={`${selectedIds.includes(t.id) ? 'bg-blue-50/50' : 'hover:bg-slate-50/30'} transition-colors group`}>
+                <td className="p-5 text-center">
+                   <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => setSelectedIds(prev => prev.includes(t.id) ? prev.filter(i => i !== t.id) : [...prev, t.id])} />
                 </td>
-                <td className="p-4 font-medium">{new Date(t.vencimento).toLocaleDateString('pt-BR')}</td>
-                <td className="p-4">
-                  <div className="font-bold text-gray-900">{t.descricao}</div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[9px] bg-gray-200 px-1.5 py-0.5 rounded text-gray-600 font-bold uppercase">{t.conta || 'GERAL'}</span>
-                    <span className="text-[9px] text-gray-400 uppercase">{t.formaPagamento}</span>
+                <td className="p-5 font-bold text-slate-600">{new Date(t.vencimento).toLocaleDateString('pt-BR')}</td>
+                <td className="p-5">
+                  <div className="font-black text-blue-900 uppercase tracking-tight leading-none mb-1">{t.descricao}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded font-black text-slate-500 uppercase">{t.conta || 'GERAL'}</span>
+                    <span className="text-[9px] text-slate-400 uppercase font-bold">{t.formaPagamento}</span>
                   </div>
                 </td>
-                <td className={`p-4 text-right font-bold ${type === 'PAGAR' ? 'text-red-500' : 'text-green-600'}`}>
+                <td className={`p-5 text-right font-black text-lg ${type === 'PAGAR' ? 'text-red-500' : 'text-emerald-600'}`}>
                    R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </td>
-                <td className="p-4 text-[10px] uppercase font-semibold text-gray-500">
-                  {t.centroCusto} <br/> <span className="text-gray-400">{t.subItem}</span>
+                <td className="p-5">
+                  <div className="text-[10px] uppercase font-black text-slate-400 leading-none">{t.centroCusto}</div>
+                  <div className="text-[9px] font-bold text-slate-300 uppercase">{t.subItem}</div>
                 </td>
-                <td className="p-4">
-                  <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase ${
-                    t.status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'
+                <td className="p-5">
+                  <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${
+                    t.status === 'PENDENTE' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
                   }`}>
                     {t.status}
                   </span>
                 </td>
-                <td className="p-4 text-center">
-                  <button onClick={() => handleOpenEdit(t)} className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg"><i className="fa-solid fa-pen"></i></button>
+                <td className="p-5 text-center">
+                  <button onClick={() => {
+                    setEditingId(t.id);
+                    setFormData({
+                      vencimento: t.vencimento, pagamento: t.pagamento || '', descricao: t.descricao,
+                      valor: t.valor.toString(), formaPagamento: t.formaPagamento, centroCusto: t.centroCusto,
+                      subItem: t.subItem, status: t.status, conta: t.conta || 'GERAL'
+                    });
+                    setIsModalOpen(true);
+                  }} className="text-blue-900 hover:bg-blue-50 p-3 rounded-xl transition-all"><i className="fa-solid fa-pen-to-square"></i></button>
                 </td>
               </tr>
             ))}
@@ -183,70 +150,52 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="bg-blue-900 p-6 flex justify-between items-center text-white">
-              <h3 className="text-lg font-bold uppercase tracking-tight">{editingId ? 'Editar' : 'Novo'} Registro</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-white/60 hover:text-white text-2xl">&times;</button>
+        <div className="fixed inset-0 bg-blue-900/20 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in duration-300 border border-white/20">
+            <div className="bg-blue-900 p-8 flex justify-between items-center text-white">
+              <h3 className="text-xl font-black uppercase tracking-tighter">Lançamento Financeiro</h3>
+              <button onClick={() => setIsModalOpen(false)} className="bg-white/10 w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/20 transition-all">&times;</button>
             </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            <form onSubmit={handleSave} className="p-8 space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Data Vencimento</label>
-                  <input type="date" className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.vencimento} onChange={e => setFormData({...formData, vencimento: e.target.value})} required />
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Vencimento</label>
+                  <input type="date" className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 transition-all" value={formData.vencimento} onChange={e => setFormData({...formData, vencimento: e.target.value})} required />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Conta Bancária</label>
-                  <select className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={formData.conta} onChange={e => setFormData({...formData, conta: e.target.value})}>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Conta</label>
+                  <select className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 transition-all" value={formData.conta} onChange={e => setFormData({...formData, conta: e.target.value})}>
                     <option value="SANTANDER">SANTANDER</option>
                     <option value="NUBANK">NUBANK</option>
                     <option value="CAIXA">CAIXA</option>
                     <option value="INTER">INTER</option>
-                    <option value="GERAL">GERAL / CAIXA INTERNO</option>
+                    <option value="BRADESCO">BRADESCO</option>
+                    <option value="GERAL">GERAL / DINHEIRO</option>
                   </select>
                 </div>
               </div>
 
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Descrição</label>
+                <input type="text" className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 uppercase" placeholder="EX: PAGAMENTO ENERGIA" value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value.toUpperCase()})} required />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-1">
-                   <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Valor</label>
-                   <input type="number" step="0.01" className="w-full p-2.5 border rounded-lg outline-none" value={formData.valor} onChange={e => setFormData({...formData, valor: e.target.value})} required />
+                <div>
+                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Valor (R$)</label>
+                   <input type="number" step="0.01" className="w-full p-3 border border-slate-200 rounded-xl outline-none font-bold" value={formData.valor} onChange={e => setFormData({...formData, valor: e.target.value})} required />
                 </div>
-                <div className="col-span-1">
-                   <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Forma</label>
-                   <select className="w-full p-2.5 border rounded-lg outline-none" value={formData.formaPagamento} onChange={e => setFormData({...formData, formaPagamento: e.target.value})}>
+                <div>
+                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Forma</label>
+                   <select className="w-full p-3 border border-slate-200 rounded-xl outline-none" value={formData.formaPagamento} onChange={e => setFormData({...formData, formaPagamento: e.target.value})}>
                      <option>PIX</option><option>BOLETO</option><option>TRANSFERÊNCIA</option><option>DINHEIRO</option><option>CARTÃO</option>
                    </select>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Descrição</label>
-                <input type="text" className="w-full p-2.5 border rounded-lg outline-none" placeholder="Ex: Pagamento Internet" value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value})} required />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Centro de Custo</label>
-                  <select className="w-full p-2.5 border rounded-lg outline-none" value={formData.centroCusto} onChange={e => setFormData({...formData, centroCusto: e.target.value, subItem: ''})} required>
-                    <option value="">Selecione...</option>
-                    {COST_CENTERS.filter(cc => type === 'PAGAR' ? cc.tipo === 'DESPESA' : cc.tipo === 'RECEITA').map(cc => (
-                      <option key={cc.id} value={cc.nome}>{cc.nome}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                   <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Status</label>
-                   <select className="w-full p-2.5 border rounded-lg outline-none" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as Status})}>
-                     <option value="PENDENTE">PENDENTE</option>
-                     <option value={type === 'PAGAR' ? 'PAGO' : 'RECEBIDO'}>{type === 'PAGAR' ? 'PAGO' : 'RECEBIDO'}</option>
-                   </select>
-                </div>
-              </div>
-
               <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-3 bg-gray-100 rounded-xl font-bold text-gray-600 hover:bg-gray-200 transition-all uppercase text-xs tracking-widest">Cancelar</button>
-                <button type="submit" className="flex-1 px-4 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 shadow-lg transition-all uppercase text-xs tracking-widest">Salvar</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-4 bg-slate-100 rounded-2xl font-black text-slate-500 hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">Cancelar</button>
+                <button type="submit" className="flex-1 px-4 py-4 bg-blue-900 text-white rounded-2xl font-black hover:bg-blue-800 shadow-xl shadow-blue-900/20 transition-all uppercase text-[10px] tracking-widest">Confirmar Saldo</button>
               </div>
             </form>
           </div>
