@@ -1,21 +1,27 @@
-
-import React, { useState, useEffect } from 'react';
-import { Transaction, TransactionType, Status } from '../types';
-import { COST_CENTERS } from '../constants';
+import React, { useState, useMemo } from 'react';
+import { Transaction, TransactionType, Status, CostCenter } from '../types';
 
 interface TransactionTableProps {
   type: TransactionType;
   transactions: Transaction[];
+  costCenters: CostCenter[];
   onAdd: (transaction: Transaction) => void;
   onUpdate: (transaction: Transaction) => void;
   onDelete: (ids: string[]) => void;
 }
 
-const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions, onAdd, onUpdate, onDelete }) => {
+type SortField = 'vencimento' | 'valor';
+type SortOrder = 'asc' | 'desc';
+
+const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions, costCenters, onAdd, onUpdate, onDelete }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  
+  // Estados de ordenação
+  const [sortField, setSortField] = useState<SortField>('vencimento');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   
   const [formData, setFormData] = useState({
     vencimento: new Date().toISOString().split('T')[0],
@@ -29,20 +35,52 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     conta: 'GERAL'
   });
 
-  // Filtrar centros de custo pelo tipo (Receita ou Despesa)
-  const availableCostCenters = COST_CENTERS.filter(cc => cc.tipo === (type === 'RECEBER' ? 'RECEITA' : 'DESPESA'));
-  
-  // Obter sub-itens do centro de custo selecionado
+  const availableCostCenters = costCenters.filter(cc => cc.tipo === (type === 'RECEBER' ? 'RECEITA' : 'DESPESA'));
   const availableSubItems = availableCostCenters.find(cc => cc.nome === formData.centroCusto)?.subItens || [];
 
-  const filtered = transactions.filter(t => {
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedAndFiltered = useMemo(() => {
     const search = searchTerm.toLowerCase();
-    return (
-      t.descricao.toLowerCase().includes(search) ||
-      t.centroCusto.toLowerCase().includes(search) ||
-      (t.conta || '').toLowerCase().includes(search)
-    );
-  });
+    
+    // Primeiro filtra
+    let result = transactions.filter(t => {
+      return (
+        t.descricao.toLowerCase().includes(search) ||
+        t.centroCusto.toLowerCase().includes(search) ||
+        (t.conta || '').toLowerCase().includes(search)
+      );
+    });
+
+    // Depois ordena
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'vencimento') {
+        comparison = a.vencimento.localeCompare(b.vencimento);
+      } else if (sortField === 'valor') {
+        comparison = a.valor - b.valor;
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [transactions, searchTerm, sortField, sortOrder]);
+
+  // Fix: Simplified status change logic to avoid redundant type checks that can cause narrowing errors.
+  const handleStatusChange = (newStatus: Status) => {
+    setFormData(prev => ({
+      ...prev,
+      status: newStatus,
+      pagamento: newStatus === 'PENDENTE' ? '' : (prev.pagamento || prev.vencimento)
+    }));
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +120,13 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     setEditingId(null);
   };
 
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <i className="fa-solid fa-sort ml-1 opacity-20"></i>;
+    return sortOrder === 'asc' 
+      ? <i className="fa-solid fa-sort-up ml-1 text-blue-900"></i> 
+      : <i className="fa-solid fa-sort-down ml-1 text-blue-900"></i>;
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
       <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
@@ -116,18 +161,22 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
           <thead>
             <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest">
               <th className="p-5 w-12 text-center">
-                <input type="checkbox" onChange={(e) => e.target.checked ? setSelectedIds(filtered.map(t => t.id)) : setSelectedIds([])} />
+                <input type="checkbox" onChange={(e) => e.target.checked ? setSelectedIds(sortedAndFiltered.map(t => t.id)) : setSelectedIds([])} />
               </th>
-              <th className="p-5">Data</th>
+              <th className="p-5 cursor-pointer hover:text-blue-900 transition-colors" onClick={() => handleSort('vencimento')}>
+                Vencimento <SortIcon field="vencimento" />
+              </th>
               <th className="p-5">Descrição / Conta</th>
-              <th className="p-5 text-right">Valor</th>
+              <th className="p-5 text-right cursor-pointer hover:text-blue-900 transition-colors" onClick={() => handleSort('valor')}>
+                Valor <SortIcon field="valor" />
+              </th>
               <th className="p-5">Categoria</th>
-              <th className="p-5">Status</th>
+              <th className="p-5">Status / Pagamento</th>
               <th className="p-5 text-center">Ações</th>
             </tr>
           </thead>
           <tbody className="text-sm divide-y divide-slate-100">
-            {filtered.map((t) => (
+            {sortedAndFiltered.map((t) => (
               <tr key={t.id} className={`${selectedIds.includes(t.id) ? 'bg-blue-50/50' : 'hover:bg-slate-50/30'} transition-colors group`}>
                 <td className="p-5 text-center">
                    <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => setSelectedIds(prev => prev.includes(t.id) ? prev.filter(i => i !== t.id) : [...prev, t.id])} />
@@ -148,11 +197,18 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
                   <div className="text-[9px] font-bold text-slate-300 uppercase">{t.subItem}</div>
                 </td>
                 <td className="p-5">
-                  <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${
-                    t.status === 'PENDENTE' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                  }`}>
-                    {t.status}
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest inline-block w-fit ${
+                      String(t.status) === 'PENDENTE' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                    }`}>
+                      {t.status}
+                    </span>
+                    {t.pagamento && (
+                      <span className="text-[9px] text-slate-400 font-bold italic">
+                        Baixa: {new Date(t.pagamento).toLocaleDateString('pt-BR')}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="p-5 text-center">
                   <button onClick={() => {
@@ -172,7 +228,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-blue-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-blue-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-300 border border-white/20">
             <div className="bg-blue-900 p-6 flex justify-between items-center text-white">
               <div>
@@ -184,38 +240,34 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
               <button onClick={() => setIsModalOpen(false)} className="bg-white/10 w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/20 transition-all font-bold text-xl">&times;</button>
             </div>
             
-            <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto max-h-[80vh]">
+            <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto max-h-[85vh]">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Data Vencimento</label>
-                  <input type="date" className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 transition-all" value={formData.vencimento} onChange={e => setFormData({...formData, vencimento: e.target.value})} required />
+                  <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 transition-all text-slate-700 font-medium" value={formData.vencimento} onChange={e => setFormData({...formData, vencimento: e.target.value})} required />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Conta / Banco</label>
-                  <select className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 transition-all font-bold" value={formData.conta} onChange={e => setFormData({...formData, conta: e.target.value})}>
-                    <option value="SANTANDER">SANTANDER</option>
-                    <option value="NUBANK">NUBANK</option>
-                    <option value="CAIXA">CAIXA</option>
-                    <option value="INTER">INTER</option>
-                    <option value="BRADESCO">BRADESCO</option>
-                    <option value="GERAL">GERAL / DINHEIRO</option>
-                  </select>
-                </div>
+                {formData.status !== 'PENDENTE' && (
+                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                    <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Data do Pagamento / Recebimento</label>
+                    {/* Fix: Removed redundant status comparison inside a guard that already established it's not PENDENTE */}
+                    <input type="date" className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-xl outline-none focus:ring-4 focus:ring-emerald-900/5 transition-all text-emerald-700 font-bold" value={formData.pagamento} onChange={e => setFormData({...formData, pagamento: e.target.value})} required />
+                  </div>
+                )}
               </div>
 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Descrição do Lançamento</label>
-                <input type="text" className="w-full p-3 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 uppercase font-medium" placeholder="Ex: PAGAMENTO FORNECEDOR X" value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value.toUpperCase()})} required />
+                <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 uppercase font-medium text-slate-700" placeholder="Ex: PAGAMENTO FORNECEDOR X" value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value.toUpperCase()})} required />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Valor (R$)</label>
-                   <input type="number" step="0.01" className="w-full p-3 border border-slate-200 rounded-xl outline-none font-black text-lg text-blue-900" placeholder="0,00" value={formData.valor} onChange={e => setFormData({...formData, valor: e.target.value})} required />
+                   <input type="number" step="0.01" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-black text-lg text-blue-900" placeholder="0,00" value={formData.valor} onChange={e => setFormData({...formData, valor: e.target.value})} required />
                 </div>
                 <div>
                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Status do Pagamento</label>
-                   <select className={`w-full p-3 border rounded-xl outline-none font-black text-xs ${formData.status === 'PENDENTE' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`} value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as Status})}>
+                   <select className={`w-full p-3 border rounded-xl outline-none font-black text-xs transition-colors ${formData.status === 'PENDENTE' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`} value={formData.status} onChange={e => handleStatusChange(e.target.value as Status)}>
                      <option value="PENDENTE">🟡 PENDENTE</option>
                      {type === 'PAGAR' ? <option value="PAGO">🟢 PAGO</option> : <option value="RECEBIDO">🟢 RECEBIDO</option>}
                    </select>
@@ -224,29 +276,42 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Centro de Custo</label>
-                   <select className="w-full p-3 border border-slate-200 rounded-xl outline-none text-sm" value={formData.centroCusto} onChange={e => setFormData({...formData, centroCusto: e.target.value, subItem: ''})} required>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Conta / Banco</label>
+                  <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 transition-all font-bold text-slate-700" value={formData.conta} onChange={e => setFormData({...formData, conta: e.target.value})}>
+                    <option value="SANTANDER">SANTANDER</option>
+                    <option value="NUBANK">NUBANK</option>
+                    <option value="CAIXA">CAIXA</option>
+                    <option value="INTER">INTER</option>
+                    <option value="BRADESCO">BRADESCO</option>
+                    <option value="GERAL">GERAL / DINHEIRO</option>
+                  </select>
+                </div>
+                <div>
+                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Centro de Custo (Estrutura)</label>
+                   <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm text-slate-700 font-bold" value={formData.centroCusto} onChange={e => setFormData({...formData, centroCusto: e.target.value, subItem: ''})} required>
                      <option value="">Selecione...</option>
                      {availableCostCenters.map(cc => <option key={cc.id} value={cc.nome}>{cc.nome}</option>)}
                    </select>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Sub-item</label>
-                   <select className="w-full p-3 border border-slate-200 rounded-xl outline-none text-sm" value={formData.subItem} onChange={e => setFormData({...formData, subItem: e.target.value})} required disabled={!formData.centroCusto}>
+                   <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm text-slate-700 font-bold disabled:opacity-50" value={formData.subItem} onChange={e => setFormData({...formData, subItem: e.target.value})} required disabled={!formData.centroCusto}>
                      <option value="">Selecione...</option>
                      {availableSubItems.map(si => <option key={si} value={si}>{si}</option>)}
                    </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Forma de Movimentação</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {['PIX', 'BOLETO', 'DINHEIRO', 'CARTÃO', 'TRANSFERÊNCIA'].map(forma => (
-                    <button type="button" key={forma} onClick={() => setFormData({...formData, formaPagamento: forma})} className={`py-2.5 rounded-xl text-[10px] font-black transition-all border ${formData.formaPagamento === forma ? 'bg-blue-900 text-white border-blue-900 shadow-lg shadow-blue-900/20' : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-slate-300'}`}>
-                      {forma}
-                    </button>
-                  ))}
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Forma de Movimentação</label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {['PIX', 'BOLETO', 'DINHEIRO', 'CARTÃO', 'TED'].map(forma => (
+                      <button type="button" key={forma} onClick={() => setFormData({...formData, formaPagamento: forma})} className={`py-2 rounded-lg text-[9px] font-black transition-all border ${formData.formaPagamento === forma ? 'bg-blue-900 text-white border-blue-900 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                        {forma}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

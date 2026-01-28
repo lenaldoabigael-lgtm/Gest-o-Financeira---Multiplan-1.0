@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Transaction } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -10,76 +10,94 @@ interface DashboardProps {
   transactions: Transaction[];
 }
 
-const COLORS = ['#1e3a8a', '#f97316', '#10b981', '#ef4444', '#8b5cf6'];
+const COLORS = ['#1e3a8a', '#f97316', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#f59e0b', '#6366f1'];
 
 const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
-  const receitas = transactions.filter(t => t.type === 'RECEBER').reduce((acc, t) => acc + t.valor, 0);
-  const despesas = transactions.filter(t => t.type === 'PAGAR').reduce((acc, t) => acc + t.valor, 0);
-  const saldo = receitas - despesas;
-  
-  const despesasPagas = transactions.filter(t => t.type === 'PAGAR' && t.status === 'PAGO').reduce((acc, t) => acc + t.valor, 0);
-  const despesasPendentes = despesas - despesasPagas;
+  const stats = useMemo(() => {
+    const receitas = transactions.filter(t => t.type === 'RECEBER').reduce((acc, t) => acc + t.valor, 0);
+    const despesas = transactions.filter(t => t.type === 'PAGAR').reduce((acc, t) => acc + t.valor, 0);
+    const despesasPagas = transactions.filter(t => t.type === 'PAGAR' && (t.status === 'PAGO' || t.status === 'RECEBIDO')).reduce((acc, t) => acc + t.valor, 0);
+    
+    return {
+      receitas,
+      despesas,
+      saldo: receitas - despesas,
+      pendentes: despesas - despesasPagas
+    };
+  }, [transactions]);
 
-  // Mock data for charts
-  const monthlyData = [
-    { name: 'Jan', receitas: 1634743, despesas: 946786 },
-    { name: 'Fev', receitas: 1800000, despesas: 850000 },
-    { name: 'Mar', receitas: 1500000, despesas: 1100000 },
-  ];
+  const chartData = useMemo(() => {
+    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const data = months.map(m => ({ name: m, receitas: 0, despesas: 0 }));
 
-  const topDespesas = [
-    { name: 'DESC. FUNCION. OBRA', value: 392803 },
-    { name: 'DESC. ESCRITORIO', value: 268990 },
-    { name: 'DESC. DEPOSITO', value: 96392 },
-    { name: 'DESC. MAT. OBRA', value: 75003 },
-  ];
+    transactions.forEach(t => {
+      const date = new Date(t.vencimento);
+      const monthIdx = date.getMonth();
+      if (t.type === 'RECEBER') data[monthIdx].receitas += t.valor;
+      else data[monthIdx].despesas += t.valor;
+    });
+
+    return data.filter(d => d.receitas > 0 || d.despesas > 0);
+  }, [transactions]);
+
+  const topDespesas = useMemo(() => {
+    const categories: Record<string, number> = {};
+    transactions.filter(t => t.type === 'PAGAR').forEach(t => {
+      categories[t.centroCusto] = (categories[t.centroCusto] || 0) + t.valor;
+    });
+
+    return Object.entries(categories)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [transactions]);
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-900">
-          <p className="text-gray-500 text-xs font-bold uppercase mb-1">Saldo</p>
-          <p className="text-2xl font-bold text-gray-900">R$ {saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Saldo Atual</p>
+          <p className={`text-2xl font-black ${stats.saldo >= 0 ? 'text-blue-900' : 'text-red-500'}`}>
+            R$ {stats.saldo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-          <p className="text-gray-500 text-xs font-bold uppercase mb-1">Receitas</p>
-          <p className="text-2xl font-bold text-green-600">R$ {receitas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1 text-emerald-600">Total Receitas</p>
+          <p className="text-2xl font-black text-emerald-600">R$ {stats.receitas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-orange-500">
-          <p className="text-gray-500 text-xs font-bold uppercase mb-1">Despesas</p>
-          <p className="text-2xl font-bold text-orange-600">-R$ {despesas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1 text-orange-600">Total Despesas</p>
+          <p className="text-2xl font-black text-orange-600">R$ {stats.despesas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
-          <p className="text-gray-500 text-xs font-bold uppercase mb-1">Pendentes</p>
-          <p className="text-2xl font-bold text-red-600">R$ {despesasPendentes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1 text-red-600">Total Pendente</p>
+          <p className="text-2xl font-black text-red-600">R$ {stats.pendentes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
         </div>
       </div>
 
-      {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h3 className="text-blue-900 font-bold mb-6 flex items-center gap-2">
-            <i className="fa-solid fa-chart-line"></i> Receita x Despesa por Mês
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-sm">
+            <i className="fa-solid fa-chart-line text-blue-500"></i> Desempenho Mensal Real
           </h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="receitas" stroke="#1e3a8a" strokeWidth={3} dot={{ r: 6 }} />
-                <Line type="monotone" dataKey="despesas" stroke="#f97316" strokeWidth={3} dot={{ r: 6 }} />
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 'bold'}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                <Legend iconType="circle" />
+                <Line type="monotone" dataKey="receitas" stroke="#10b981" strokeWidth={4} dot={{ r: 4, fill: '#10b981' }} name="Receitas" />
+                <Line type="monotone" dataKey="despesas" stroke="#f97316" strokeWidth={4} dot={{ r: 4, fill: '#f97316' }} name="Despesas" />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h3 className="text-blue-900 font-bold mb-6 flex items-center gap-2">
-            <i className="fa-solid fa-chart-pie"></i> Top 10 Despesas
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-sm">
+            <i className="fa-solid fa-chart-pie text-orange-500"></i> Distribuição por Centro de Custo
           </h3>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -88,37 +106,37 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
                   data={topDespesas}
                   cx="50%"
                   cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  innerRadius={60}
                   outerRadius={100}
-                  fill="#8884d8"
+                  paddingAngle={5}
                   dataKey="value"
                 >
                   {topDespesas.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
                   ))}
                 </Pie>
                 <Tooltip />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-lg shadow-sm">
-        <h3 className="text-blue-900 font-bold mb-6 flex items-center gap-2">
-          <i className="fa-solid fa-chart-bar"></i> Receita x Despesa por Dia (Simulação)
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+        <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-sm">
+          <i className="fa-solid fa-chart-bar text-emerald-500"></i> Receita x Despesa por Mês (Real)
         </h3>
         <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="receitas" fill="#1e3a8a" />
-                    <Bar dataKey="despesas" fill="#f97316" />
+                <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 'bold'}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                    <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                    <Legend iconType="rect" />
+                    <Bar dataKey="receitas" fill="#1e3a8a" radius={[4, 4, 0, 0]} name="Receitas" />
+                    <Bar dataKey="despesas" fill="#f97316" radius={[4, 4, 0, 0]} name="Despesas" />
                 </BarChart>
             </ResponsiveContainer>
         </div>

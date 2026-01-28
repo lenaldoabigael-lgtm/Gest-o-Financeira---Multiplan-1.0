@@ -29,57 +29,61 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 font-sans p-4">
-      <div className="bg-white p-8 rounded shadow-xl w-full max-w-md border-t-4 border-blue-900 transition-all duration-300">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-black text-blue-900 uppercase mb-2 tracking-tighter">Multiplan</h1>
-          <div className="w-16 h-1 bg-blue-900 mx-auto rounded"></div>
+    <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] font-sans p-4">
+      <div className="bg-white p-10 rounded-lg shadow-2xl w-full max-w-[420px] transition-all duration-500 border-t-8 border-[#1e3a8a]">
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-black text-[#1e3a8a] uppercase tracking-tighter">MULTIPLAN</h1>
+          <div className="w-12 h-1 bg-[#1e3a8a] mx-auto rounded mt-1"></div>
         </div>
         
-        <h2 className="text-xl font-bold text-blue-800 text-center mb-2">
-          {isRegistering ? 'Criar Nova Conta' : 'Bem Vindo'}
-        </h2>
-        <p className="text-sm text-gray-500 text-center mb-8">
-          {isRegistering ? 'Preencha os dados para se cadastrar.' : 'Entre com suas credenciais abaixo.'}
-        </p>
+        <div className="mb-8 text-center">
+          <h2 className="text-2xl font-black text-[#1e3a8a] mb-1">
+            {isRegistering ? 'Solicitar Acesso' : 'Bem Vindo'}
+          </h2>
+          <p className="text-xs font-medium text-slate-400">
+            {isRegistering ? 'Preencha os dados para solicitar seu acesso.' : 'Entre com suas credenciais abaixo.'}
+          </p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex items-center border-b border-gray-300 py-2">
-            <label className="w-20 text-xs font-bold text-gray-400 uppercase" htmlFor="login">Login</label>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-1 group">
+            <div className="flex items-center justify-between">
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest" htmlFor="login">Login</label>
+            </div>
             <input
               id="login"
               type="text"
               value={login}
               onChange={(e) => setLogin(e.target.value)}
-              className="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none text-sm"
-              placeholder="seu.usuario"
+              className="w-full bg-transparent border-b-2 border-slate-100 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#1e3a8a] transition-all placeholder:text-slate-200"
+              placeholder="Usuario"
               required
             />
           </div>
 
           {isRegistering && (
-            <div className="flex items-center border-b border-gray-300 py-2 animate-in fade-in slide-in-from-top-2">
-              <label className="w-20 text-xs font-bold text-gray-400 uppercase" htmlFor="email">E-mail</label>
+            <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-300">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest" htmlFor="email">E-mail</label>
               <input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none text-sm"
-                placeholder="exemplo@email.com"
+                className="w-full bg-transparent border-b-2 border-slate-100 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#1e3a8a] transition-all placeholder:text-slate-200"
+                placeholder="email@multiplan.com"
                 required
               />
             </div>
           )}
 
-          <div className="flex items-center border-b border-gray-300 py-2">
-            <label className="w-20 text-xs font-bold text-gray-400 uppercase" htmlFor="senha">Senha</label>
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest" htmlFor="senha">Senha</label>
             <input
               id="senha"
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              className="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none text-sm"
+              className="w-full bg-transparent border-b-2 border-slate-100 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#1e3a8a] transition-all placeholder:text-slate-200"
               placeholder="••••••"
               required
             />
@@ -88,19 +92,23 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-900 hover:bg-blue-800 text-white font-bold py-3 px-4 rounded transition-colors duration-200 uppercase tracking-widest mt-4 shadow-lg flex items-center justify-center gap-2"
+            className="w-full bg-[#1e3a8a] hover:bg-[#152a65] text-white font-black py-4 px-4 rounded-lg transition-all duration-300 uppercase text-xs tracking-[0.2em] shadow-xl shadow-blue-900/20 flex items-center justify-center gap-3 active:scale-95"
           >
             {loading && <i className="fa-solid fa-circle-notch fa-spin"></i>}
-            {isRegistering ? 'Cadastrar' : 'Entrar'}
+            {isRegistering ? 'Enviar Solicitação' : 'Entrar'}
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+        <div className="mt-12 pt-8 border-t border-slate-50 text-center">
           <button 
             onClick={() => setIsRegistering(!isRegistering)}
-            className="text-sm font-bold text-blue-900 hover:text-orange-500 transition-colors uppercase tracking-tighter"
+            className="text-[10px] font-black text-[#1e3a8a] hover:text-[#152a65] transition-colors uppercase tracking-[0.1em] flex items-center justify-center gap-2 mx-auto"
           >
-            {isRegistering ? 'Já tenho uma conta? Entrar' : 'Não tem uma conta? Criar agora'}
+            {isRegistering ? (
+               <>TENHO ACESSO? <span className="text-orange-500">ENTRAR AGORA</span></>
+            ) : (
+               <>NÃO TEM ACESSO? <span className="text-orange-500">SOLICITAR AGORA</span></>
+            )}
           </button>
         </div>
       </div>

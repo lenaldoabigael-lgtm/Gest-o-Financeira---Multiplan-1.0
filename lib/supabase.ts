@@ -14,6 +14,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
  *   login TEXT PRIMARY KEY,
  *   senha TEXT NOT NULL,
  *   email TEXT,
+ *   approved BOOLEAN DEFAULT FALSE,
  *   permissions JSONB NOT NULL
  * );
  * 
@@ -38,6 +39,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
  *   "centroCusto" TEXT NOT NULL,
  *   "subItem" TEXT NOT NULL,
  *   cliente TEXT,
+ *   conta TEXT DEFAULT 'GERAL',
  *   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
  * );
  */

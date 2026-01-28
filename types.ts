@@ -5,6 +5,7 @@ export interface User {
   login: string;
   senha: string;
   email?: string;
+  approved?: boolean; // Novo campo para controle de aprovação
   permissions: {
     centroCusto: boolean;
     contasPagar: boolean;
