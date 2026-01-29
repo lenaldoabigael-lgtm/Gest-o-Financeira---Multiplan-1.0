@@ -124,7 +124,6 @@ const App: React.FC = () => {
     return true;
   };
 
-  // Determina se o filtro de conta deve ser exibido
   const showAccountFilter = useMemo(() => {
     return activeTab !== Tab.CENTRO_CUSTO && activeTab !== Tab.PLAN_CREDENCIAS;
   }, [activeTab]);
@@ -209,6 +208,7 @@ const App: React.FC = () => {
             transactions={filteredTransactions.filter(t => t.type === 'PAGAR')} 
             costCenters={costCenters}
             onAdd={async t => { await supabase.from('transactions').insert(t); fetchData(); }} 
+            onBulkAdd={async items => { await supabase.from('transactions').insert(items); fetchData(); }}
             onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }} 
             onDelete={async ids => { await supabase.from('transactions').delete().in('id', ids); fetchData(); }} 
           />
@@ -219,11 +219,13 @@ const App: React.FC = () => {
             transactions={filteredTransactions.filter(t => t.type === 'RECEBER')} 
             costCenters={costCenters}
             onAdd={async t => { await supabase.from('transactions').insert(t); fetchData(); }} 
+            onBulkAdd={async items => { await supabase.from('transactions').insert(items); fetchData(); }}
             onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }} 
             onDelete={async ids => { await supabase.from('transactions').delete().in('id', ids); fetchData(); }} 
           />
         )}
-        {activeTab === Tab.CENTRO_CUSTO && <CostCentersView costCenters={costCenters} onSave={async cc => { await supabase.from('cost_centers').upsert({id: cc.id, nome: cc.nome, tipo: cc.tipo, sub_itens: cc.subItens}); fetchData(); }} onDelete={async id => { await supabase.from('cost_centers').delete().eq('id', id); fetchData(); }} />}
+        {/* Fix: Changed cc.sub_itens to cc.subItens to match the CostCenter type definition */}
+        {activeTab === Tab.CENTRO_CUSTO && <CostCentersView costCenters={costCenters} onSave={async cc => { await supabase.from('cost_centers').upsert({id: cc.id, nome: cc.nome, tipo: cc.tipo, sub_itens: cc.subItens || []}); fetchData(); }} onDelete={async id => { await supabase.from('cost_centers').delete().eq('id', id); fetchData(); }} />}
         {activeTab === Tab.FLUXO_CAIXA && <CashFlow transactions={filteredTransactions} />}
         {activeTab === Tab.DETALHES && <Details transactions={filteredTransactions} costCenters={costCenters} />}
         {activeTab === Tab.PLAN_CREDENCIAS && <CredentialsManager users={appUsers} onUpdateUsers={async nu => { for(const u of nu) { await supabase.from('users').upsert(u); } fetchData(); }} />}

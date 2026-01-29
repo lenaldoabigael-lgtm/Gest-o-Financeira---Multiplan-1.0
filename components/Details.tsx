@@ -15,6 +15,8 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters }) => {
   const [formaFilter, setFormaFilter] = useState('Todos');
   const [ccFilter, setCcFilter] = useState('Todos');
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const filtered = transactions.filter(t => {
     if (t.type !== activeSubTab) return false;
@@ -22,6 +24,11 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters }) => {
     if (formaFilter !== 'Todos' && t.formaPagamento !== formaFilter) return false;
     if (ccFilter !== 'Todos' && t.centroCusto !== ccFilter) return false;
     if (yearFilter !== 'Todos' && !t.vencimento.startsWith(yearFilter)) return false;
+    
+    // Date Range Filter
+    if (startDate && t.vencimento < startDate) return false;
+    if (endDate && t.vencimento > endDate) return false;
+    
     return true;
   });
 
@@ -52,6 +59,11 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters }) => {
     link.click();
   };
 
+  const clearDateRange = () => {
+    setStartDate('');
+    setEndDate('');
+  };
+
   return (
     <div className="bg-white p-6 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 space-y-6">
        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -78,7 +90,36 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters }) => {
           </button>
        </div>
 
-       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
+       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
+          <div>
+            <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Data Início</label>
+            <input 
+              type="date" 
+              value={startDate} 
+              onChange={e => setStartDate(e.target.value)} 
+              className="w-full text-xs font-bold p-3 border border-slate-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-900/5 transition-all"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Data Fim</label>
+            <div className="relative">
+              <input 
+                type="date" 
+                value={endDate} 
+                onChange={e => setEndDate(e.target.value)} 
+                className="w-full text-xs font-bold p-3 border border-slate-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-900/5 transition-all"
+              />
+              {(startDate || endDate) && (
+                <button 
+                  onClick={clearDateRange}
+                  className="absolute -right-2 -top-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] hover:bg-red-600 transition-colors shadow-sm"
+                  title="Limpar Datas"
+                >
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+              )}
+            </div>
+          </div>
           <div>
             <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Filtrar Status</label>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full text-xs font-bold p-3 border border-slate-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-900/5 transition-all">
@@ -99,7 +140,7 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters }) => {
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Centro de Custo (Estrutura)</label>
+            <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Centro de Custo</label>
             <select value={ccFilter} onChange={e => setCcFilter(e.target.value)} className="w-full text-xs font-bold p-3 border border-slate-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-900/5 transition-all">
               <option>Todos</option>
               {costCenters.filter(cc => cc.tipo === (activeSubTab === 'PAGAR' ? 'DESPESA' : 'RECEITA')).map(cc => (
@@ -108,9 +149,9 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters }) => {
             </select>
           </div>
           <div>
-            <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Ano de Referência</label>
+            <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Ano</label>
             <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} className="w-full text-xs font-bold p-3 border border-slate-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-900/5 transition-all">
-              <option value="Todos">Todos os Anos</option>
+              <option value="Todos">Todos</option>
               <option value="2023">2023</option>
               <option value="2024">2024</option>
               <option value="2025">2025</option>

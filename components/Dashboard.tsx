@@ -40,6 +40,23 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
     return data.filter(d => d.receitas > 0 || d.despesas > 0);
   }, [transactions]);
 
+  const taskCountData = useMemo(() => {
+    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const data = months.map(m => ({ name: m, concluidas: 0, pendentes: 0 }));
+
+    transactions.forEach(t => {
+      const date = new Date(t.vencimento);
+      const monthIdx = date.getMonth();
+      if (t.status === 'PAGO' || t.status === 'RECEBIDO') {
+        data[monthIdx].concluidas += 1;
+      } else {
+        data[monthIdx].pendentes += 1;
+      }
+    });
+
+    return data.filter(d => d.concluidas > 0 || d.pendentes > 0);
+  }, [transactions]);
+
   const topDespesas = useMemo(() => {
     const categories: Record<string, number> = {};
     transactions.filter(t => t.type === 'PAGAR').forEach(t => {
@@ -97,6 +114,27 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
           <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-sm">
+            <i className="fa-solid fa-tasks text-emerald-500"></i> Volume de Tarefas por Mês
+          </h3>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={taskCountData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 'bold'}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} allowDecimals={false} />
+                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                <Legend iconType="rect" />
+                <Bar dataKey="concluidas" fill="#10b981" radius={[4, 4, 0, 0]} name="Concluídas" />
+                <Bar dataKey="pendentes" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Pendentes" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-sm">
             <i className="fa-solid fa-chart-pie text-orange-500"></i> Distribuição por Centro de Custo
           </h3>
           <div className="h-80">
@@ -121,13 +159,12 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
             </ResponsiveContainer>
           </div>
         </div>
-      </div>
 
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-        <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-sm">
-          <i className="fa-solid fa-chart-bar text-emerald-500"></i> Receita x Despesa por Mês (Real)
-        </h3>
-        <div className="h-80">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+          <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-sm">
+            <i className="fa-solid fa-chart-bar text-emerald-500"></i> Receita x Despesa por Mês (Real)
+          </h3>
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -139,6 +176,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
                     <Bar dataKey="despesas" fill="#f97316" radius={[4, 4, 0, 0]} name="Despesas" />
                 </BarChart>
             </ResponsiveContainer>
+          </div>
         </div>
       </div>
     </div>
