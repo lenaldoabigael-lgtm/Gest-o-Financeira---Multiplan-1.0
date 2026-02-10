@@ -120,7 +120,6 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     setEditingId(null);
   };
 
-  // Helper para verificar alertas de vencimento
   const getVencimentoAlert = (vencimento: string, status: Status) => {
     if (type !== 'PAGAR' || status !== 'PENDENTE') return null;
     
@@ -150,7 +149,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     return null;
   };
 
-  // Lógica de Importação CSV
+  // Lógica de Importação CSV Aprimorada
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -159,24 +158,31 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     reader.onload = (event) => {
       const text = event.target?.result as string;
       const lines = text.split(/\r?\n/);
-      const headers = lines[0].toLowerCase().split(/[;,]/);
-      
+      if (lines.length < 2) return;
+
+      // Detecta se o separador é ; ou , baseado na primeira linha
+      const headerLine = lines[0];
+      const countSemicolon = (headerLine.match(/;/g) || []).length;
+      const countComma = (headerLine.match(/,/g) || []).length;
+      const separator = countSemicolon >= countComma ? ';' : ',';
+
+      const headers = headerLine.toLowerCase().split(separator).map(h => h.trim());
       const parsed: Transaction[] = [];
       
       for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue;
+        const line = lines[i].trim();
+        if (!line) continue;
         
-        const cols = lines[i].split(/[;,]/);
-        if (cols.length < 5) continue;
-
+        const cols = line.split(separator);
+        
         const getCol = (possibleHeaders: string[]) => {
             const idx = headers.findIndex(h => possibleHeaders.some(p => h.includes(p)));
             return idx !== -1 ? cols[idx]?.trim() : '';
         };
 
         const vencRaw = getCol(['venc', 'data']);
-        const desc = getCol(['desc']);
-        const valorRaw = getCol(['valor', 'quant']);
+        const desc = getCol(['desc', 'lança']);
+        const valorRaw = getCol(['valor', 'quant', 'preço']);
         const statusRaw = getCol(['stat']);
         const forma = getCol(['forma', 'pag', 'mov']);
         const centro = getCol(['centro', 'categ', 'estru']);
@@ -185,12 +191,23 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
 
         let venc = vencRaw;
         if (vencRaw.includes('/')) {
-            const [d, m, y] = vencRaw.split('/');
-            venc = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+            const parts = vencRaw.split('/');
+            if (parts.length === 3) {
+                const [d, m, y] = parts;
+                venc = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+            }
         }
 
-        const valor = parseFloat(valorRaw.replace(/\./g, '').replace(',', '.'));
-        const status: Status = statusRaw.toUpperCase().includes('PAGO') || statusRaw.toUpperCase().includes('RECEB') ? (type === 'PAGAR' ? 'PAGO' : 'RECEBIDO') : 'PENDENTE';
+        // Limpeza de valor (remove pontos de milhar e troca vírgula decimal por ponto)
+        const valorClean = (valorRaw || '0').replace(/\./g, '').replace(',', '.');
+        const valor = parseFloat(valorClean);
+        
+        // Mapeamento Robusto de Status
+        const sUpper = (statusRaw || '').toUpperCase();
+        let finalStatus: Status = 'PENDENTE';
+        if (sUpper.includes('PAGO') || sUpper.includes('RECEB') || sUpper.includes('CONCLU')) {
+            finalStatus = type === 'PAGAR' ? 'PAGO' : 'RECEBIDO';
+        }
 
         parsed.push({
             id: crypto.randomUUID(),
@@ -198,7 +215,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
             vencimento: venc || new Date().toISOString().split('T')[0],
             descricao: (desc || 'IMPORTADO CSV').toUpperCase(),
             valor: isNaN(valor) ? 0 : valor,
-            status,
+            status: finalStatus,
             formaPagamento: (forma || 'PIX').toUpperCase(),
             centroCusto: (centro || 'OUTROS').toUpperCase(),
             subItem: (sub || '').toUpperCase(),
@@ -379,7 +396,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
                 <div className="bg-amber-50 border-2 border-amber-100 p-4 rounded-xl flex gap-3">
                     <i className="fa-solid fa-triangle-exclamation text-amber-500 text-xl"></i>
                     <p className="text-[10px] font-bold text-amber-700 leading-relaxed uppercase">
-                        Certifique-se de que o CSV possui ponto e vírgula (;) como separador e as colunas de Vencimento e Valor estão no formato correto.
+                        Certifique-se de que o CSV possui o separador correto (; ou ,) e as colunas de Vencimento, Valor, Conta e Status estão presentes.
                     </p>
                 </div>
 
