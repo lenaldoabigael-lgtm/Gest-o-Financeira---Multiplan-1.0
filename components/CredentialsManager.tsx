@@ -38,7 +38,10 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users, onUpdate
         dashboard: false,
         fluxoCaixa: false,
         detalhes: false,
-        planCredencias: false
+        planCredencias: false,
+        gestaoDemandas: false,
+        propostas: false,
+        financeiro: false
       }
     };
 
@@ -64,7 +67,8 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users, onUpdate
       if (u.login === login) {
         const currentPermissions = u.permissions || {
           centroCusto: false, contasPagar: false, contasReceber: false,
-          dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false
+          dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+          gestaoDemandas: false, propostas: false, financeiro: false
         };
         return {
           ...u,
@@ -206,6 +210,9 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users, onUpdate
                 <th className="p-6 text-center">F. Caixa</th>
                 <th className="p-6 text-center">Estrutura</th>
                 <th className="p-6 text-center">Relatórios</th>
+                <th className="p-6 text-center">Propostas</th>
+                <th className="p-6 text-center">Liberação</th>
+                <th className="p-6 text-center">Financeiro</th>
                 <th className="p-6 text-center">Usuários</th>
                 <th className="p-6 text-center">Ações</th>
               </tr>
@@ -225,6 +232,9 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users, onUpdate
                     { key: 'fluxoCaixa', label: 'F. Caixa' },
                     { key: 'centroCusto', label: 'Estrutura' },
                     { key: 'detalhes', label: 'Relatórios' },
+                    { key: 'propostas', label: 'Propostas' },
+                    { key: 'gestaoDemandas', label: 'Liberação' },
+                    { key: 'financeiro', label: 'Financeiro' },
                     { key: 'planCredencias', label: 'Usuários' }
                   ].map(perm => (
                     <td key={perm.key} className="p-6 text-center">

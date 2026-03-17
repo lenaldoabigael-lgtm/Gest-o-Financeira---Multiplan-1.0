@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Tab, Transaction, CostCenter } from './types';
+import { User, Tab, Transaction, CostCenter, Proposal } from './types';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -9,12 +9,18 @@ import CostCentersView from './components/CostCentersView';
 import CashFlow from './components/CashFlow';
 import Details from './components/Details';
 import CredentialsManager from './components/CredentialsManager';
+import ProposalsView from './components/ProposalsView';
+import ManagerArea from './components/ManagerArea';
+import ProposalModal from './components/ProposalModal';
+import FinanceView from './components/FinanceView';
 import { supabase } from './lib/supabase';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<Tab | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [appUsers, setAppUsers] = useState<User[]>([]);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,9 +47,10 @@ const App: React.FC = () => {
         }
       }
 
-      const [transactionsRes, costCentersRes] = await Promise.all([
+      const [transactionsRes, costCentersRes, proposalsRes] = await Promise.all([
         supabase.from('transactions').select('*').order('vencimento', { ascending: false }),
-        supabase.from('cost_centers').select('*').order('nome')
+        supabase.from('cost_centers').select('*').order('nome'),
+        supabase.from('proposals').select('*').order('data', { ascending: false })
       ]);
 
       let currentUsers = (usersData || []) as User[];
@@ -57,7 +64,8 @@ const App: React.FC = () => {
           approved: true,
           permissions: {
             centroCusto: true, contasPagar: true, contasReceber: true,
-            dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true
+            dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
+            gestaoDemandas: true, propostas: true, financeiro: true
           }
         };
         await supabase.from('users').insert(adminUser);
@@ -66,6 +74,17 @@ const App: React.FC = () => {
 
       setAppUsers(currentUsers);
       if (transactionsRes.data) setTransactions(transactionsRes.data);
+      if (proposalsRes.data) {
+        setProposals(proposalsRes.data);
+      } else if (!proposalsRes.error) {
+        // Mock data if table is empty but exists
+        const mockProposals: Proposal[] = [
+          { id: '1', contrato: '6GTLW', data: '2026-04-20', cliente: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 1566.62, vidas: 4, status: 'CADASTRADO', comissao: 783.31 },
+          { id: '2', contrato: 'GPLRG', data: '2026-04-20', cliente: 'T.F.S. SILVA FARMACIA', cpfCnpj: '12.345.678/0001-90', corretor: 'Michele', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 2379.28, vidas: 6, status: 'CADASTRADO', comissao: 1189.64 },
+          { id: '3', contrato: 'HXRYU', data: '2026-04-21', cliente: 'JOAO SILVA', cpfCnpj: '111.222.333-44', corretor: 'Luiza', operadora: 'Amil', categoria: 'Direto', valor: 326.37, vidas: 2, status: 'CADASTRADO', comissao: 163.18 },
+        ];
+        setProposals(mockProposals);
+      }
       if (costCentersRes.data) {
         setCostCenters(costCentersRes.data.map(cc => ({
           id: cc.id, nome: cc.nome, tipo: cc.tipo, subItens: cc.sub_itens || []
@@ -112,7 +131,12 @@ const App: React.FC = () => {
     const newUser: User = {
       login, senha: pass, email,
       approved: false,
-      permissions: { centroCusto: false, contasPagar: false, contasReceber: false, dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false }
+      permissions: { 
+        centroCusto: false, contasPagar: false, contasReceber: false, 
+        dashboard: false, fluxoCaixa: false, detalhes: false, 
+        planCredencias: false, gestaoDemandas: false, propostas: false,
+        financeiro: false
+      }
     };
     const { error } = await supabase.from('users').insert(newUser);
     if (error) {
@@ -125,7 +149,10 @@ const App: React.FC = () => {
   };
 
   const showAccountFilter = useMemo(() => {
-    return activeTab !== Tab.CENTRO_CUSTO && activeTab !== Tab.PLAN_CREDENCIAS;
+    return activeTab !== Tab.CENTRO_CUSTO && 
+           activeTab !== Tab.PLAN_CREDENCIAS && 
+           activeTab !== Tab.PROPOSTAS && 
+           activeTab !== Tab.GESTAO_DEMANDAS;
   }, [activeTab]);
 
   if (errorType === 'SCHEMA_HIDDEN') {
@@ -228,8 +255,52 @@ const App: React.FC = () => {
         {activeTab === Tab.CENTRO_CUSTO && <CostCentersView costCenters={costCenters} onSave={async cc => { await supabase.from('cost_centers').upsert({id: cc.id, nome: cc.nome, tipo: cc.tipo, sub_itens: cc.subItens || []}); fetchData(); }} onDelete={async id => { await supabase.from('cost_centers').delete().eq('id', id); fetchData(); }} />}
         {activeTab === Tab.FLUXO_CAIXA && <CashFlow transactions={filteredTransactions} />}
         {activeTab === Tab.DETALHES && <Details transactions={filteredTransactions} costCenters={costCenters} />}
+        {activeTab === Tab.PROPOSTAS && (
+          <ProposalsView 
+            proposals={proposals} 
+            onAddProposal={() => setIsProposalModalOpen(true)} 
+            onDeleteProposal={async (id) => {
+              const { error } = await supabase.from('proposals').delete().eq('id', id);
+              if (error) {
+                console.error('Erro ao excluir proposta:', error);
+                setProposals(prev => prev.filter(p => p.id !== id));
+              } else {
+                fetchData();
+              }
+            }}
+          />
+        )}
+        {activeTab === Tab.GESTAO_DEMANDAS && (
+          <ManagerArea 
+            proposals={proposals} 
+            onGeneratePaymentCode={async (ids) => {
+              const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+              alert(`Código de Pagamento Gerado: ${code}\nAs propostas selecionadas foram enviadas ao financeiro.`);
+              // Update local state for demo
+              setProposals(prev => prev.map(p => ids.includes(p.id) ? { ...p, status: 'ENVIADO_FINANCEIRO' } : p));
+              // In real app: await supabase.from('proposals').update({ status: 'ENVIADO_FINANCEIRO' }).in('id', ids);
+            }} 
+          />
+        )}
+        {activeTab === Tab.FINANCEIRO && <FinanceView />}
         {activeTab === Tab.PLAN_CREDENCIAS && <CredentialsManager users={appUsers} onUpdateUsers={async nu => { for(const u of nu) { await supabase.from('users').upsert(u); } fetchData(); }} />}
       </div>
+
+      <ProposalModal 
+        isOpen={isProposalModalOpen} 
+        onClose={() => setIsProposalModalOpen(false)} 
+        onSave={async (newProposal) => {
+          const { error } = await supabase.from('proposals').insert([newProposal]);
+          if (error) {
+            console.error('Erro ao salvar proposta:', error);
+            // Fallback for demo if table doesn't exist
+            const mockNew: Proposal = { ...newProposal, id: Math.random().toString() };
+            setProposals(prev => [mockNew, ...prev]);
+          } else {
+            fetchData();
+          }
+        }}
+      />
     </Layout>
   );
 };

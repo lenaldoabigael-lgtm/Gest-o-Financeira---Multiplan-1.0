@@ -18,6 +18,9 @@ const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout
     { id: Tab.FLUXO_CAIXA, label: 'Fluxo de Caixa', icon: 'fa-money-bill-transfer', permission: user.permissions.fluxoCaixa },
     { id: Tab.CENTRO_CUSTO, label: 'Estrutura', icon: 'fa-sitemap', permission: user.permissions.centroCusto },
     { id: Tab.DETALHES, label: 'Relatórios', icon: 'fa-file-lines', permission: user.permissions.detalhes },
+    { id: Tab.PROPOSTAS, label: 'Propostas', icon: 'fa-file-contract', permission: user.permissions.propostas },
+    { id: Tab.GESTAO_DEMANDAS, label: 'Liberação', icon: 'fa-hand-holding-dollar', permission: user.permissions.gestaoDemandas },
+    { id: Tab.FINANCEIRO, label: 'Financeiro', icon: 'fa-wallet', permission: true },
     { id: Tab.PLAN_CREDENCIAS, label: 'Usuários', icon: 'fa-user-gear', permission: user.permissions.planCredencias },
   ];
 

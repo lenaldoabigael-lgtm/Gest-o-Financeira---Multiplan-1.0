@@ -1,0 +1,180 @@
+
+import React, { useState } from 'react';
+import { PaymentLot } from '../types';
+
+const FinanceView: React.FC = () => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('Pendente');
+
+  // Mock data based on the screenshot
+  const [lots, setLots] = useState<PaymentLot[]>([
+    {
+      id: '1',
+      codigo: 'LOTE-2603-042',
+      aprovadoPor: 'Arley (Gestor)',
+      dataAprovacao: '16/03/2026 às 14:30',
+      qtdPropostas: 2,
+      vencimento: '17/03/2026',
+      valorTotal: 946.49,
+      status: 'PENDENTE'
+    },
+    {
+      id: '2',
+      codigo: 'LOTE-2603-041',
+      aprovadoPor: 'João (Gestor)',
+      dataAprovacao: '15/03/2026 às 16:15',
+      qtdPropostas: 5,
+      vencimento: 'Hoje',
+      valorTotal: 3946.01,
+      status: 'PENDENTE'
+    },
+    {
+      id: '3',
+      codigo: 'LOTE-2603-040',
+      aprovadoPor: 'Arley (Gestor)',
+      dataAprovacao: '15/03/2026',
+      qtdPropostas: 1,
+      vencimento: '15/03/2026',
+      valorTotal: 1250.00,
+      status: 'PAGO'
+    }
+  ]);
+
+  const handlePay = (id: string) => {
+    setLots(prev => prev.map(lot => lot.id === id ? { ...lot, status: 'PAGO' } : lot));
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Header Area */}
+      <div className="bg-slate-900 p-4 rounded-xl flex items-center gap-4 text-white shadow-lg">
+        <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+          <i className="fa-solid fa-wallet text-xl"></i>
+        </div>
+        <div>
+          <h1 className="text-lg font-black uppercase tracking-tighter">Módulo Financeiro</h1>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Controle de Pagamentos e Comissões</p>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-xl border-l-4 border-orange-500 shadow-sm flex justify-between items-start">
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Aguardando Pagamento</p>
+            <h2 className="text-2xl font-black text-slate-800">R$ 4.892,50</h2>
+          </div>
+          <span className="bg-orange-100 text-orange-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">3 Lotes</span>
+        </div>
+        <div className="bg-white p-6 rounded-xl border-l-4 border-emerald-500 shadow-sm flex justify-between items-start">
+          <div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Pago Hoje</p>
+            <h2 className="text-2xl font-black text-slate-800">R$ 1.250,00</h2>
+          </div>
+          <span className="bg-emerald-100 text-emerald-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">1 Lote</span>
+        </div>
+        <div className="bg-white p-6 rounded-xl border-l-4 border-blue-500 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Previsão da Semana</p>
+          <h2 className="text-2xl font-black text-slate-800">R$ 12.400,00</h2>
+        </div>
+      </div>
+
+      {/* Table Area */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-layer-group text-blue-600"></i>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Lotes de Pagamento (Borderôs)</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+              <input 
+                type="text" 
+                placeholder="Buscar por código do lote..." 
+                className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <select 
+              className="bg-slate-50 border border-slate-200 rounded-lg text-xs px-3 py-2 outline-none"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+            >
+              <option>Status: Todos</option>
+              <option>Status: Pendente</option>
+              <option>Status: Pago</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                <th className="px-6 py-4">Código do Lote</th>
+                <th className="px-6 py-4">Aprovado por</th>
+                <th className="px-6 py-4">Qtd. Propostas</th>
+                <th className="px-6 py-4">Vencimento</th>
+                <th className="px-6 py-4">Valor Total</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {lots.map(lot => (
+                <tr key={lot.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <p className="text-xs font-black text-slate-800">{lot.codigo}</p>
+                    <button className="text-[9px] font-bold text-blue-600 hover:underline uppercase">Ver detalhes</button>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-xs font-bold text-slate-700">{lot.aprovadoPor}</p>
+                    <p className="text-[9px] text-slate-400">{lot.dataAprovacao}</p>
+                  </td>
+                  <td className="px-6 py-4 text-xs text-slate-600">
+                    {lot.qtdPropostas} {lot.qtdPropostas === 1 ? 'proposta' : 'propostas'}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`text-xs font-bold ${lot.vencimento === 'Hoje' ? 'text-red-500' : 'text-slate-600'}`}>
+                      {lot.vencimento}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm font-black text-slate-800">
+                    R$ {lot.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-6 py-4">
+                    {lot.status === 'PENDENTE' ? (
+                      <span className="bg-orange-100 text-orange-600 text-[9px] font-black px-2 py-1 rounded uppercase">Pendente</span>
+                    ) : (
+                      <span className="bg-emerald-100 text-emerald-600 text-[9px] font-black px-2 py-1 rounded uppercase flex items-center gap-1 w-fit">
+                        <i className="fa-solid fa-check"></i> Pago
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    {lot.status === 'PENDENTE' ? (
+                      <button 
+                        onClick={() => handlePay(lot.id)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black px-4 py-2 rounded-lg uppercase tracking-widest flex items-center gap-2 ml-auto shadow-md shadow-blue-600/20 transition-all"
+                      >
+                        <i className="fa-solid fa-circle-check"></i> Baixar Pagamento
+                      </button>
+                    ) : (
+                      <button className="text-[10px] font-black text-slate-400 hover:text-slate-600 uppercase tracking-widest flex items-center gap-2 ml-auto transition-all">
+                        <i className="fa-solid fa-paperclip"></i> Ver Comprovante
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default FinanceView;

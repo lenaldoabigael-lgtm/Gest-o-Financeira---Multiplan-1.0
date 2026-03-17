@@ -14,6 +14,9 @@ export interface User {
     fluxoCaixa: boolean;
     detalhes: boolean;
     planCredencias: boolean;
+    gestaoDemandas: boolean;
+    propostas: boolean;
+    financeiro: boolean;
   };
 }
 
@@ -49,5 +52,34 @@ export enum Tab {
   DASHBOARD = 'dashboard',
   FLUXO_CAIXA = 'fluxo_caixa',
   DETALHES = 'detalhes',
-  PLAN_CREDENCIAS = 'plan_credencias'
+  PLAN_CREDENCIAS = 'plan_credencias',
+  GESTAO_DEMANDAS = 'gestao_demandas',
+  PROPOSTAS = 'propostas',
+  FINANCEIRO = 'financeiro'
+}
+
+export interface PaymentLot {
+  id: string;
+  codigo: string;
+  aprovadoPor: string;
+  dataAprovacao: string;
+  qtdPropostas: number;
+  vencimento: string;
+  valorTotal: number;
+  status: 'PENDENTE' | 'PAGO';
+}
+
+export interface Proposal {
+  id: string;
+  contrato: string;
+  data: string;
+  cliente: string;
+  cpfCnpj: string;
+  corretor: string;
+  operadora: string;
+  categoria: string;
+  valor: number;
+  vidas: number;
+  status: 'CADASTRADO' | 'ENVIADO_FINANCEIRO' | 'PAGO';
+  comissao: number;
 }

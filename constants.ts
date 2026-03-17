@@ -12,7 +12,10 @@ export const USERS: User[] = [
       dashboard: true, 
       fluxoCaixa: true, 
       detalhes: true,
-      planCredencias: true 
+      planCredencias: true,
+      gestaoDemandas: true,
+      propostas: true,
+      financeiro: true
     }
   },
   {
@@ -25,7 +28,10 @@ export const USERS: User[] = [
       dashboard: false, 
       fluxoCaixa: false, 
       detalhes: false,
-      planCredencias: false 
+      planCredencias: false,
+      gestaoDemandas: false,
+      propostas: false,
+      financeiro: false
     }
   },
   {
@@ -38,7 +44,10 @@ export const USERS: User[] = [
       dashboard: false, 
       fluxoCaixa: false, 
       detalhes: false,
-      planCredencias: false 
+      planCredencias: false,
+      gestaoDemandas: false,
+      propostas: false,
+      financeiro: false
     }
   },
   {
@@ -51,7 +60,10 @@ export const USERS: User[] = [
       dashboard: true, 
       fluxoCaixa: true, 
       detalhes: true,
-      planCredencias: false 
+      planCredencias: false,
+      gestaoDemandas: true,
+      propostas: true,
+      financeiro: true
     }
   }
 ];
