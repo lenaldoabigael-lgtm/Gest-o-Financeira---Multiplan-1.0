@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Proposal } from '../types';
+import * as XLSX from 'xlsx';
 
 interface ManagerAreaProps {
   proposals: Proposal[];
@@ -14,7 +15,7 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
 
   const filteredProposals = useMemo(() => {
     return proposals.filter(p => 
-      p.status === 'CADASTRADO' &&
+      p.status === 'CADASTRADA' &&
       (p.corretor.toLowerCase().includes(searchTerm.toLowerCase()) || p.contrato.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterOperadora === 'Todas' || p.operadora === filterOperadora)
     );
@@ -40,9 +41,46 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
       count: selected.length,
       vidas: selected.reduce((acc, p) => acc + p.vidas, 0),
       valorTotal: selected.reduce((acc, p) => acc + p.valor, 0),
-      comissaoTotal: selected.reduce((acc, p) => acc + p.comissao, 0)
+      comissaoTotal: selected.reduce((acc, p) => acc + p.comissao, 0),
+      selectedProposals: selected
     };
   }, [proposals, selectedIds]);
+
+  const handleExportExcel = () => {
+    const dataToExport = selectedIds.length > 0
+      ? summary.selectedProposals
+      : filteredProposals;
+
+    if (dataToExport.length === 0) {
+      alert('Nenhuma proposta selecionada para exportar.');
+      return;
+    }
+
+    const worksheetData = dataToExport.map(p => ({
+      'Nº Contrato': p.contrato,
+      'Data': p.data,
+      'Cliente': p.cliente,
+      'CPF/CNPJ': p.cpfCnpj,
+      'Corretor': p.corretor,
+      'Operadora': p.operadora,
+      'Categoria': p.categoria,
+      'Valor Contrato': p.valor,
+      'Comissão/Taxa': p.comissao,
+      'Vidas': p.vidas,
+      'Status': p.status,
+      'Observações': p.observacoes || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Liberação");
+    
+    // Auto-size columns
+    const max_width = worksheetData.reduce((w, r) => Math.max(w, ...Object.values(r).map(v => v.toString().length)), 10);
+    worksheet["!cols"] = Object.keys(worksheetData[0]).map(() => ({ wch: max_width }));
+
+    XLSX.writeFile(workbook, `liberacao_financeira_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
 
   const operadoras = useMemo(() => {
     const unique = Array.from(new Set(proposals.map(p => p.operadora)));
@@ -162,7 +200,15 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-100">
+            <div className="pt-4 border-t border-slate-100 space-y-3">
+              <button
+                onClick={handleExportExcel}
+                className="w-full py-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all border border-emerald-100 text-xs"
+              >
+                <i className="fa-solid fa-file-excel"></i>
+                Exportar Seleção para Excel
+              </button>
+
               <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-center justify-between">
                 <span className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">Total a Liberar (Comissões)</span>
                 <span className="text-xl font-black text-emerald-600">R$ {summary.comissaoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
@@ -171,7 +217,10 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
 
             <button
               disabled={selectedIds.length === 0}
-              onClick={() => onGeneratePaymentCode(selectedIds)}
+              onClick={async () => {
+                await onGeneratePaymentCode(selectedIds);
+                setSelectedIds([]);
+              }}
               className={`w-full py-4 rounded-xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg ${
                 selectedIds.length > 0 
                 ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-600/20' 

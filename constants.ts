@@ -15,7 +15,8 @@ export const USERS: User[] = [
       planCredencias: true,
       gestaoDemandas: true,
       propostas: true,
-      financeiro: true
+      financeiro: true,
+      estruturaProposta: true
     }
   },
   {
@@ -31,7 +32,8 @@ export const USERS: User[] = [
       planCredencias: false,
       gestaoDemandas: false,
       propostas: false,
-      financeiro: false
+      financeiro: false,
+      estruturaProposta: false
     }
   },
   {
@@ -47,7 +49,8 @@ export const USERS: User[] = [
       planCredencias: false,
       gestaoDemandas: false,
       propostas: false,
-      financeiro: false
+      financeiro: false,
+      estruturaProposta: false
     }
   },
   {
@@ -63,7 +66,8 @@ export const USERS: User[] = [
       planCredencias: false,
       gestaoDemandas: true,
       propostas: true,
-      financeiro: true
+      financeiro: true,
+      estruturaProposta: true
     }
   }
 ];

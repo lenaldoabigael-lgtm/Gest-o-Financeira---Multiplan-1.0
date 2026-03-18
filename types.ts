@@ -17,6 +17,7 @@ export interface User {
     gestaoDemandas: boolean;
     propostas: boolean;
     financeiro: boolean;
+    estruturaProposta: boolean;
   };
 }
 
@@ -45,6 +46,12 @@ export interface CostCenter {
   subItens: string[];
 }
 
+export interface ProposalRequirement {
+  id: string;
+  tipo: 'CORRETOR' | 'CATEGORIA' | 'OPERADORA' | 'TIPO_PLANO' | 'UNIDADE';
+  nome: string;
+}
+
 export enum Tab {
   CONTAS_PAGAR = 'contas_pagar',
   CONTAS_RECEBER = 'contas_receber',
@@ -55,7 +62,8 @@ export enum Tab {
   PLAN_CREDENCIAS = 'plan_credencias',
   GESTAO_DEMANDAS = 'gestao_demandas',
   PROPOSTAS = 'propostas',
-  FINANCEIRO = 'financeiro'
+  FINANCEIRO = 'financeiro',
+  ESTRUTURA_PROPOSTA = 'estrutura_proposta'
 }
 
 export interface PaymentLot {
@@ -80,6 +88,6 @@ export interface Proposal {
   categoria: string;
   valor: number;
   vidas: number;
-  status: 'CADASTRADO' | 'ENVIADO_FINANCEIRO' | 'PAGO';
+  status: 'CADASTRADA' | 'ENVIADA AO FINANCEIRO' | 'PAGO';
   comissao: number;
 }

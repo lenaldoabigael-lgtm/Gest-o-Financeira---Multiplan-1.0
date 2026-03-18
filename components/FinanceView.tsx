@@ -2,46 +2,28 @@
 import React, { useState } from 'react';
 import { PaymentLot } from '../types';
 
-const FinanceView: React.FC = () => {
+interface FinanceViewProps {
+  lots: PaymentLot[];
+  onPay: (id: string) => void;
+}
+
+const FinanceView: React.FC<FinanceViewProps> = ({ lots, onPay }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('Pendente');
+  const [statusFilter, setStatusFilter] = useState('Todos');
 
-  // Mock data based on the screenshot
-  const [lots, setLots] = useState<PaymentLot[]>([
-    {
-      id: '1',
-      codigo: 'LOTE-2603-042',
-      aprovadoPor: 'Arley (Gestor)',
-      dataAprovacao: '16/03/2026 às 14:30',
-      qtdPropostas: 2,
-      vencimento: '17/03/2026',
-      valorTotal: 946.49,
-      status: 'PENDENTE'
-    },
-    {
-      id: '2',
-      codigo: 'LOTE-2603-041',
-      aprovadoPor: 'João (Gestor)',
-      dataAprovacao: '15/03/2026 às 16:15',
-      qtdPropostas: 5,
-      vencimento: 'Hoje',
-      valorTotal: 3946.01,
-      status: 'PENDENTE'
-    },
-    {
-      id: '3',
-      codigo: 'LOTE-2603-040',
-      aprovadoPor: 'Arley (Gestor)',
-      dataAprovacao: '15/03/2026',
-      qtdPropostas: 1,
-      vencimento: '15/03/2026',
-      valorTotal: 1250.00,
-      status: 'PAGO'
-    }
-  ]);
+  const filteredLots = lots.filter(lot => {
+    const matchesSearch = lot.codigo.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'Todos' || 
+                         (statusFilter === 'Pendente' && lot.status === 'PENDENTE') ||
+                         (statusFilter === 'Pago' && lot.status === 'PAGO');
+    return matchesSearch && matchesStatus;
+  });
 
-  const handlePay = (id: string) => {
-    setLots(prev => prev.map(lot => lot.id === id ? { ...lot, status: 'PAGO' } : lot));
+  const totals = {
+    pendente: lots.filter(l => l.status === 'PENDENTE').reduce((acc, l) => acc + l.valorTotal, 0),
+    pagoHoje: lots.filter(l => l.status === 'PAGO').reduce((acc, l) => acc + l.valorTotal, 0), // Simplification
+    countPendente: lots.filter(l => l.status === 'PENDENTE').length,
+    countPago: lots.filter(l => l.status === 'PAGO').length
   };
 
   return (
@@ -62,20 +44,20 @@ const FinanceView: React.FC = () => {
         <div className="bg-white p-6 rounded-xl border-l-4 border-orange-500 shadow-sm flex justify-between items-start">
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Aguardando Pagamento</p>
-            <h2 className="text-2xl font-black text-slate-800">R$ 4.892,50</h2>
+            <h2 className="text-2xl font-black text-slate-800">R$ {totals.pendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
           </div>
-          <span className="bg-orange-100 text-orange-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">3 Lotes</span>
+          <span className="bg-orange-100 text-orange-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">{totals.countPendente} {totals.countPendente === 1 ? 'Lote' : 'Lotes'}</span>
         </div>
         <div className="bg-white p-6 rounded-xl border-l-4 border-emerald-500 shadow-sm flex justify-between items-start">
           <div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Pago Hoje</p>
-            <h2 className="text-2xl font-black text-slate-800">R$ 1.250,00</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Pago (Total)</p>
+            <h2 className="text-2xl font-black text-slate-800">R$ {totals.pagoHoje.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
           </div>
-          <span className="bg-emerald-100 text-emerald-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">1 Lote</span>
+          <span className="bg-emerald-100 text-emerald-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">{totals.countPago} {totals.countPago === 1 ? 'Lote' : 'Lotes'}</span>
         </div>
         <div className="bg-white p-6 rounded-xl border-l-4 border-blue-500 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Previsão da Semana</p>
-          <h2 className="text-2xl font-black text-slate-800">R$ 12.400,00</h2>
+          <h2 className="text-2xl font-black text-slate-800">R$ {(totals.pendente + totals.pagoHoje).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
         </div>
       </div>
 
@@ -123,7 +105,7 @@ const FinanceView: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {lots.map(lot => (
+              {filteredLots.map(lot => (
                 <tr key={lot.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <p className="text-xs font-black text-slate-800">{lot.codigo}</p>
@@ -156,7 +138,7 @@ const FinanceView: React.FC = () => {
                   <td className="px-6 py-4 text-right">
                     {lot.status === 'PENDENTE' ? (
                       <button 
-                        onClick={() => handlePay(lot.id)}
+                        onClick={() => onPay(lot.id)}
                         className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black px-4 py-2 rounded-lg uppercase tracking-widest flex items-center gap-2 ml-auto shadow-md shadow-blue-600/20 transition-all"
                       >
                         <i className="fa-solid fa-circle-check"></i> Baixar Pagamento
@@ -169,6 +151,14 @@ const FinanceView: React.FC = () => {
                   </td>
                 </tr>
               ))}
+              {filteredLots.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center">
+                    <i className="fa-solid fa-folder-open text-4xl text-slate-200 mb-3"></i>
+                    <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhum lote encontrado</p>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
