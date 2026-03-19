@@ -183,31 +183,35 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
   React.useEffect(() => {
     if (isOpen) {
       if (proposal) {
-        setFormData({
-          ...initialData,
-          cliente: {
-            ...initialData.cliente,
-            nome: proposal.cliente,
-            cpfCnpj: proposal.cpfCnpj
-          },
-          proposta: {
-            contrato: proposal.contrato,
-            dataVenda: proposal.data,
-            corretor: proposal.corretor,
-            categoria: proposal.categoria,
-            operadora: proposal.operadora,
-            tipoPlano: '', // Not in Proposal type
-            unidade: '' // Not in Proposal type
-          },
-          financeiro: {
-            ...initialData.financeiro,
-            valorContrato: proposal.valor,
-            vidas: proposal.vidas,
-            parcelas: [
-              { id: '1', numero: '1ª Parcela', valor: proposal.valor, comissao: proposal.comissao, vencimento: proposal.data }
-            ]
-          }
-        });
+        if (proposal.detalhes) {
+          setFormData(proposal.detalhes);
+        } else {
+          setFormData({
+            ...initialData,
+            cliente: {
+              ...initialData.cliente,
+              nome: proposal.cliente,
+              cpfCnpj: proposal.cpfCnpj
+            },
+            proposta: {
+              contrato: proposal.contrato,
+              dataVenda: proposal.data,
+              corretor: proposal.corretor,
+              categoria: proposal.categoria,
+              operadora: proposal.operadora,
+              tipoPlano: '', // Not in Proposal type
+              unidade: '' // Not in Proposal type
+            },
+            financeiro: {
+              ...initialData.financeiro,
+              valorContrato: proposal.valor,
+              vidas: proposal.vidas,
+              parcelas: [
+                { id: '1', numero: '1ª Parcela', valor: proposal.valor, comissao: proposal.comissao, vencimento: proposal.data }
+              ]
+            }
+          });
+        }
       } else {
         setFormData(initialData);
       }
@@ -229,7 +233,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       valor: formData.financeiro.valorContrato,
       vidas: formData.financeiro.vidas,
       status: proposal?.status || 'CADASTRADA',
-      comissao: formData.financeiro.parcelas[0]?.comissao || 0
+      comissao: formData.financeiro.parcelas[0]?.comissao || 0,
+      detalhes: formData
     });
     onClose();
   };

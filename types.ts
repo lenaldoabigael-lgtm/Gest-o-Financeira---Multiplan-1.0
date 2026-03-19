@@ -90,4 +90,5 @@ export interface Proposal {
   vidas: number;
   status: 'CADASTRADA' | 'ENVIADA AO FINANCEIRO' | 'PAGO';
   comissao: number;
+  detalhes?: any;
 }
