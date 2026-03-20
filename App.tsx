@@ -224,11 +224,12 @@ CREATE TABLE IF NOT EXISTS users (login TEXT PRIMARY KEY, senha TEXT NOT NULL, e
 CREATE TABLE IF NOT EXISTS cost_centers (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), nome TEXT NOT NULL, tipo TEXT NOT NULL, sub_itens TEXT[] DEFAULT '{}');
 CREATE TABLE IF NOT EXISTS transactions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), type TEXT NOT NULL, vencimento DATE NOT NULL, pagamento DATE, descricao TEXT NOT NULL, valor NUMERIC(15,2) NOT NULL, "formaPagamento" TEXT NOT NULL, status TEXT NOT NULL, "centroCusto" TEXT NOT NULL, "subItem" TEXT NOT NULL, cliente TEXT, conta TEXT DEFAULT 'GERAL');
 CREATE TABLE IF NOT EXISTS proposal_requirements (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tipo TEXT NOT NULL, nome TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS proposals (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), contrato TEXT NOT NULL, data DATE NOT NULL, cliente TEXT NOT NULL, "cpfCnpj" TEXT NOT NULL, corretor TEXT NOT NULL, operadora TEXT NOT NULL, categoria TEXT NOT NULL, valor NUMERIC(15,2) NOT NULL, vidas INTEGER NOT NULL, status TEXT NOT NULL, comissao NUMERIC(15,2) NOT NULL, detalhes JSONB);
+CREATE TABLE IF NOT EXISTS proposals (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), contrato TEXT NOT NULL, data DATE NOT NULL, cliente TEXT NOT NULL, "cpfCnpj" TEXT NOT NULL, corretor TEXT NOT NULL, operadora TEXT NOT NULL, categoria TEXT NOT NULL, valor NUMERIC(15,2) NOT NULL, vidas INTEGER NOT NULL, status TEXT NOT NULL, comissao NUMERIC(15,2) NOT NULL, detalhes JSONB, lote_id UUID);
 CREATE TABLE IF NOT EXISTS payment_lots (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), codigo TEXT NOT NULL, "aprovadoPor" TEXT NOT NULL, "dataAprovacao" TIMESTAMP WITH TIME ZONE NOT NULL, "qtdPropostas" INTEGER NOT NULL, vencimento DATE NOT NULL, "valorTotal" NUMERIC(15,2) NOT NULL, status TEXT NOT NULL);
 
 /* 2. ATUALIZAR TABELAS EXISTENTES */
 ALTER TABLE proposals ADD COLUMN IF NOT EXISTS detalhes JSONB;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS lote_id UUID;
 
 /* 3. DESABILITAR RLS (Segurança para Testes) */
 ALTER TABLE users DISABLE ROW LEVEL SECURITY;
@@ -340,35 +341,45 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             proposals={proposals} 
             onGeneratePaymentCode={async (ids) => {
               const selectedProposals = proposals.filter(p => ids.includes(p.id));
-              const totalValue = selectedProposals.reduce((acc, p) => acc + p.comissao, 0);
+              const totalValue = selectedProposals.reduce((acc, p) => acc + Number(p.comissao), 0);
               const code = `LOTE-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`;
               
               const newLot: Omit<PaymentLot, 'id'> = {
                 codigo: code,
                 aprovadoPor: user?.login || 'Sistema',
-                dataAprovacao: new Date().toLocaleString('pt-BR'),
+                dataAprovacao: new Date().toISOString(),
                 qtdPropostas: ids.length,
-                vencimento: new Date(Date.now() + 86400000).toLocaleDateString('pt-BR'), // Tomorrow
+                vencimento: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Tomorrow
                 valorTotal: totalValue,
                 status: 'PENDENTE'
               };
 
               const { data: lotData, error: lotError } = await supabase.from('payment_lots').insert([newLot]).select();
               
+              let createdLotId: string | undefined;
+
               if (lotError) {
                 console.error('Erro ao criar lote:', lotError);
                 // Fallback for demo
                 const mockLot = { ...newLot, id: Math.random().toString() } as PaymentLot;
                 setPaymentLots(prev => [mockLot, ...prev]);
+                createdLotId = mockLot.id;
+              } else if (lotData && lotData.length > 0) {
+                createdLotId = lotData[0].id;
               }
 
-              const { error: propError } = await supabase.from('proposals').update({ status: 'ENVIADA AO FINANCEIRO' }).in('id', ids);
+              const updateData: any = { status: 'ENVIADA AO FINANCEIRO' };
+              if (createdLotId) {
+                updateData.lote_id = createdLotId;
+              }
+
+              const { error: propError } = await supabase.from('proposals').update(updateData).in('id', ids);
               
               if (propError) {
                 console.error('Erro ao atualizar propostas:', propError);
               } else {
                 // Optimistic update to remove from release flow immediately
-                setProposals(prev => prev.map(p => ids.includes(p.id) ? { ...p, status: 'ENVIADA AO FINANCEIRO' } : p));
+                setProposals(prev => prev.map(p => ids.includes(p.id) ? { ...p, status: 'ENVIADA AO FINANCEIRO', lote_id: createdLotId } : p));
               }
 
               // Small delay to ensure DB has processed the update before we fetch again
@@ -381,6 +392,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         {activeTab === Tab.FINANCEIRO && (
           <FinanceView 
             lots={paymentLots} 
+            proposals={proposals}
             onPay={async (id) => {
               const { error } = await supabase.from('payment_lots').update({ status: 'PAGO' }).eq('id', id);
               if (error) {

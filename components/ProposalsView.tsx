@@ -189,7 +189,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
                     <div className="text-[10px] text-slate-400 uppercase font-bold">{p.categoria}</div>
                   </td>
                   <td className="p-4">
-                    <div className="font-bold text-slate-700">R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                    <div className="font-bold text-slate-700">R$ {Number(p.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
                     <div className="text-[10px] text-slate-400 font-bold">{p.vidas} vidas</div>
                   </td>
                   <td className="p-4">

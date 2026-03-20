@@ -230,10 +230,10 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       corretor: formData.proposta.corretor,
       operadora: formData.proposta.operadora,
       categoria: formData.proposta.categoria,
-      valor: formData.financeiro.valorContrato,
-      vidas: formData.financeiro.vidas,
+      valor: Number(formData.financeiro.valorContrato) || 0,
+      vidas: Number(formData.financeiro.vidas) || 0,
       status: proposal?.status || 'CADASTRADA',
-      comissao: formData.financeiro.parcelas[0]?.comissao || 0,
+      comissao: Number(formData.financeiro.parcelas[0]?.comissao) || 0,
       detalhes: formData
     });
     onClose();

@@ -39,9 +39,9 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
     const selected = proposals.filter(p => selectedIds.includes(p.id));
     return {
       count: selected.length,
-      vidas: selected.reduce((acc, p) => acc + p.vidas, 0),
-      valorTotal: selected.reduce((acc, p) => acc + p.valor, 0),
-      comissaoTotal: selected.reduce((acc, p) => acc + p.comissao, 0),
+      vidas: selected.reduce((acc, p) => acc + Number(p.vidas), 0),
+      valorTotal: selected.reduce((acc, p) => acc + Number(p.valor), 0),
+      comissaoTotal: selected.reduce((acc, p) => acc + Number(p.comissao), 0),
       selectedProposals: selected
     };
   }, [proposals, selectedIds]);
@@ -157,10 +157,10 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
                         <div className="text-[10px] text-slate-400 uppercase font-bold">Multi Plan</div>
                       </td>
                       <td className="p-4 text-right font-mono text-sm text-slate-600">
-                        R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        R$ {Number(p.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-4 text-right font-mono text-sm font-bold text-emerald-600">
-                        R$ {p.comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        R$ {Number(p.comissao).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))}

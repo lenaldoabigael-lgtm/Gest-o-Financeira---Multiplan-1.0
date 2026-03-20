@@ -91,4 +91,5 @@ export interface Proposal {
   status: 'CADASTRADA' | 'ENVIADA AO FINANCEIRO' | 'PAGO';
   comissao: number;
   detalhes?: any;
+  lote_id?: string;
 }
