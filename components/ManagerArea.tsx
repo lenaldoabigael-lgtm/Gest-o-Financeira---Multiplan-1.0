@@ -12,26 +12,29 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOperadora, setFilterOperadora] = useState('Todas');
+  const [filterStatus, setFilterStatus] = useState('CADASTRADA');
 
   const filteredProposals = useMemo(() => {
     return proposals.filter(p => 
-      p.status === 'CADASTRADA' &&
+      (filterStatus === 'Todas' || p.status === filterStatus) &&
       (p.corretor.toLowerCase().includes(searchTerm.toLowerCase()) || p.contrato.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterOperadora === 'Todas' || p.operadora === filterOperadora)
     );
-  }, [proposals, searchTerm, filterOperadora]);
+  }, [proposals, searchTerm, filterOperadora, filterStatus]);
 
-  const toggleSelection = (id: string) => {
+  const toggleSelection = (id: string, status: string) => {
+    if (status !== 'CADASTRADA') return;
     setSelectedIds(prev => 
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
 
   const toggleAll = () => {
-    if (selectedIds.length === filteredProposals.length) {
+    const selectable = filteredProposals.filter(p => p.status === 'CADASTRADA');
+    if (selectedIds.length === selectable.length && selectable.length > 0) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(filteredProposals.map(p => p.id));
+      setSelectedIds(selectable.map(p => p.id));
     }
   };
 
@@ -116,6 +119,15 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
             >
               {operadoras.map(op => <option key={op} value={op}>Operadora: {op}</option>)}
             </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
+            >
+              <option value="Todas">Status: Todos</option>
+              <option value="CADASTRADA">Status: Cadastrada</option>
+              <option value="ENVIADA AO FINANCEIRO">Status: Enviada ao Financeiro</option>
+            </select>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -126,27 +138,33 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
                     <th className="p-4 w-10">
                       <input
                         type="checkbox"
-                        checked={selectedIds.length > 0 && selectedIds.length === filteredProposals.length}
+                        checked={selectedIds.length > 0 && selectedIds.length === filteredProposals.filter(p => p.status === 'CADASTRADA').length}
                         onChange={toggleAll}
                         className="rounded border-slate-300 text-blue-900 focus:ring-blue-900"
+                        disabled={filteredProposals.filter(p => p.status === 'CADASTRADA').length === 0}
                       />
                     </th>
                     <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contrato</th>
                     <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Corretor</th>
                     <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Valor Contrato</th>
                     <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Comissão/Taxa</th>
+                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {filteredProposals.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <tr key={p.id} className={`hover:bg-slate-50/50 transition-colors group ${p.status !== 'CADASTRADA' ? 'opacity-60' : ''}`}>
                       <td className="p-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(p.id)}
-                          onChange={() => toggleSelection(p.id)}
-                          className="rounded border-slate-300 text-blue-900 focus:ring-blue-900"
-                        />
+                        {p.status === 'CADASTRADA' ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(p.id)}
+                            onChange={() => toggleSelection(p.id, p.status)}
+                            className="rounded border-slate-300 text-blue-900 focus:ring-blue-900"
+                          />
+                        ) : (
+                          <i className="fa-solid fa-lock text-slate-300 text-xs"></i>
+                        )}
                       </td>
                       <td className="p-4">
                         <div className="font-bold text-blue-900">{p.contrato}</div>
@@ -162,13 +180,20 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
                       <td className="p-4 text-right font-mono text-sm font-bold text-emerald-600">
                         R$ {Number(p.comissao).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
+                      <td className="p-4 text-center">
+                        {p.status === 'CADASTRADA' ? (
+                          <span className="bg-slate-100 text-slate-600 text-[9px] font-black px-2 py-1 rounded uppercase">Pendente</span>
+                        ) : (
+                          <span className="bg-blue-100 text-blue-600 text-[9px] font-black px-2 py-1 rounded uppercase">Enviada</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                   {filteredProposals.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="p-12 text-center">
+                      <td colSpan={6} className="p-12 text-center">
                         <i className="fa-solid fa-folder-open text-4xl text-slate-200 mb-3"></i>
-                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhuma proposta pendente encontrada</p>
+                        <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhuma proposta encontrada</p>
                       </td>
                     </tr>
                   )}
