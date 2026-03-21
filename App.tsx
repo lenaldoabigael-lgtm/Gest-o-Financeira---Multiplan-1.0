@@ -158,8 +158,23 @@ const App: React.FC = () => {
         return;
       }
       setUser(foundUser);
-      if (foundUser.permissions.dashboard) setActiveTab(Tab.DASHBOARD);
-      else setActiveTab(Tab.CONTAS_PAGAR);
+      
+      const tabs = [
+        { id: Tab.DASHBOARD, permission: foundUser.permissions.dashboard },
+        { id: Tab.CONTAS_PAGAR, permission: foundUser.permissions.contasPagar },
+        { id: Tab.CONTAS_RECEBER, permission: foundUser.permissions.contasReceber },
+        { id: Tab.FLUXO_CAIXA, permission: foundUser.permissions.fluxoCaixa },
+        { id: Tab.CENTRO_CUSTO, permission: foundUser.permissions.centroCusto },
+        { id: Tab.ESTRUTURA_PROPOSTA, permission: foundUser.permissions.estruturaProposta },
+        { id: Tab.DETALHES, permission: foundUser.permissions.detalhes },
+        { id: Tab.PROPOSTAS, permission: foundUser.permissions.propostas },
+        { id: Tab.GESTAO_DEMANDAS, permission: foundUser.permissions.gestaoDemandas },
+        { id: Tab.FINANCEIRO, permission: foundUser.permissions.financeiro },
+        { id: Tab.PLAN_CREDENCIAS, permission: foundUser.permissions.planCredencias },
+      ];
+      
+      const firstAllowedTab = tabs.find(t => t.permission)?.id || null;
+      setActiveTab(firstAllowedTab);
     } else {
       alert('Login ou senha inválidos!');
     }
@@ -187,7 +202,8 @@ const App: React.FC = () => {
   };
 
   const showAccountFilter = useMemo(() => {
-    return activeTab !== Tab.CENTRO_CUSTO && 
+    return activeTab !== null &&
+           activeTab !== Tab.CENTRO_CUSTO && 
            activeTab !== Tab.PLAN_CREDENCIAS && 
            activeTab !== Tab.PROPOSTAS && 
            activeTab !== Tab.GESTAO_DEMANDAS &&
@@ -306,6 +322,13 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
       )}
 
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+        {activeTab === null && (
+          <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+            <i className="fa-solid fa-lock text-6xl text-slate-300"></i>
+            <h2 className="text-2xl font-black text-slate-700 uppercase tracking-tighter">Acesso Restrito</h2>
+            <p className="text-slate-500 max-w-md">Você não possui permissão para acessar nenhuma tela do sistema. Por favor, contate o administrador para solicitar acesso.</p>
+          </div>
+        )}
         {activeTab === Tab.DASHBOARD && <Dashboard transactions={filteredTransactions} />}
         {activeTab === Tab.CONTAS_PAGAR && (
           <TransactionTable 
@@ -386,7 +409,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             }}
           />
         )}
-        {activeTab === Tab.GESTAO_DEMANDAS && (
+        {activeTab === Tab.GESTAO_DEMANDAS && user.permissions.gestaoDemandas && (
           <ManagerArea 
             proposals={proposals} 
             onGeneratePaymentCode={async (ids) => {
@@ -447,7 +470,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             }} 
           />
         )}
-        {activeTab === Tab.FINANCEIRO && (
+        {activeTab === Tab.FINANCEIRO && user.permissions.financeiro && (
           <FinanceView 
             lots={paymentLots} 
             proposals={proposals}
@@ -468,7 +491,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             }}
           />
         )}
-        {activeTab === Tab.ESTRUTURA_PROPOSTA && (
+        {activeTab === Tab.ESTRUTURA_PROPOSTA && user.permissions.estruturaProposta && (
           <ProposalStructureView 
             requirements={proposalRequirements}
             onSave={async (req) => {
@@ -491,7 +514,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             }}
           />
         )}
-        {activeTab === Tab.PLAN_CREDENCIAS && <CredentialsManager users={appUsers} onUpdateUsers={async nu => { for(const u of nu) { await supabase.from('users').upsert(u); } fetchData(); }} />}
+        {activeTab === Tab.PLAN_CREDENCIAS && user.permissions.planCredencias && <CredentialsManager users={appUsers} onUpdateUsers={async nu => { for(const u of nu) { await supabase.from('users').upsert(u); } fetchData(); }} />}
       </div>
 
       <ProposalModal 

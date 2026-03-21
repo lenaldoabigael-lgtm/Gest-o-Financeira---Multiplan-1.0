@@ -21,7 +21,7 @@ const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout
     { id: Tab.DETALHES, label: 'Relatórios', icon: 'fa-file-lines', permission: user.permissions.detalhes },
     { id: Tab.PROPOSTAS, label: 'Propostas', icon: 'fa-file-contract', permission: user.permissions.propostas },
     { id: Tab.GESTAO_DEMANDAS, label: 'Liberação', icon: 'fa-hand-holding-dollar', permission: user.permissions.gestaoDemandas },
-    { id: Tab.FINANCEIRO, label: 'Financeiro', icon: 'fa-wallet', permission: true },
+    { id: Tab.FINANCEIRO, label: 'Financeiro', icon: 'fa-wallet', permission: user.permissions.financeiro },
     { id: Tab.PLAN_CREDENCIAS, label: 'Usuários', icon: 'fa-user-gear', permission: user.permissions.planCredencias },
   ];
 
