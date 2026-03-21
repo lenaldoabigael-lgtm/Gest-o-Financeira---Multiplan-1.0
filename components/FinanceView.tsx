@@ -102,9 +102,9 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, onPay }) => 
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
             >
-              <option>Status: Todos</option>
-              <option>Status: Pendente</option>
-              <option>Status: Pago</option>
+              <option value="Todos">Status: Todos</option>
+              <option value="Pendente">Status: Pendente</option>
+              <option value="Pago">Status: Pago</option>
             </select>
           </div>
         </div>
@@ -193,11 +193,11 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, onPay }) => 
                               {proposals.filter(p => p.lote_id === lot.id).map(prop => (
                                 <tr key={prop.id} className="hover:bg-slate-50/50">
                                   <td className="px-4 py-3 text-xs font-bold text-slate-700">{prop.corretor}</td>
-                                  <td className="px-4 py-3 text-xs text-slate-600">{prop.numeroContrato || '-'}</td>
+                                  <td className="px-4 py-3 text-xs text-slate-600">{prop.contrato || '-'}</td>
                                   <td className="px-4 py-3 text-xs text-slate-600">{prop.operadora}</td>
                                   <td className="px-4 py-3 text-xs text-slate-600">{prop.vidas}</td>
                                   <td className="px-4 py-3 text-xs text-slate-600">
-                                    R$ {Number(prop.valorContrato || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    R$ {Number(prop.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                   </td>
                                   <td className="px-4 py-3 text-xs font-bold text-emerald-600">
                                     R$ {Number(prop.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}

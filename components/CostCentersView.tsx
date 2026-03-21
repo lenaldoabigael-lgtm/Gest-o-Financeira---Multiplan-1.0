@@ -60,14 +60,17 @@ const CostCentersView: React.FC<CostCentersViewProps> = ({ costCenters, onSave, 
     e.preventDefault();
     if (!formData.nome.trim()) return;
 
-    const cc: CostCenter = {
-      id: editingCC?.id || Math.random().toString(36).substr(2, 9),
+    const cc: Partial<CostCenter> = {
       nome: formData.nome.trim().toUpperCase(),
       tipo: formData.tipo,
       subItens: formData.subItens
     };
+    
+    if (editingCC?.id) {
+      cc.id = editingCC.id;
+    }
 
-    onSave(cc);
+    onSave(cc as CostCenter);
     setIsModalOpen(false);
   };
 

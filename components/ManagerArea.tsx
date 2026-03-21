@@ -127,6 +127,7 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
               <option value="Todas">Status: Todos</option>
               <option value="CADASTRADA">Status: Cadastrada</option>
               <option value="ENVIADA AO FINANCEIRO">Status: Enviada ao Financeiro</option>
+              <option value="PAGO">Status: Paga</option>
             </select>
           </div>
 
@@ -183,8 +184,10 @@ const ManagerArea: React.FC<ManagerAreaProps> = ({ proposals, onGeneratePaymentC
                       <td className="p-4 text-center">
                         {p.status === 'CADASTRADA' ? (
                           <span className="bg-slate-100 text-slate-600 text-[9px] font-black px-2 py-1 rounded uppercase">Pendente</span>
-                        ) : (
+                        ) : p.status === 'ENVIADA AO FINANCEIRO' ? (
                           <span className="bg-blue-100 text-blue-600 text-[9px] font-black px-2 py-1 rounded uppercase">Enviada</span>
+                        ) : (
+                          <span className="bg-emerald-100 text-emerald-600 text-[9px] font-black px-2 py-1 rounded uppercase">Paga</span>
                         )}
                       </td>
                     </tr>

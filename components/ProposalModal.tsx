@@ -53,6 +53,35 @@ const Select = ({ label, value, options, onChange, className = "" }: { label: st
   </div>
 );
 
+const formatCpfCnpj = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length <= 11) {
+    return digits
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+      .replace(/(-\d{2})\d+?$/, '$1');
+  } else {
+    return digits
+      .replace(/(\d{2})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1/$2')
+      .replace(/(\d{4})(\d{1,2})/, '$1-$2')
+      .replace(/(-\d{2})\d+?$/, '$1');
+  }
+};
+
+const formatDate = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length <= 2) {
+    return digits;
+  } else if (digits.length <= 4) {
+    return digits.replace(/(\d{2})(\d)/, '$1/$2');
+  } else {
+    return digits.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3').slice(0, 10);
+  }
+};
+
 const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, requirements, proposal }) => {
   const initialData = {
     cliente: {
@@ -287,12 +316,12 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                     <Input 
                       label="CPF / CNPJ" 
                       value={formData.cliente.cpfCnpj} 
-                      onChange={(val) => setFormData(prev => ({ ...prev, cliente: { ...prev.cliente, cpfCnpj: val } }))}
+                      onChange={(val) => setFormData(prev => ({ ...prev, cliente: { ...prev.cliente, cpfCnpj: formatCpfCnpj(val) } }))}
                     />
                     <Input 
                       label="Data Nascimento" 
                       value={formData.cliente.dataNascimento} 
-                      onChange={(val) => setFormData(prev => ({ ...prev, cliente: { ...prev.cliente, dataNascimento: val } }))}
+                      onChange={(val) => setFormData(prev => ({ ...prev, cliente: { ...prev.cliente, dataNascimento: formatDate(val) } }))}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -450,7 +479,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                           type="text"
                           placeholder="CPF..."
                           value={newBeneficiaryInput.cpf}
-                          onChange={(e) => setNewBeneficiaryInput(prev => ({ ...prev, cpf: e.target.value }))}
+                          onChange={(e) => setNewBeneficiaryInput(prev => ({ ...prev, cpf: formatCpfCnpj(e.target.value) }))}
                           className="w-full bg-white border border-blue-100 p-1 text-[11px] text-slate-700 outline-none focus:ring-1 focus:ring-blue-400 rounded"
                         />
                       </td>
@@ -459,7 +488,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                           type="text"
                           placeholder="DD/MM/AAAA"
                           value={newBeneficiaryInput.nascimento}
-                          onChange={(e) => setNewBeneficiaryInput(prev => ({ ...prev, nascimento: e.target.value }))}
+                          onChange={(e) => setNewBeneficiaryInput(prev => ({ ...prev, nascimento: formatDate(e.target.value) }))}
                           className="w-full bg-white border border-blue-100 p-1 text-[11px] text-slate-700 outline-none focus:ring-1 focus:ring-blue-400 rounded"
                         />
                       </td>
@@ -500,7 +529,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                           <input 
                             type="text"
                             value={b.cpf}
-                            onChange={(e) => handleUpdateBeneficiary(b.id, 'cpf', e.target.value)}
+                            onChange={(e) => handleUpdateBeneficiary(b.id, 'cpf', formatCpfCnpj(e.target.value))}
                             className="w-full bg-transparent border-none p-1 text-[11px] text-slate-700 outline-none focus:ring-1 focus:ring-blue-200 rounded"
                           />
                         </td>
@@ -508,7 +537,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                           <input 
                             type="text"
                             value={b.nascimento}
-                            onChange={(e) => handleUpdateBeneficiary(b.id, 'nascimento', e.target.value)}
+                            onChange={(e) => handleUpdateBeneficiary(b.id, 'nascimento', formatDate(e.target.value))}
                             className="w-full bg-transparent border-none p-1 text-[11px] text-slate-700 outline-none focus:ring-1 focus:ring-blue-200 rounded"
                           />
                         </td>

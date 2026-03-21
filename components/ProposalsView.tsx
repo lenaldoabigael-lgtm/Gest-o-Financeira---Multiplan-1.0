@@ -194,8 +194,9 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
                   </td>
                   <td className="p-4">
                     <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                      p.status === 'CADASTRADA' ? 'bg-emerald-100 text-emerald-700' :
+                      p.status === 'CADASTRADA' ? 'bg-slate-100 text-slate-700' :
                       p.status === 'ENVIADA AO FINANCEIRO' ? 'bg-blue-100 text-blue-700' :
+                      p.status === 'PAGO' ? 'bg-emerald-100 text-emerald-700' :
                       'bg-slate-100 text-slate-700'
                     }`}>
                       {p.status}
@@ -205,15 +206,21 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={() => onEditProposal(p)}
-                        className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-blue-600 hover:text-white rounded-lg transition-all"
-                        title="Editar"
+                        disabled={p.status === 'PAGO'}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
+                          p.status === 'PAGO' ? 'bg-slate-50 text-slate-300 cursor-not-allowed' : 'bg-slate-100 text-slate-500 hover:bg-blue-600 hover:text-white'
+                        }`}
+                        title={p.status === 'PAGO' ? 'Não é possível editar proposta paga' : 'Editar'}
                       >
                         <i className="fa-solid fa-pen-to-square text-xs"></i>
                       </button>
                       <button 
                         onClick={() => onDeleteProposal(p.id)}
-                        className="w-8 h-8 flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-red-600 hover:text-white rounded-lg transition-all"
-                        title="Excluir"
+                        disabled={p.status === 'PAGO' || p.status === 'ENVIADA AO FINANCEIRO'}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
+                          p.status === 'PAGO' || p.status === 'ENVIADA AO FINANCEIRO' ? 'bg-slate-50 text-slate-300 cursor-not-allowed' : 'bg-slate-100 text-slate-500 hover:bg-red-600 hover:text-white'
+                        }`}
+                        title={p.status === 'PAGO' || p.status === 'ENVIADA AO FINANCEIRO' ? 'Não é possível excluir esta proposta' : 'Excluir'}
                       >
                         <i className="fa-solid fa-trash text-xs"></i>
                       </button>

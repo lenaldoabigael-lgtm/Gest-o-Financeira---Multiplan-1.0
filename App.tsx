@@ -59,6 +59,25 @@ const App: React.FC = () => {
         supabase.from('payment_lots').select('*').order('dataAprovacao', { ascending: false })
       ]);
 
+      // Check if any table is missing
+      const anyMissing = [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes].some(
+        res => res.error && res.error.code === '42P01'
+      );
+
+      if (anyMissing) {
+        setErrorType('TABLES_MISSING');
+        setIsLoading(false);
+        return;
+      }
+
+      // Check if proposals table is missing lote_id column
+      const { error: colError } = await supabase.from('proposals').select('lote_id').limit(1);
+      if (colError) {
+        setErrorType('TABLES_MISSING');
+        setIsLoading(false);
+        return;
+      }
+
       let currentUsers = (usersData || []) as User[];
       const hasAdmin = currentUsers.some(u => u.login === 'admin');
       
@@ -311,7 +330,25 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
           />
         )}
         {/* Fix: Changed cc.sub_itens to cc.subItens to match the CostCenter type definition */}
-        {activeTab === Tab.CENTRO_CUSTO && <CostCentersView costCenters={costCenters} onSave={async cc => { await supabase.from('cost_centers').upsert({id: cc.id, nome: cc.nome, tipo: cc.tipo, sub_itens: cc.subItens || []}); fetchData(); }} onDelete={async id => { await supabase.from('cost_centers').delete().eq('id', id); fetchData(); }} />}
+        {activeTab === Tab.CENTRO_CUSTO && <CostCentersView costCenters={costCenters} onSave={async cc => { 
+          const payload: any = { nome: cc.nome, tipo: cc.tipo, sub_itens: cc.subItens || [] };
+          if (cc.id) payload.id = cc.id;
+          const { error } = await supabase.from('cost_centers').upsert(payload); 
+          if (error) {
+            console.error('Erro ao salvar centro de custo:', error);
+            alert('Erro ao salvar centro de custo. Verifique o console.');
+          } else {
+            fetchData(); 
+          }
+        }} onDelete={async id => { 
+          const { error } = await supabase.from('cost_centers').delete().eq('id', id); 
+          if (error) {
+            console.error('Erro ao excluir centro de custo:', error);
+            alert('Erro ao excluir centro de custo. Verifique o console.');
+          } else {
+            fetchData(); 
+          }
+        }} />}
         {activeTab === Tab.FLUXO_CAIXA && <CashFlow transactions={filteredTransactions} />}
         {activeTab === Tab.DETALHES && <Details transactions={filteredTransactions} costCenters={costCenters} />}
         {activeTab === Tab.PROPOSTAS && (
@@ -322,14 +359,27 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               setIsProposalModalOpen(true);
             }} 
             onEditProposal={(p) => {
+              if (p.status === 'PAGO') {
+                alert('Propostas com status PAGO não podem ser alteradas.');
+                return;
+              }
               setEditingProposal(p);
               setIsProposalModalOpen(true);
             }}
             onDeleteProposal={async (id) => {
+              const proposalToDelete = proposals.find(p => p.id === id);
+              if (proposalToDelete?.status === 'PAGO') {
+                alert('Propostas com status PAGO não podem ser excluídas.');
+                return;
+              }
+              if (proposalToDelete?.status === 'ENVIADA AO FINANCEIRO') {
+                alert('Propostas enviadas ao financeiro não podem ser excluídas.');
+                return;
+              }
               const { error } = await supabase.from('proposals').delete().eq('id', id);
               if (error) {
                 console.error('Erro ao excluir proposta:', error);
-                setProposals(prev => prev.filter(p => p.id !== id));
+                alert('Erro ao excluir proposta. Verifique o console.');
               } else {
                 fetchData();
               }
@@ -341,6 +391,14 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             proposals={proposals} 
             onGeneratePaymentCode={async (ids) => {
               const selectedProposals = proposals.filter(p => ids.includes(p.id));
+              
+              // Bloqueio contra duplicidade
+              const invalidProposals = selectedProposals.filter(p => p.status !== 'CADASTRADA');
+              if (invalidProposals.length > 0) {
+                alert('Ação bloqueada: Uma ou mais propostas já foram enviadas ao financeiro ou pagas.');
+                return;
+              }
+
               const totalValue = selectedProposals.reduce((acc, p) => acc + Number(p.comissao), 0);
               const code = `LOTE-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`;
               
@@ -360,10 +418,8 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
 
               if (lotError) {
                 console.error('Erro ao criar lote:', lotError);
-                // Fallback for demo
-                const mockLot = { ...newLot, id: Math.random().toString() } as PaymentLot;
-                setPaymentLots(prev => [mockLot, ...prev]);
-                createdLotId = mockLot.id;
+                alert('Erro ao criar lote de pagamento. Verifique o console.');
+                return;
               } else if (lotData && lotData.length > 0) {
                 createdLotId = lotData[0].id;
               }
@@ -377,6 +433,8 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               
               if (propError) {
                 console.error('Erro ao atualizar propostas:', propError);
+                alert('Erro ao vincular propostas ao lote. Verifique o console.');
+                return;
               } else {
                 // Optimistic update to remove from release flow immediately
                 setProposals(prev => prev.map(p => ids.includes(p.id) ? { ...p, status: 'ENVIADA AO FINANCEIRO', lote_id: createdLotId } : p));
@@ -397,8 +455,14 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               const { error } = await supabase.from('payment_lots').update({ status: 'PAGO' }).eq('id', id);
               if (error) {
                 console.error('Erro ao pagar lote:', error);
-                setPaymentLots(prev => prev.map(l => l.id === id ? { ...l, status: 'PAGO' } : l));
+                alert('Erro ao pagar lote. Verifique o console.');
               } else {
+                // Atualiza as propostas vinculadas ao lote para PAGO
+                const { error: propError } = await supabase.from('proposals').update({ status: 'PAGO' }).eq('lote_id', id);
+                if (propError) {
+                  console.error('Erro ao atualizar status das propostas para PAGO:', propError);
+                  alert('Aviso: Lote pago, mas houve erro ao atualizar as propostas vinculadas.');
+                }
                 fetchData();
               }
             }}
@@ -411,8 +475,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               const { error } = await supabase.from('proposal_requirements').insert([req]);
               if (error) {
                 console.error('Erro ao salvar requisito:', error);
-                // Fallback for demo
-                setProposalRequirements(prev => [...prev, { ...req, id: Math.random().toString() }]);
+                alert('Erro ao salvar requisito. Verifique o console.');
               } else {
                 fetchData();
               }
@@ -421,7 +484,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               const { error } = await supabase.from('proposal_requirements').delete().eq('id', id);
               if (error) {
                 console.error('Erro ao excluir requisito:', error);
-                setProposalRequirements(prev => prev.filter(r => r.id !== id));
+                alert('Erro ao excluir requisito. Verifique o console.');
               } else {
                 fetchData();
               }
@@ -441,19 +504,30 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         proposal={editingProposal}
         onSave={async (proposalData) => {
           if (editingProposal) {
+            // Regra Crítica: Não permitir voltar status ou alterar se estiver PAGO
+            if (editingProposal.status === 'PAGO') {
+              alert('Propostas com status PAGO não podem ser alteradas.');
+              return;
+            }
+            if (editingProposal.status === 'ENVIADA AO FINANCEIRO' && proposalData.status === 'CADASTRADA') {
+              proposalData.status = 'ENVIADA AO FINANCEIRO';
+            }
+
             const { error } = await supabase.from('proposals').update(proposalData).eq('id', editingProposal.id);
             if (error) {
               console.error('Erro ao atualizar proposta:', error);
-              setProposals(prev => prev.map(p => p.id === editingProposal.id ? { ...p, ...proposalData } : p));
+              alert('Erro ao atualizar proposta. Verifique o console.');
             } else {
               fetchData();
             }
           } else {
+            // Força status inicial
+            proposalData.status = 'CADASTRADA';
+            
             const { error } = await supabase.from('proposals').insert([proposalData]);
             if (error) {
               console.error('Erro ao salvar proposta:', error);
-              const mockNew: Proposal = { ...proposalData, id: Math.random().toString() } as Proposal;
-              setProposals(prev => [mockNew, ...prev]);
+              alert('Erro ao salvar proposta. Verifique o console.');
             } else {
               fetchData();
             }
