@@ -14,6 +14,7 @@ import ManagerArea from './components/ManagerArea';
 import ProposalModal from './components/ProposalModal';
 import FinanceView from './components/FinanceView';
 import ProposalStructureView from './components/ProposalStructureView';
+import ComissoesModule from './components/ComissoesModule';
 import { supabase } from './lib/supabase';
 
 const App: React.FC = () => {
@@ -79,10 +80,10 @@ const App: React.FC = () => {
       }
 
       let currentUsers = (usersData || []) as User[];
-      const hasAdmin = currentUsers.some(u => u.login === 'admin');
+      const adminUser = currentUsers.find(u => u.login === 'admin');
       
-      if (!hasAdmin && !uErr) {
-        const adminUser: User = {
+      if (!adminUser && !uErr) {
+        const newAdmin: User = {
           login: 'admin',
           senha: '123',
           email: 'admin@multiplan.com',
@@ -90,11 +91,19 @@ const App: React.FC = () => {
           permissions: {
             centroCusto: true, contasPagar: true, contasReceber: true,
             dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
-            gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true
+            gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
           }
         };
-        await supabase.from('users').insert(adminUser);
-        currentUsers = [...currentUsers, adminUser];
+        await supabase.from('users').insert(newAdmin);
+        currentUsers = [...currentUsers, newAdmin];
+      } else if (adminUser && adminUser.permissions.comissoes === undefined) {
+        // Patch existing admin to have comissoes permission
+        const updatedAdmin = {
+          ...adminUser,
+          permissions: { ...adminUser.permissions, comissoes: true }
+        };
+        await supabase.from('users').update({ permissions: updatedAdmin.permissions }).eq('login', 'admin');
+        currentUsers = currentUsers.map(u => u.login === 'admin' ? updatedAdmin : u);
       }
 
       setAppUsers(currentUsers);
@@ -170,6 +179,7 @@ const App: React.FC = () => {
         { id: Tab.PROPOSTAS, permission: foundUser.permissions.propostas },
         { id: Tab.GESTAO_DEMANDAS, permission: foundUser.permissions.gestaoDemandas },
         { id: Tab.FINANCEIRO, permission: foundUser.permissions.financeiro },
+        { id: Tab.COMISSOES, permission: foundUser.permissions.comissoes },
         { id: Tab.PLAN_CREDENCIAS, permission: foundUser.permissions.planCredencias },
       ];
       
@@ -188,7 +198,7 @@ const App: React.FC = () => {
         centroCusto: false, contasPagar: false, contasReceber: false, 
         dashboard: false, fluxoCaixa: false, detalhes: false, 
         planCredencias: false, gestaoDemandas: false, propostas: false,
-        financeiro: false, estruturaProposta: false
+        financeiro: false, estruturaProposta: false, comissoes: false
       }
     };
     const { error } = await supabase.from('users').insert(newUser);
@@ -208,7 +218,8 @@ const App: React.FC = () => {
            activeTab !== Tab.PROPOSTAS && 
            activeTab !== Tab.GESTAO_DEMANDAS &&
            activeTab !== Tab.ESTRUTURA_PROPOSTA &&
-           activeTab !== Tab.FINANCEIRO;
+           activeTab !== Tab.FINANCEIRO &&
+           activeTab !== Tab.COMISSOES;
   }, [activeTab]);
 
   if (errorType === 'SCHEMA_HIDDEN') {
@@ -491,6 +502,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             }}
           />
         )}
+        {activeTab === Tab.COMISSOES && user.permissions.comissoes && <ComissoesModule />}
         {activeTab === Tab.ESTRUTURA_PROPOSTA && user.permissions.estruturaProposta && (
           <ProposalStructureView 
             requirements={proposalRequirements}

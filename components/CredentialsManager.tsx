@@ -42,7 +42,8 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users, onUpdate
         gestaoDemandas: false,
         propostas: false,
         financeiro: false,
-        estruturaProposta: false
+        estruturaProposta: false,
+        comissoes: false
       }
     };
 
@@ -69,7 +70,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users, onUpdate
         const currentPermissions = u.permissions || {
           centroCusto: false, contasPagar: false, contasReceber: false,
           dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-          gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false
+          gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
         };
         return {
           ...u,
@@ -215,6 +216,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users, onUpdate
                 <th className="p-6 text-center">Liberação</th>
                 <th className="p-6 text-center">Financeiro</th>
                 <th className="p-6 text-center">Estrutura Prop.</th>
+                <th className="p-6 text-center">Comissões</th>
                 <th className="p-6 text-center">Usuários</th>
                 <th className="p-6 text-center">Ações</th>
               </tr>
@@ -238,6 +240,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users, onUpdate
                     { key: 'gestaoDemandas', label: 'Liberação' },
                     { key: 'financeiro', label: 'Financeiro' },
                     { key: 'estruturaProposta', label: 'Estrutura Prop.' },
+                    { key: 'comissoes', label: 'Comissões' },
                     { key: 'planCredencias', label: 'Usuários' }
                   ].map(perm => (
                     <td key={perm.key} className="p-6 text-center">

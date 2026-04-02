@@ -18,6 +18,7 @@ export interface User {
     propostas: boolean;
     financeiro: boolean;
     estruturaProposta: boolean;
+    comissoes: boolean;
   };
 }
 
@@ -63,7 +64,8 @@ export enum Tab {
   GESTAO_DEMANDAS = 'gestao_demandas',
   PROPOSTAS = 'propostas',
   FINANCEIRO = 'financeiro',
-  ESTRUTURA_PROPOSTA = 'estrutura_proposta'
+  ESTRUTURA_PROPOSTA = 'estrutura_proposta',
+  COMISSOES = 'comissoes'
 }
 
 export interface PaymentLot {
