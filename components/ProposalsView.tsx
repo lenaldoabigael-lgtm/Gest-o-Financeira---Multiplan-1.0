@@ -8,12 +8,15 @@ interface ProposalsViewProps {
   onAddProposal: () => void;
   onEditProposal: (proposal: Proposal) => void;
   onDeleteProposal: (id: string) => void;
+  onImportProposals?: (proposals: any[]) => void;
 }
 
-const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal, onEditProposal, onDeleteProposal }) => {
+const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal, onEditProposal, onDeleteProposal, onImportProposals }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterOperadora, setFilterOperadora] = useState('Todas');
+  const [confirmingSendId, setConfirmingSendId] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const filteredProposals = useMemo(() => {
@@ -82,6 +85,98 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
     XLSX.writeFile(workbook, `propostas_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json<any>(worksheet);
+        
+        if (json.length === 0) {
+          alert('A planilha está vazia.');
+          return;
+        }
+
+        const importedProposals = json.map(row => {
+          const clienteNome = row['Nome']?.toString() || row['Cliente']?.toString() || '';
+          const clienteCpfCnpj = row['CPF / CNPJ']?.toString() || row['CPF/CNPJ']?.toString() || row['CPF']?.toString() || row['CNPJ']?.toString() || '';
+          const contratoNum = row['Nº Contrato']?.toString() || row['Contrato']?.toString() || '';
+          const corretorNome = row['Corretor']?.toString() || '';
+          const operadoraNome = row['Operadora']?.toString() || '';
+          const categoriaNome = row['Categoria']?.toString() || '';
+          const valorNum = parseFloat(row['Valor Contrato']?.toString() || row['Valor']?.toString() || '0');
+          const vidasNum = parseInt(row['Vidas']?.toString() || '0', 10);
+          const dataVenda = row['Dt Venda']?.toString() || row['Data']?.toString() || new Date().toISOString().split('T')[0];
+          
+          return {
+            contrato: contratoNum,
+            data: dataVenda,
+            cliente: clienteNome,
+            cpfCnpj: clienteCpfCnpj,
+            corretor: corretorNome,
+            operadora: operadoraNome,
+            categoria: categoriaNome,
+            valor: valorNum,
+            vidas: vidasNum,
+            status: row['Status']?.toString() || 'CADASTRADA',
+            comissao: 0,
+            detalhes: {
+              cliente: {
+                nome: clienteNome,
+                cpfCnpj: clienteCpfCnpj,
+                dataNascimento: row['Data Nascimento']?.toString() || '',
+                email: row['Email']?.toString() || '',
+                telefone: row['Telefone']?.toString() || ''
+              },
+              endereco: {
+                cep: row['CEP']?.toString() || '',
+                logradouro: row['Endereço']?.toString() || '',
+                numero: row['Número']?.toString() || '',
+                complemento: row['Complemento']?.toString() || '',
+                bairro: row['Bairro']?.toString() || '',
+                cidade: row['Cidade']?.toString() || '',
+                estado: row['Estado']?.toString() || ''
+              },
+              proposta: {
+                contrato: contratoNum,
+                dataVenda: dataVenda,
+                corretor: corretorNome,
+                categoria: categoriaNome,
+                operadora: operadoraNome,
+                tipoPlano: row['Tipo de Plano']?.toString() || '',
+                unidade: row['Unidade']?.toString() || ''
+              },
+              financeiro: {
+                valorContrato: valorNum,
+                vidas: vidasNum,
+                valorTaxa: parseFloat(row['Valor Taxa']?.toString() || '0'),
+                parcelas: []
+              },
+              beneficiarios: [],
+              documentos: [],
+              historico: []
+            }
+          };
+        });
+
+        if (onImportProposals) {
+          onImportProposals(importedProposals);
+        }
+      } catch (err) {
+        console.error("Error importing file:", err);
+        alert('Erro ao importar o arquivo. Verifique o console.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = ''; // Reset input
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -90,6 +185,10 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
           <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Gerencie e consulte os contratos de saúde</p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-xl font-black uppercase tracking-widest transition-all flex items-center gap-3">
+            <i className="fa-solid fa-file-import"></i> Importar Planilha
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportExcel} />
+          </label>
           <button
             onClick={handleExportExcel}
             className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-3"
@@ -214,16 +313,66 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
                       >
                         <i className="fa-solid fa-pen-to-square text-xs"></i>
                       </button>
-                      <button 
-                        onClick={() => onDeleteProposal(p.id)}
-                        disabled={p.status === 'PAGO' || p.status === 'ENVIADA AO FINANCEIRO'}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
-                          p.status === 'PAGO' || p.status === 'ENVIADA AO FINANCEIRO' ? 'bg-slate-50 text-slate-300 cursor-not-allowed' : 'bg-slate-100 text-slate-500 hover:bg-red-600 hover:text-white'
-                        }`}
-                        title={p.status === 'PAGO' || p.status === 'ENVIADA AO FINANCEIRO' ? 'Não é possível excluir esta proposta' : 'Excluir'}
-                      >
-                        <i className="fa-solid fa-trash text-xs"></i>
-                      </button>
+
+                      {p.status === 'CADASTRADA' && (
+                        confirmingSendId === p.id ? (
+                          <div className="flex gap-1 bg-emerald-50 rounded-lg p-1">
+                            <button
+                              onClick={() => {
+                                onEditProposal({ ...p, status: 'ENVIADA AO FINANCEIRO' } as any);
+                                setConfirmingSendId(null);
+                              }}
+                              className="px-2 bg-emerald-600 text-white rounded text-[10px] font-bold"
+                            >
+                              Confirmar
+                            </button>
+                            <button
+                              onClick={() => setConfirmingSendId(null)}
+                              className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300"
+                            >
+                              X
+                            </button>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => setConfirmingSendId(p.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg transition-all bg-slate-100 text-slate-500 hover:bg-emerald-600 hover:text-white"
+                            title="Enviar ao Financeiro"
+                          >
+                            <i className="fa-solid fa-paper-plane text-xs"></i>
+                          </button>
+                        )
+                      )}
+
+                      {p.status !== 'PAGO' && p.status !== 'ENVIADA AO FINANCEIRO' && (
+                        confirmingDeleteId === p.id ? (
+                          <div className="flex gap-1 bg-red-50 rounded-lg p-1">
+                            <button
+                              onClick={() => {
+                                onDeleteProposal(p.id);
+                                setConfirmingDeleteId(null);
+                              }}
+                              className="px-2 bg-red-600 text-white rounded text-[10px] font-bold"
+                            >
+                              Deletar
+                            </button>
+                            <button
+                              onClick={() => setConfirmingDeleteId(null)}
+                              className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300"
+                            >
+                              X
+                            </button>
+                          </div>
+                        ) : (
+                          <button 
+                            onClick={() => setConfirmingDeleteId(p.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg transition-all bg-slate-100 text-slate-500 hover:bg-red-600 hover:text-white"
+                            title="Excluir"
+                          >
+                            <i className="fa-solid fa-trash text-xs"></i>
+                          </button>
+                        )
+                      )}
                     </div>
                   </td>
                 </tr>

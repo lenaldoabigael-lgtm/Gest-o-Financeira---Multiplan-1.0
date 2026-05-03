@@ -10,7 +10,7 @@ import CashFlow from './components/CashFlow';
 import Details from './components/Details';
 import CredentialsManager from './components/CredentialsManager';
 import ProposalsView from './components/ProposalsView';
-import ManagerArea from './components/ManagerArea';
+import SellerBoard from './components/SellerBoard';
 import ProposalModal from './components/ProposalModal';
 import FinanceView from './components/FinanceView';
 import ProposalStructureView from './components/ProposalStructureView';
@@ -177,7 +177,7 @@ const App: React.FC = () => {
         { id: Tab.ESTRUTURA_PROPOSTA, permission: foundUser.permissions.estruturaProposta },
         { id: Tab.DETALHES, permission: foundUser.permissions.detalhes },
         { id: Tab.PROPOSTAS, permission: foundUser.permissions.propostas },
-        { id: Tab.GESTAO_DEMANDAS, permission: foundUser.permissions.gestaoDemandas },
+        { id: Tab.ACOMPANHAMENTO, permission: foundUser.permissions.gestaoDemandas },
         { id: Tab.FINANCEIRO, permission: foundUser.permissions.financeiro },
         { id: Tab.COMISSOES, permission: foundUser.permissions.comissoes },
         { id: Tab.PLAN_CREDENCIAS, permission: foundUser.permissions.planCredencias },
@@ -216,7 +216,7 @@ const App: React.FC = () => {
            activeTab !== Tab.CENTRO_CUSTO && 
            activeTab !== Tab.PLAN_CREDENCIAS && 
            activeTab !== Tab.PROPOSTAS && 
-           activeTab !== Tab.GESTAO_DEMANDAS &&
+           activeTab !== Tab.ACOMPANHAMENTO &&
            activeTab !== Tab.ESTRUTURA_PROPOSTA &&
            activeTab !== Tab.FINANCEIRO &&
            activeTab !== Tab.COMISSOES;
@@ -418,73 +418,93 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                 fetchData();
               }
             }}
+            onImportProposals={async (importedProposals) => {
+              const { error } = await supabase.from('proposals').insert(importedProposals);
+              if (error) {
+                console.error('Erro ao importar propostas:', error);
+                alert('Erro ao importar propostas. Verifique o console.');
+              } else {
+                alert(`${importedProposals.length} propostas importadas com sucesso!`);
+                fetchData();
+              }
+            }}
           />
         )}
-        {activeTab === Tab.GESTAO_DEMANDAS && user.permissions.gestaoDemandas && (
-          <ManagerArea 
+        {activeTab === Tab.ACOMPANHAMENTO && user.permissions.gestaoDemandas && (
+          <SellerBoard 
             proposals={proposals} 
-            onGeneratePaymentCode={async (ids) => {
-              const selectedProposals = proposals.filter(p => ids.includes(p.id));
-              
-              // Bloqueio contra duplicidade
-              const invalidProposals = selectedProposals.filter(p => p.status !== 'CADASTRADA');
-              if (invalidProposals.length > 0) {
-                alert('Ação bloqueada: Uma ou mais propostas já foram enviadas ao financeiro ou pagas.');
-                return;
-              }
-
-              const totalValue = selectedProposals.reduce((acc, p) => acc + Number(p.comissao), 0);
-              const code = `LOTE-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`;
-              
-              const newLot: Omit<PaymentLot, 'id'> = {
-                codigo: code,
-                aprovadoPor: user?.login || 'Sistema',
-                dataAprovacao: new Date().toISOString(),
-                qtdPropostas: ids.length,
-                vencimento: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Tomorrow
-                valorTotal: totalValue,
-                status: 'PENDENTE'
-              };
-
-              const { data: lotData, error: lotError } = await supabase.from('payment_lots').insert([newLot]).select();
-              
-              let createdLotId: string | undefined;
-
-              if (lotError) {
-                console.error('Erro ao criar lote:', lotError);
-                alert('Erro ao criar lote de pagamento. Verifique o console.');
-                return;
-              } else if (lotData && lotData.length > 0) {
-                createdLotId = lotData[0].id;
-              }
-
-              const updateData: any = { status: 'ENVIADA AO FINANCEIRO' };
-              if (createdLotId) {
-                updateData.lote_id = createdLotId;
-              }
-
-              const { error: propError } = await supabase.from('proposals').update(updateData).in('id', ids);
-              
-              if (propError) {
-                console.error('Erro ao atualizar propostas:', propError);
-                alert('Erro ao vincular propostas ao lote. Verifique o console.');
-                return;
+            requirements={proposalRequirements}
+            onStatusChange={async (id, novoStatus) => {
+              const { error } = await supabase.from('proposals').update({ status: novoStatus }).eq('id', id);
+              if (error) {
+                console.error('Erro ao atualizar status:', error);
+                alert('Erro ao atualizar status da proposta.');
               } else {
-                // Optimistic update to remove from release flow immediately
-                setProposals(prev => prev.map(p => ids.includes(p.id) ? { ...p, status: 'ENVIADA AO FINANCEIRO', lote_id: createdLotId } : p));
+                fetchData();
               }
-
-              // Small delay to ensure DB has processed the update before we fetch again
-              await new Promise(resolve => setTimeout(resolve, 800));
-              await fetchData();
-              alert(`Código de Pagamento Gerado: ${code}\nAs propostas selecionadas foram enviadas ao financeiro.`);
-            }} 
+            }}
           />
         )}
         {activeTab === Tab.FINANCEIRO && user.permissions.financeiro && (
           <FinanceView 
             lots={paymentLots} 
             proposals={proposals}
+            onGenerateLot={async (corretor, ids) => {
+              const selectedProposals = proposals.filter(p => ids.includes(p.id));
+              const totalValue = selectedProposals.reduce((acc, p) => acc + Number(p.comissao), 0);
+              const code = `LOTE-${corretor.replace(/[^A-Z0-9]/ig, '').substring(0, 5).toUpperCase()}-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`;
+              
+              const newLot: Omit<PaymentLot, 'id'> = {
+                codigo: code,
+                aprovadoPor: user?.login || 'Sistema',
+                dataAprovacao: new Date().toISOString(),
+                qtdPropostas: ids.length,
+                vencimento: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Amanhã
+                valorTotal: totalValue,
+                status: 'PENDENTE'
+              };
+
+              const { data: lotData, error: lotError } = await supabase.from('payment_lots').insert([newLot]).select();
+              
+              if (lotError) {
+                console.error('Erro ao criar lote:', lotError);
+                alert('Erro ao criar lote de pagamento. Verifique o console.');
+                return;
+              } else if (lotData && lotData.length > 0) {
+                const createdLotId = lotData[0].id;
+                const { error: propError } = await supabase.from('proposals').update({ lote_id: createdLotId }).in('id', ids);
+                
+                if (propError) {
+                  console.error('Erro ao atualizar propostas:', propError);
+                  alert('Erro ao vincular propostas ao lote. Verifique o console.');
+                } else {
+                  await fetchData();
+                  alert(`Lote gerado para ${corretor}: ${code}`);
+                }
+              }
+            }}
+            onReturnProposal={async (proposalId, lotId) => {
+              const prop = proposals.find(p => p.id === proposalId);
+              const lot = paymentLots.find(l => l.id === lotId);
+              if (!prop || !lot) return;
+
+              const { error: propError } = await supabase.from('proposals').update({ status: 'CADASTRADA', lote_id: null }).eq('id', proposalId);
+              if (propError) {
+                 alert('Erro ao devolver proposta. Verifique o console.');
+                 return;
+              }
+
+              const remainingProposals = proposals.filter(p => p.lote_id === lotId && p.id !== proposalId);
+              if (remainingProposals.length === 0) {
+                 await supabase.from('payment_lots').delete().eq('id', lotId);
+              } else {
+                 const newTotal = remainingProposals.reduce((a, b) => a + Number(b.comissao), 0);
+                 await supabase.from('payment_lots').update({ qtdPropostas: remainingProposals.length, valorTotal: newTotal }).eq('id', lotId);
+              }
+
+              await fetchData();
+              alert(`Proposta ${prop.contrato || ''} devolvida com sucesso para status Cadastrada.`);
+            }}
             onPay={async (id) => {
               const { error } = await supabase.from('payment_lots').update({ status: 'PAGO' }).eq('id', id);
               if (error) {

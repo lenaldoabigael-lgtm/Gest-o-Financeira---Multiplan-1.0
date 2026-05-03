@@ -117,7 +117,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
         { id: '1', numero: '1ª Parcela', valor: 0, comissao: 0, vencimento: '' }
       ]
     },
-    beneficiarios: [] as { id: string, nome: string, cpf: string, nascimento: string, parentesco: string }[],
+    beneficiarios: [] as { id: string, nome: string, cpf: string, nascimento: string, parentesco: string, titularPlanoSaude?: boolean }[],
     documentos: [] as { id: string, nome: string, data: string, tamanho: string }[],
     historico: [] as any[]
   };
@@ -128,7 +128,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
     nome: '',
     cpf: '',
     nascimento: '',
-    parentesco: 'Titular'
+    parentesco: 'Titular',
+    titularPlanoSaude: false
   });
 
   const handleAddNote = () => {
@@ -163,7 +164,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       nome: '',
       cpf: '',
       nascimento: '',
-      parentesco: 'Titular'
+      parentesco: 'Titular',
+      titularPlanoSaude: false
     });
   };
 
@@ -174,7 +176,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
     }));
   };
 
-  const handleUpdateBeneficiary = (id: string, field: string, value: string) => {
+  const handleUpdateBeneficiary = (id: string, field: string, value: any) => {
     setFormData(prev => ({
       ...prev,
       beneficiarios: prev.beneficiarios.map(b => b.id === id ? { ...b, [field]: value } : b)
@@ -455,10 +457,11 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                 <table className="w-full text-left">
                   <thead>
                     <tr className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                      <th className="pb-3">Nome</th>
-                      <th className="pb-3">CPF</th>
-                      <th className="pb-3">Nascimento</th>
-                      <th className="pb-3">Parentesco</th>
+                      <th className="pb-3 w-1/4">Nome</th>
+                      <th className="pb-3 w-1/5">CPF</th>
+                      <th className="pb-3 w-1/5">Nascimento</th>
+                      <th className="pb-3 w-1/6">Parentesco</th>
+                      <th className="pb-3 text-center">Titular</th>
                       <th className="pb-3 text-right">Ações</th>
                     </tr>
                   </thead>
@@ -504,6 +507,15 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                           <option value="Pai/Mãe">Pai/Mãe</option>
                           <option value="Outros">Outros</option>
                         </select>
+                      </td>
+                      <td className="py-2 text-center">
+                        <input 
+                          type="checkbox"
+                          checked={newBeneficiaryInput.titularPlanoSaude}
+                          onChange={(e) => setNewBeneficiaryInput(prev => ({ ...prev, titularPlanoSaude: e.target.checked }))}
+                          className="w-4 h-4 text-blue-600 bg-white border-blue-200 rounded outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer mx-auto"
+                          title="É o titular do plano de saúde?"
+                        />
                       </td>
                       <td className="py-2 text-right">
                         <button 
@@ -554,6 +566,15 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                             <option value="Outros">Outros</option>
                           </select>
                         </td>
+                        <td className="py-2 text-center">
+                          <input 
+                            type="checkbox"
+                            checked={!!b.titularPlanoSaude}
+                            onChange={(e) => handleUpdateBeneficiary(b.id, 'titularPlanoSaude', e.target.checked)}
+                            className="w-4 h-4 text-blue-600 bg-transparent border-slate-300 rounded outline-none focus:ring-1 focus:ring-blue-200 cursor-pointer mx-auto"
+                            title="É o titular do plano de saúde?"
+                          />
+                        </td>
                         <td className="py-2 text-right">
                           <button 
                             onClick={() => handleDeleteBeneficiary(b.id)}
@@ -566,7 +587,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                     ))}
                     {formData.beneficiarios.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-6 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                        <td colSpan={6} className="py-6 text-center text-slate-400 text-[10px] font-bold uppercase tracking-widest">
                           Nenhum beneficiário cadastrado
                         </td>
                       </tr>

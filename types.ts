@@ -49,7 +49,7 @@ export interface CostCenter {
 
 export interface ProposalRequirement {
   id: string;
-  tipo: 'CORRETOR' | 'CATEGORIA' | 'OPERADORA' | 'TIPO_PLANO' | 'UNIDADE';
+  tipo: 'CORRETOR' | 'CATEGORIA' | 'OPERADORA' | 'TIPO_PLANO' | 'UNIDADE' | 'PRAZO_PAGAMENTO';
   nome: string;
 }
 
@@ -61,7 +61,7 @@ export enum Tab {
   FLUXO_CAIXA = 'fluxo_caixa',
   DETALHES = 'detalhes',
   PLAN_CREDENCIAS = 'plan_credencias',
-  GESTAO_DEMANDAS = 'gestao_demandas',
+  ACOMPANHAMENTO = 'acompanhamento',
   PROPOSTAS = 'propostas',
   FINANCEIRO = 'financeiro',
   ESTRUTURA_PROPOSTA = 'estrutura_proposta',
@@ -77,6 +77,7 @@ export interface PaymentLot {
   vencimento: string;
   valorTotal: number;
   status: 'PENDENTE' | 'PAGO';
+  comprovanteUrl?: string;
 }
 
 export interface Proposal {
