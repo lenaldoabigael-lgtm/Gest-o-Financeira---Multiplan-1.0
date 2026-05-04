@@ -419,12 +419,27 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               }
             }}
             onImportProposals={async (importedProposals) => {
-              const { error } = await supabase.from('proposals').insert(importedProposals);
+              const uniqueImported = importedProposals.filter(importada => 
+                !proposals.some(p => p.contrato.trim() === importada.contrato.trim())
+              );
+
+              const duplicadasCount = importedProposals.length - uniqueImported.length;
+
+              if (uniqueImported.length === 0) {
+                alert(duplicadasCount > 0 ? 'Todas as propostas do arquivo já estão cadastradas (contratos duplicados).' : 'Nenhuma proposta válida encontrada no arquivo.');
+                return;
+              }
+
+              const { error } = await supabase.from('proposals').insert(uniqueImported);
               if (error) {
                 console.error('Erro ao importar propostas:', error);
                 alert('Erro ao importar propostas. Verifique o console.');
               } else {
-                alert(`${importedProposals.length} propostas importadas com sucesso!`);
+                let msg = `${uniqueImported.length} propostas importadas com sucesso!`;
+                if (duplicadasCount > 0) {
+                  msg += `\n${duplicadasCount} propostas foram ignoradas pois já existem cadastros com o mesmo número de contrato.`;
+                }
+                alert(msg);
                 fetchData();
               }
             }}
@@ -558,6 +573,16 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         requirements={proposalRequirements}
         proposal={editingProposal}
         onSave={async (proposalData) => {
+          const contratoNumber = proposalData.contrato.trim();
+          const isContratoDuplicado = proposals.some(
+            p => p.contrato.trim() === contratoNumber && p.id !== editingProposal?.id
+          );
+
+          if (isContratoDuplicado) {
+            alert(`Já existe uma proposta cadastrada com o contrato ${contratoNumber}. Não é permitido cadastrar propostas duplicadas.`);
+            return;
+          }
+
           if (editingProposal) {
             // Regra Crítica: Não permitir voltar status ou alterar se estiver PAGO
             if (editingProposal.status === 'PAGO') {
