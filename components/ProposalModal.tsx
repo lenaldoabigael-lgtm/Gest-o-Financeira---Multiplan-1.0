@@ -429,7 +429,29 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       label="Operadora" 
                       value={formData.proposta.operadora} 
                       options={getOptions('OPERADORA')}
-                      onChange={(val) => setFormData(prev => ({ ...prev, proposta: { ...prev.proposta, operadora: val } }))}
+                      onChange={(val) => {
+                        setFormData(prev => {
+                          let novaTaxa = prev.financeiro.valorTaxa;
+                          const taxasAdesao = requirements?.filter(r => r.tipo === 'TAXA_ADESAO') || [];
+                          const req = taxasAdesao.find(t => t.nome.startsWith(`${val.toUpperCase()} - `)) || taxasAdesao.find(t => t.nome.startsWith(`TODAS - `));
+                          
+                          if (req) {
+                            novaTaxa = parseFloat(req.nome.split(' - ')[1]) || 0;
+                          } else {
+                            // novaTaxa = 0; // Opcional, podemos manter o valor que estava se não achar regra
+                          }
+
+                          return { 
+                            ...prev, 
+                            proposta: { ...prev.proposta, operadora: val },
+                            financeiro: {
+                              ...prev.financeiro,
+                              valorTaxa: novaTaxa,
+                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
+                            }
+                          };
+                        });
+                      }}
                     />
                     <Select 
                       label="Tipo de Plano" 
@@ -635,18 +657,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       <input 
                         type="number"
                         value={formData.financeiro.valorTaxa}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0;
-                          setFormData(prev => ({ 
-                            ...prev, 
-                            financeiro: { 
-                              ...prev.financeiro, 
-                              valorTaxa: val,
-                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: Math.max(0, prev.financeiro.valorContrato - val) } : p)
-                            } 
-                          }));
-                        }}
-                        className="w-full bg-transparent border-none p-0 text-[13px] font-bold text-slate-800 outline-none focus:ring-0"
+                        readOnly
+                        className="w-full bg-transparent border-none p-0 text-[13px] font-bold text-slate-500 outline-none focus:ring-0 cursor-not-allowed"
                       />
                     </div>
                   </div>

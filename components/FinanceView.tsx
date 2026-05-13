@@ -1,16 +1,17 @@
 
 import React, { useState } from 'react';
-import { PaymentLot, Proposal } from '../types';
+import { PaymentLot, Proposal, ProposalRequirement } from '../types';
 
 interface FinanceViewProps {
   lots: PaymentLot[];
   proposals: Proposal[];
+  requirements: ProposalRequirement[];
   onPay: (id: string) => void;
   onGenerateLot: (corretor: string, proposalIds: string[]) => void;
   onReturnProposal?: (proposalId: string, lotId: string) => void;
 }
 
-const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, onPay, onGenerateLot, onReturnProposal }) => {
+const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements, onPay, onGenerateLot, onReturnProposal }) => {
   const [activeSubTab, setActiveSubTab] = useState<'LOTES' | 'AGUARDANDO'>('AGUARDANDO');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
@@ -256,56 +257,158 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, onPay, onGen
                     <td className="px-6 py-4 text-right">
                       {lot.status === 'PENDENTE' ? (
                         <div className="flex items-center justify-end gap-3">
-                          <label className="cursor-pointer text-[10px] font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center gap-2 border border-slate-200 border-dashed px-3 py-1.5 rounded-lg bg-slate-50 hover:bg-blue-50 hover:border-blue-200" title={selectedFiles[lot.id] ? selectedFiles[lot.id].name : "Anexar Comprovante"}>
-                            <i className="fa-solid fa-paperclip"></i>
-                            <span className="truncate max-w-[120px]">{selectedFiles[lot.id] ? selectedFiles[lot.id].name : "Anexar Comprovante"}</span>
-                            <input type="file" className="hidden" accept=".pdf,image/*" onChange={(e) => handleFileChange(lot.id, e)} />
-                          </label>
                           <button 
-                            onClick={() => {
-                              if (selectedFiles[lot.id]) {
-                                const reader = new FileReader();
-                                reader.onload = (e) => {
-                                  if (e.target?.result) {
-                                    try {
-                                      localStorage.setItem(`comprovante_${lot.id}`, e.target.result as string);
-                                    } catch (err) {
-                                      console.warn("Storage quota exceeded or error saving file.");
-                                    }
-                                    onPay(lot.id);
-                                  }
-                                };
-                                reader.readAsDataURL(selectedFiles[lot.id]);
-                              } else {
-                                onPay(lot.id);
-                              }
-                            }}
+                            onClick={() => onPay(lot.id)}
                             className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black px-4 py-2 rounded-lg uppercase tracking-widest flex items-center gap-2 shadow-md shadow-blue-600/20 transition-all"
                           >
-                            <i className="fa-solid fa-circle-check"></i> Baixar Pagamento
+                            <i className="fa-solid fa-circle-check"></i> Confirmar Pagamento
                           </button>
                         </div>
                       ) : (
                         <button 
                           onClick={() => {
-                            const dataUrl = localStorage.getItem(`comprovante_${lot.id}`);
-                            if (dataUrl) {
-                              if (dataUrl.startsWith('data:image')) {
-                                const w = window.open('');
-                                if (w) w.document.write(`<body style="margin:0;display:flex;justify-content:center;align-items:center;background:#0f172a;"><img src="${dataUrl}" style="max-width:100%;max-height:100vh;"/></body>`);
-                              } else if (dataUrl.startsWith('data:application/pdf')) {
-                                const w = window.open('');
-                                if (w) w.document.write(`<body style="margin:0;"><iframe src="${dataUrl}" style="width:100vw;height:100vh;border:none;"></iframe></body>`);
-                              } else {
-                                window.open(dataUrl, '_blank');
+                            const lotProposals = proposals.filter(p => p.lote_id === lot.id);
+                            
+                            const impostos = requirements.filter(r => r.tipo === 'IMPOSTO_CORRETOR');
+                            let totalComissoes = 0;
+                            let totalDescontos = 0;
+
+                            const rowsHtml = lotProposals.map(p => {
+                              const comissaoBase = Number(p.comissao || 0);
+                              const pctStr = impostos.find(r => r.nome.startsWith(`${p.corretor.toUpperCase()} - ${p.operadora.toUpperCase()} - `)) ||
+                                             impostos.find(r => r.nome.startsWith(`TODOS - ${p.operadora.toUpperCase()} - `)) ||
+                                             impostos.find(r => r.nome.startsWith(`${p.corretor.toUpperCase()} - TODAS - `)) ||
+                                             impostos.find(r => r.nome.startsWith(`TODOS - TODAS - `));
+                              
+                              let txPercentual = 0;
+                              if (pctStr) {
+                                txPercentual = parseFloat(pctStr.nome.split(' - ')[2]) || 0;
                               }
+
+                              const desconto = comissaoBase * (txPercentual / 100);
+                              const liquido = comissaoBase - desconto;
+
+                              totalComissoes += comissaoBase;
+                              totalDescontos += desconto;
+
+                              return `
+                                <tr>
+                                  <td><strong>${p.corretor}</strong></td>
+                                  <td>${p.contrato}</td>
+                                  <td>${p.cliente}</td>
+                                  <td>${p.operadora}</td>
+                                  <td class="text-right">R$ ${comissaoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                  <td class="text-right text-red-500">-${txPercentual}% (R$ ${desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</td>
+                                  <td class="text-right text-emerald">R$ ${liquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                              `;
+                            }).join('');
+                            
+                            const receiptHtml = `
+                              <!DOCTYPE html>
+                              <html>
+                              <head>
+                                <title>Comprovante de Pagamento - Lote ${lot.codigo}</title>
+                                <style>
+                                  body { font-family: 'Inter', sans-serif; padding: 40px; margin: 0; background: #f8fafc; color: #0f172a; }
+                                  .receipt-container { max-width: 900px; margin: 0 auto; background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+                                  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; }
+                                  .title { font-size: 24px; font-weight: 900; color: #1e3a8a; text-transform: uppercase; margin: 0 0 8px 0; }
+                                  .subtitle { font-size: 14px; color: #64748b; margin: 0; }
+                                  .amount-box { text-align: right; }
+                                  .amount-label { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 4px 0; }
+                                  .amount-value { font-size: 28px; font-weight: 900; color: #059669; margin: 0; }
+                                  .amount-detail { font-size: 12px; color: #ef4444; font-weight: 600; margin-top: 4px; }
+                                  
+                                  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 40px; }
+                                  .info-item { background: #f1f5f9; padding: 16px; border-radius: 6px; }
+                                  .info-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 8px 0; }
+                                  .info-value { font-size: 14px; font-weight: 600; color: #0f172a; margin: 0; }
+                                  
+                                  .table-container { border: 1px solid #e2e8f0; border-radius: 6px; overflow: hidden; }
+                                  table { w-full; width: 100%; border-collapse: collapse; text-align: left; }
+                                  th { background: #f8fafc; padding: 12px 16px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
+                                  td { padding: 12px 16px; font-size: 13px; color: #334155; border-bottom: 1px solid #e2e8f0; }
+                                  tr:last-child td { border-bottom: none; }
+                                  .text-right { text-align: right; }
+                                  .text-emerald { color: #059669; font-weight: 600; }
+                                  .text-red-500 { color: #ef4444; }
+                                  
+                                  .footer-note { text-align: center; margin-top: 40px; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+                                  
+                                  @media print {
+                                    body { background: #fff; padding: 0; }
+                                    .receipt-container { box-shadow: none; padding: 0; max-width: 100%; }
+                                  }
+                                </style>
+                              </head>
+                              <body>
+                                <div class="receipt-container">
+                                  <div class="header">
+                                    <div>
+                                      <h1 class="title">Comprovante de Pagamento</h1>
+                                      <p class="subtitle">Borderô / Lote No: <strong>${lot.codigo}</strong></p>
+                                    </div>
+                                    <div class="amount-box">
+                                      <p class="amount-label">Valor Liquido Pago</p>
+                                      <p class="amount-value">R$ ${Number(lot.valorTotal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                      <p class="amount-detail">Impostos Retidos: R$ ${totalDescontos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                    </div>
+                                  </div>
+                                  
+                                  <div class="info-grid">
+                                    <div class="info-item">
+                                      <p class="info-label">Aprovado Por</p>
+                                      <p class="info-value">${lot.aprovadoPor}</p>
+                                    </div>
+                                    <div class="info-item">
+                                      <p class="info-label">Data da Geração / Pagamento</p>
+                                      <p class="info-value">${formatDataAprovacao(lot.dataAprovacao)}</p>
+                                    </div>
+                                  </div>
+                                  
+                                  <h3 style="font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Detalhamento das Propostas (${lot.qtdPropostas})</h3>
+                                  <div class="table-container">
+                                    <table>
+                                      <thead>
+                                        <tr>
+                                          <th>Corretor</th>
+                                          <th>Contrato</th>
+                                          <th>Cliente</th>
+                                          <th>Operadora</th>
+                                          <th class="text-right">Comissão Base</th>
+                                          <th class="text-right">Imposto/NF (%)</th>
+                                          <th class="text-right">Líquido Pago</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        ${rowsHtml}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                  
+                                  <div class="footer-note">
+                                    Este é um comprovante interno gerado automaticamente pelo sistema.<br/>
+                                    <strong>SIS - Sistema Integrado de Saúde</strong>
+                                    <br/><br/>
+                                    <button onclick="window.print()" style="padding: 8px 16px; background: #1e3a8a; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 10px;">IMPRIMIR COMPROVANTE</button>
+                                  </div>
+                                </div>
+                              </body>
+                              </html>
+                            `;
+                            
+                            const w = window.open();
+                            if (w) {
+                              w.document.write(receiptHtml);
+                              w.document.close();
                             } else {
-                              alert('Nenhum comprovante foi anexado para este lote.');
+                              alert('Por favor, permita pop-ups para visualizar o comprovante.');
                             }
                           }}
-                          className={`${localStorage.getItem(`comprovante_${lot.id}`) ? 'text-blue-600 hover:text-blue-800 cursor-pointer' : 'text-slate-400 hover:text-slate-600 cursor-pointer'} text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ml-auto transition-all`}
+                          className="text-blue-600 hover:text-blue-800 cursor-pointer text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ml-auto transition-all"
                         >
-                          <i className="fa-solid fa-paperclip"></i> Ver Comprovante
+                          <i className="fa-solid fa-receipt"></i> Ver Comprovante
                         </button>
                       )}
                     </td>

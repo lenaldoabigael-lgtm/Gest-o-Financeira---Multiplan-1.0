@@ -49,7 +49,7 @@ export interface CostCenter {
 
 export interface ProposalRequirement {
   id: string;
-  tipo: 'CORRETOR' | 'CATEGORIA' | 'OPERADORA' | 'TIPO_PLANO' | 'UNIDADE' | 'PRAZO_PAGAMENTO';
+  tipo: 'CORRETOR' | 'CATEGORIA' | 'OPERADORA' | 'TIPO_PLANO' | 'UNIDADE' | 'PRAZO_PAGAMENTO' | 'TAXA_ADESAO' | 'IMPOSTO_CORRETOR';
   nome: string;
 }
 

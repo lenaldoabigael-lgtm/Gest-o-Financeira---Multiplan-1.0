@@ -464,9 +464,27 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
           <FinanceView 
             lots={paymentLots} 
             proposals={proposals}
+            requirements={proposalRequirements}
             onGenerateLot={async (corretor, ids) => {
               const selectedProposals = proposals.filter(p => ids.includes(p.id));
-              const totalValue = selectedProposals.reduce((acc, p) => acc + Number(p.comissao), 0);
+              
+              const impostos = proposalRequirements.filter(r => r.tipo === 'IMPOSTO_CORRETOR');
+              const totalValue = selectedProposals.reduce((acc, p) => {
+                const comissaoBase = Number(p.comissao || 0);
+                const pctStr = impostos.find(r => r.nome.startsWith(`${p.corretor.toUpperCase()} - ${p.operadora.toUpperCase()} - `)) ||
+                               impostos.find(r => r.nome.startsWith(`TODOS - ${p.operadora.toUpperCase()} - `)) ||
+                               impostos.find(r => r.nome.startsWith(`${p.corretor.toUpperCase()} - TODAS - `)) ||
+                               impostos.find(r => r.nome.startsWith(`TODOS - TODAS - `));
+                
+                let txPercentual = 0;
+                if (pctStr) {
+                  txPercentual = parseFloat(pctStr.nome.split(' - ')[2]) || 0;
+                }
+
+                const liquido = comissaoBase * (1 - (txPercentual / 100));
+                return acc + liquido;
+              }, 0);
+
               const code = `LOTE-${corretor.replace(/[^A-Z0-9]/ig, '').substring(0, 5).toUpperCase()}-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`;
               
               const newLot: Omit<PaymentLot, 'id'> = {
