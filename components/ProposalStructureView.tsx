@@ -34,6 +34,13 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
     valor: ''
   });
 
+  const [newPercentual, setNewPercentual] = useState({
+    corretor: '',
+    operadora: '',
+    parcela: '',
+    valor: ''
+  });
+
   const categories = [
     { id: 'CORRETOR', label: 'Corretores', icon: 'fa-user-tie' },
     { id: 'CATEGORIA', label: 'Categorias', icon: 'fa-tags' },
@@ -43,7 +50,7 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
   ] as const;
 
   const handleAdd = (tipo: ProposalRequirement['tipo']) => {
-    if (tipo === 'PRAZO_PAGAMENTO' || tipo === 'TAXA_ADESAO' || tipo === 'IMPOSTO_CORRETOR') return; // Handled separately
+    if (tipo === 'PRAZO_PAGAMENTO' || tipo === 'TAXA_ADESAO' || tipo === 'IMPOSTO_CORRETOR' || tipo === 'PERCENTUAL_COMISSAO') return; // Handled separately
     const nome = newItems[tipo].trim();
     if (!nome) return;
     
@@ -72,6 +79,13 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
     setNewImposto({ corretor: '', operadora: '', valor: '' });
   };
 
+  const handleAddPercentual = () => {
+    if (!newPercentual.corretor || !newPercentual.operadora || !newPercentual.parcela || !newPercentual.valor) return;
+    const nome = `${newPercentual.parcela} - ${newPercentual.corretor} - ${newPercentual.operadora} - ${newPercentual.valor}`.toUpperCase();
+    onSave({ tipo: 'PERCENTUAL_COMISSAO', nome });
+    setNewPercentual({ corretor: '', operadora: '', parcela: '', valor: '' });
+  };
+
   const groupedRequirements = useMemo(() => {
     const groups: Record<string, ProposalRequirement[]> = {
       CORRETOR: [],
@@ -81,7 +95,8 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
       UNIDADE: [],
       PRAZO_PAGAMENTO: [],
       TAXA_ADESAO: [],
-      IMPOSTO_CORRETOR: []
+      IMPOSTO_CORRETOR: [],
+      PERCENTUAL_COMISSAO: []
     };
     requirements.forEach(req => {
       if (groups[req.tipo]) {
@@ -289,6 +304,93 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
                 <div className="col-span-full text-center py-8 opacity-20">
                   <i className="fa-solid fa-money-bill-wave text-2xl mb-2"></i>
                   <p className="text-[10px] font-bold uppercase">Nenhuma taxa de adesão cadastrada</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Card Especial para Percentuais de Comissão */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col md:col-span-2 lg:col-span-3">
+          <div className="bg-sky-600 p-4 flex items-center justify-between text-white">
+            <div className="flex items-center gap-3">
+              <i className="fa-solid fa-chart-pie text-sky-200"></i>
+              <h3 className="text-xs font-black uppercase tracking-widest">Percentual a Ser Pago Ao Corretor (%)</h3>
+            </div>
+            <span className="bg-white/10 px-2 py-0.5 rounded text-[10px] font-bold">
+              {groupedRequirements.PERCENTUAL_COMISSAO.length}
+            </span>
+          </div>
+          
+          <div className="p-4 flex-1 space-y-4">
+            <div className="flex flex-col md:flex-row gap-2">
+              <select
+                value={newPercentual.corretor}
+                onChange={(e) => setNewPercentual(prev => ({ ...prev, corretor: e.target.value }))}
+                className="flex-1 bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-sky-600/10 outline-none uppercase font-bold text-slate-700"
+              >
+                <option value="">Selecione o Corretor...</option>
+                <option value="TODOS">TODOS OS CORRETORES</option>
+                {groupedRequirements.CORRETOR.map(c => (
+                  <option key={c.id} value={c.nome}>{c.nome}</option>
+                ))}
+              </select>
+              <select
+                value={newPercentual.operadora}
+                onChange={(e) => setNewPercentual(prev => ({ ...prev, operadora: e.target.value }))}
+                className="flex-1 bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-sky-600/10 outline-none uppercase font-bold text-slate-700"
+              >
+                <option value="">Selecione a Operadora...</option>
+                <option value="TODAS">TODAS AS OPERADORAS</option>
+                {groupedRequirements.OPERADORA.map(op => (
+                  <option key={op.id} value={op.nome}>{op.nome}</option>
+                ))}
+              </select>
+              <select
+                value={newPercentual.parcela}
+                onChange={(e) => setNewPercentual(prev => ({ ...prev, parcela: e.target.value }))}
+                className="flex-1 bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-sky-600/10 outline-none uppercase font-bold text-slate-700"
+              >
+                <option value="">Parcela...</option>
+                <option value="TODAS">TODAS AS PARCELAS</option>
+                {Array.from({ length: 20 }).map((_, i) => (
+                  <option key={i} value={`${i + 1}ª_PARCELA`}>{i + 1}ª Parcela</option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <input 
+                  type="number" 
+                  value={newPercentual.valor}
+                  onChange={(e) => setNewPercentual(prev => ({ ...prev, valor: e.target.value }))}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddPercentual()}
+                  placeholder="%"
+                  className="w-24 bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-sky-600/10 outline-none uppercase font-bold text-slate-700"
+                />
+                <button 
+                  onClick={handleAddPercentual}
+                  className="bg-sky-600 text-white w-10 h-10 rounded-xl flex items-center justify-center hover:bg-sky-700 transition-all shadow-lg shadow-sky-600/20 active:scale-95"
+                >
+                  <i className="fa-solid fa-plus"></i>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {groupedRequirements.PERCENTUAL_COMISSAO.map(req => (
+                <div key={req.id} className="group flex items-center justify-between p-3 bg-slate-50 hover:bg-white hover:shadow-md hover:shadow-slate-200/50 border border-transparent hover:border-slate-100 rounded-xl transition-all">
+                  <span className="text-[11px] font-bold text-slate-700 uppercase"><i className="fa-solid fa-chart-pie text-sky-600 mr-2"></i> {req.nome.split(' - ')[3]}% - Parcela: {req.nome.split(' - ')[0].replace('_', ' ')} - {req.nome.split(' - ')[1]} ({req.nome.split(' - ')[2]})</span>
+                  <button 
+                    onClick={() => onDelete(req.id)}
+                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
+                  >
+                    <i className="fa-solid fa-trash-can text-[10px]"></i>
+                  </button>
+                </div>
+              ))}
+              {groupedRequirements.PERCENTUAL_COMISSAO.length === 0 && (
+                <div className="col-span-full text-center py-8 opacity-20">
+                  <i className="fa-solid fa-chart-pie text-2xl mb-2"></i>
+                  <p className="text-[10px] font-bold uppercase">Nenhum percentual cadastrado</p>
                 </div>
               )}
             </div>

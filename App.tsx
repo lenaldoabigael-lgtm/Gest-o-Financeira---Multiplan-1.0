@@ -555,7 +555,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             }}
           />
         )}
-        {activeTab === Tab.COMISSOES && user.permissions.comissoes && <ComissoesModule />}
+        {activeTab === Tab.COMISSOES && user.permissions.comissoes && <ComissoesModule proposals={proposals} onUpdateProposal={(updated: Proposal) => setProposals(proposals.map(p => p.id === updated.id ? updated : p))} requirements={proposalRequirements} />}
         {activeTab === Tab.ESTRUTURA_PROPOSTA && user.permissions.estruturaProposta && (
           <ProposalStructureView 
             requirements={proposalRequirements}

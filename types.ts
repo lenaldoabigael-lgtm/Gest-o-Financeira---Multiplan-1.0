@@ -49,7 +49,7 @@ export interface CostCenter {
 
 export interface ProposalRequirement {
   id: string;
-  tipo: 'CORRETOR' | 'CATEGORIA' | 'OPERADORA' | 'TIPO_PLANO' | 'UNIDADE' | 'PRAZO_PAGAMENTO' | 'TAXA_ADESAO' | 'IMPOSTO_CORRETOR';
+  tipo: 'CORRETOR' | 'CATEGORIA' | 'OPERADORA' | 'TIPO_PLANO' | 'UNIDADE' | 'PRAZO_PAGAMENTO' | 'TAXA_ADESAO' | 'IMPOSTO_CORRETOR' | 'PERCENTUAL_COMISSAO';
   nome: string;
 }
 
@@ -95,4 +95,7 @@ export interface Proposal {
   comissao: number;
   detalhes?: any;
   lote_id?: string;
+  parcelas_status?: Record<number, 'PENDENTE' | 'PAGO'>;
+  parcelas_repassadas?: Record<number, 'PENDENTE' | 'PAGO'>;
+  parcelas_valores?: Record<number, number>;
 }
