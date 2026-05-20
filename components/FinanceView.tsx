@@ -285,7 +285,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                                 txPercentual = parseFloat(pctStr.nome.split(' - ')[2]) || 0;
                               }
 
-                              const desconto = comissaoBase * (txPercentual / 100);
+                              const desconto = Number((comissaoBase * (txPercentual / 100)).toFixed(2));
                               const liquido = comissaoBase - desconto;
 
                               totalComissoes += comissaoBase;
@@ -297,13 +297,15 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                                   <td>${p.contrato}</td>
                                   <td>${p.cliente}</td>
                                   <td>${p.operadora}</td>
-                                  <td class="text-right">R$ ${comissaoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                                  <td class="text-right text-red-500">-${txPercentual}% (R$ ${desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})</td>
-                                  <td class="text-right text-emerald">R$ ${liquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                  <td class="text-right">R$ ${comissaoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td class="text-right text-red-500">-${txPercentual.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}% (R$ ${desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</td>
+                                  <td class="text-right text-emerald">R$ ${liquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
                               `;
                             }).join('');
                             
+                            const valorLiquidoTotal = totalComissoes - totalDescontos;
+
                             const receiptHtml = `
                               <!DOCTYPE html>
                               <html>
@@ -351,8 +353,8 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                                     </div>
                                     <div class="amount-box">
                                       <p class="amount-label">Valor Liquido Pago</p>
-                                      <p class="amount-value">R$ ${Number(lot.valorTotal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                                      <p class="amount-detail">Impostos Retidos: R$ ${totalDescontos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                      <p class="amount-value">R$ ${valorLiquidoTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                      <p class="amount-detail">Comissão Base: R$ ${totalComissoes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Impostos Retidos: R$ ${totalDescontos.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                     </div>
                                   </div>
                                   

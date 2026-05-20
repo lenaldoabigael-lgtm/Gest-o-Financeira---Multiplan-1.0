@@ -481,7 +481,8 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                   txPercentual = parseFloat(pctStr.nome.split(' - ')[2]) || 0;
                 }
 
-                const liquido = comissaoBase * (1 - (txPercentual / 100));
+                const desconto = Number((comissaoBase * (txPercentual / 100)).toFixed(2));
+                const liquido = comissaoBase - desconto;
                 return acc + liquido;
               }, 0);
 

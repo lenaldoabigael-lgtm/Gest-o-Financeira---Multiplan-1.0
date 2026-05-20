@@ -176,7 +176,10 @@ const SellerBoard: React.FC<SellerBoardProps> = ({ proposals, requirements, onSt
                       )}
                     </div>
                     <div className="font-bold text-slate-800 text-sm mb-1">{p.cliente}</div>
-                    <div className="text-xs text-slate-500 mb-3">CPF/CNPJ: {p.cpfCnpj}</div>
+                    <div className="text-xs text-slate-500 mb-3">
+                      <span className="block mb-1">CPF/CNPJ: {p.cpfCnpj}</span>
+                      <span className="block font-bold">Contrato: {p.contrato || 'N/A'}</span>
+                    </div>
                     
                     <div className="flex flex-wrap gap-2 mb-3">
                       <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">
