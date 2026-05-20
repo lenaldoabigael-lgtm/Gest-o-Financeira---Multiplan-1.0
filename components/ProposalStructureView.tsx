@@ -25,6 +25,7 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
 
   const [newTaxaAdesao, setNewTaxaAdesao] = useState({
     operadora: '',
+    tipoPlano: '',
     valor: ''
   });
 
@@ -67,9 +68,10 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
 
   const handleAddTaxaAdesao = () => {
     if (!newTaxaAdesao.operadora || !newTaxaAdesao.valor) return;
-    const nome = `${newTaxaAdesao.operadora} - ${newTaxaAdesao.valor}`.toUpperCase();
+    const tipo = newTaxaAdesao.tipoPlano || 'TODOS';
+    const nome = `${newTaxaAdesao.operadora} - ${tipo} - ${newTaxaAdesao.valor}`.toUpperCase();
     onSave({ tipo: 'TAXA_ADESAO', nome });
-    setNewTaxaAdesao({ operadora: '', valor: '' });
+    setNewTaxaAdesao({ operadora: '', tipoPlano: '', valor: '' });
   };
 
   const handleAddImposto = () => {
@@ -262,12 +264,23 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
               <select
                 value={newTaxaAdesao.operadora}
                 onChange={(e) => setNewTaxaAdesao(prev => ({ ...prev, operadora: e.target.value }))}
-                className="flex-1 bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-orange-600/10 outline-none uppercase font-bold text-slate-700"
+                className="flex-[2] bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-orange-600/10 outline-none uppercase font-bold text-slate-700"
               >
                 <option value="">Selecione a Operadora...</option>
                 <option value="TODAS">TODAS AS OPERADORAS</option>
                 {groupedRequirements.OPERADORA.map(op => (
                   <option key={op.id} value={op.nome}>{op.nome}</option>
+                ))}
+              </select>
+              <select
+                value={newTaxaAdesao.tipoPlano}
+                onChange={(e) => setNewTaxaAdesao(prev => ({ ...prev, tipoPlano: e.target.value }))}
+                className="flex-1 bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-orange-600/10 outline-none uppercase font-bold text-slate-700"
+              >
+                <option value="">Tipo de Plano...</option>
+                <option value="TODOS">TODAS OS PLANOS</option>
+                {groupedRequirements.TIPO_PLANO.map(tp => (
+                  <option key={tp.id} value={tp.nome}>{tp.nome}</option>
                 ))}
               </select>
               <div className="flex gap-2">
@@ -289,17 +302,24 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
             </div>
 
             <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {groupedRequirements.TAXA_ADESAO.map(req => (
-                <div key={req.id} className="group flex items-center justify-between p-3 bg-slate-50 hover:bg-white hover:shadow-md hover:shadow-slate-200/50 border border-transparent hover:border-slate-100 rounded-xl transition-all">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase"><i className="fa-solid fa-money-bill-wave text-orange-600 mr-2"></i> R$ {req.nome.split(' - ')[1]} ({req.nome.split(' - ')[0]})</span>
-                  <button 
-                    onClick={() => onDelete(req.id)}
-                    className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
-                  >
-                    <i className="fa-solid fa-trash-can text-[10px]"></i>
-                  </button>
-                </div>
-              ))}
+              {groupedRequirements.TAXA_ADESAO.map(req => {
+                const parts = req.nome.split(' - ');
+                // Handling backwards compatibility where it could be just "OPERADORA - VALOR"
+                const operadora = parts[0];
+                const tipo = parts.length > 2 ? parts[1] : 'TODOS';
+                const valor = parts.length > 2 ? parts[2] : parts[1];
+                return (
+                 <div key={req.id} className="group flex items-center justify-between p-3 bg-slate-50 hover:bg-white hover:shadow-md hover:shadow-slate-200/50 border border-transparent hover:border-slate-100 rounded-xl transition-all">
+                   <span className="text-[11px] font-bold text-slate-700 uppercase"><i className="fa-solid fa-money-bill-wave text-orange-600 mr-2"></i> R$ {valor} ({operadora} - {tipo})</span>
+                   <button 
+                     onClick={() => onDelete(req.id)}
+                     className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
+                   >
+                     <i className="fa-solid fa-trash-can text-[10px]"></i>
+                   </button>
+                 </div>
+                );
+              })}
               {groupedRequirements.TAXA_ADESAO.length === 0 && (
                 <div className="col-span-full text-center py-8 opacity-20">
                   <i className="fa-solid fa-money-bill-wave text-2xl mb-2"></i>

@@ -15,23 +15,39 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterOperadora, setFilterOperadora] = useState('Todas');
+  const [filterTipoPlano, setFilterTipoPlano] = useState('Todos');
+  const [filterValor, setFilterValor] = useState('');
   const [confirmingSendId, setConfirmingSendId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const filteredProposals = useMemo(() => {
-    return proposals.filter(p => 
-      (p.cliente.toLowerCase().includes(searchTerm.toLowerCase()) || 
-       p.cpfCnpj.includes(searchTerm) || 
-       p.contrato.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (filterStatus === 'Todos' || p.status === filterStatus) &&
-      (filterOperadora === 'Todas' || p.operadora === filterOperadora)
-    );
-  }, [proposals, searchTerm, filterStatus, filterOperadora]);
+    return proposals.filter(p => {
+      const matchSearch = (
+        p.cliente.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        p.cpfCnpj.includes(searchTerm) || 
+        p.contrato.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      const matchStatus = filterStatus === 'Todos' || p.status === filterStatus;
+      const matchOperadora = filterOperadora === 'Todas' || p.operadora === filterOperadora;
+      
+      const tipoPlano = p.detalhes?.proposta?.tipoPlano || 'Não Informado';
+      const matchTipoPlano = filterTipoPlano === 'Todos' || tipoPlano === filterTipoPlano;
+
+      const matchValor = !filterValor || p.valor.toString().includes(filterValor) || p.valor.toFixed(2).includes(filterValor);
+
+      return matchSearch && matchStatus && matchOperadora && matchTipoPlano && matchValor;
+    });
+  }, [proposals, searchTerm, filterStatus, filterOperadora, filterTipoPlano, filterValor]);
 
   const operadoras = useMemo(() => {
     const unique = Array.from(new Set(proposals.map(p => p.operadora)));
     return ['Todas', ...unique.sort()];
+  }, [proposals]);
+
+  const tiposPlano = useMemo(() => {
+    const unique = Array.from(new Set(proposals.map(p => p.detalhes?.proposta?.tipoPlano || 'Não Informado')));
+    return ['Todos', ...unique.sort()];
   }, [proposals]);
 
   const statusOptions = ['Todos', 'CADASTRADA', 'ENVIADA AO FINANCEIRO', 'PAGO'];
@@ -230,9 +246,20 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
           >
             {operadoras.map(op => <option key={op} value={op}>{op === 'Todas' ? 'Operadora: Todas' : op}</option>)}
           </select>
-          <button className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all">
-            Filtros
-          </button>
+          <select
+            value={filterTipoPlano}
+            onChange={(e) => setFilterTipoPlano(e.target.value)}
+            className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
+          >
+            {tiposPlano.map(tp => <option key={tp} value={tp}>{tp === 'Todos' ? 'Tipo de Plano: Todos' : tp}</option>)}
+          </select>
+          <input
+            type="text"
+            placeholder="Valor..."
+            value={filterValor}
+            onChange={(e) => setFilterValor(e.target.value)}
+            className="w-32 bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10 transition-all"
+          />
           <button className="px-6 py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 rounded-xl text-xs font-black uppercase tracking-widest transition-all">
             Buscar
           </button>

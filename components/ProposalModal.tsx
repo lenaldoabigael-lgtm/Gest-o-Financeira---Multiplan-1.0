@@ -433,12 +433,22 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                         setFormData(prev => {
                           let novaTaxa = prev.financeiro.valorTaxa;
                           const taxasAdesao = requirements?.filter(r => r.tipo === 'TAXA_ADESAO') || [];
-                          const req = taxasAdesao.find(t => t.nome.startsWith(`${val.toUpperCase()} - `)) || taxasAdesao.find(t => t.nome.startsWith(`TODAS - `));
+                          
+                          // Handle modern format: OPERADORA - TIPO_PLANO - VALOR and legacy: OPERADORA - VALOR
+                          const findTaxa = (op: string, tipo: string) => {
+                            return taxasAdesao.find(t => {
+                               const parts = t.nome.split(' - ');
+                               const reqOp = parts[0];
+                               const reqTipo = parts.length > 2 ? parts[1] : 'TODOS';
+                               return (reqOp === op || reqOp === 'TODAS') && (reqTipo === tipo || reqTipo === 'TODOS');
+                            });
+                          };
+
+                          const req = findTaxa(val.toUpperCase(), prev.proposta.tipoPlano?.toUpperCase() || 'TODOS');
                           
                           if (req) {
-                            novaTaxa = parseFloat(req.nome.split(' - ')[1]) || 0;
-                          } else {
-                            // novaTaxa = 0; // Opcional, podemos manter o valor que estava se não achar regra
+                             const parts = req.nome.split(' - ');
+                             novaTaxa = parseFloat(parts.length > 2 ? parts[2] : parts[1]) || 0;
                           }
 
                           return { 
@@ -457,7 +467,38 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       label="Tipo de Plano" 
                       value={formData.proposta.tipoPlano} 
                       options={getOptions('TIPO_PLANO')}
-                      onChange={(val) => setFormData(prev => ({ ...prev, proposta: { ...prev.proposta, tipoPlano: val } }))}
+                      onChange={(val) => {
+                        setFormData(prev => {
+                          let novaTaxa = prev.financeiro.valorTaxa;
+                          const taxasAdesao = requirements?.filter(r => r.tipo === 'TAXA_ADESAO') || [];
+                          
+                          const findTaxa = (op: string, tipo: string) => {
+                            return taxasAdesao.find(t => {
+                               const parts = t.nome.split(' - ');
+                               const reqOp = parts[0];
+                               const reqTipo = parts.length > 2 ? parts[1] : 'TODOS';
+                               return (reqOp === op || reqOp === 'TODAS') && (reqTipo === tipo || reqTipo === 'TODOS');
+                            });
+                          };
+
+                          const req = findTaxa(prev.proposta.operadora?.toUpperCase() || 'TODAS', val.toUpperCase());
+                          
+                          if (req) {
+                             const parts = req.nome.split(' - ');
+                             novaTaxa = parseFloat(parts.length > 2 ? parts[2] : parts[1]) || 0;
+                          }
+
+                          return { 
+                            ...prev, 
+                            proposta: { ...prev.proposta, tipoPlano: val },
+                            financeiro: {
+                              ...prev.financeiro,
+                              valorTaxa: novaTaxa,
+                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
+                            }
+                          };
+                        });
+                      }}
                     />
                     <Select 
                       label="Unidade" 
