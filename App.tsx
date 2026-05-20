@@ -107,6 +107,37 @@ const App: React.FC = () => {
       }
 
       setAppUsers(currentUsers);
+
+      // Auto-login from localStorage to prevent flash
+      const savedLogin = localStorage.getItem('sis_login');
+      const savedPass = localStorage.getItem('sis_pass');
+      if (savedLogin && savedPass && !user) {
+        const foundUser = currentUsers.find(u => u.login === savedLogin && u.senha === savedPass);
+        if (foundUser && foundUser.approved) {
+          setUser(foundUser);
+          const tabs = [
+            { id: Tab.DASHBOARD, permission: foundUser.permissions.dashboard },
+            { id: Tab.CONTAS_PAGAR, permission: foundUser.permissions.contasPagar },
+            { id: Tab.CONTAS_RECEBER, permission: foundUser.permissions.contasReceber },
+            { id: Tab.FLUXO_CAIXA, permission: foundUser.permissions.fluxoCaixa },
+            { id: Tab.CENTRO_CUSTO, permission: foundUser.permissions.centroCusto },
+            { id: Tab.ESTRUTURA_PROPOSTA, permission: foundUser.permissions.estruturaProposta },
+            { id: Tab.DETALHES, permission: foundUser.permissions.detalhes },
+            { id: Tab.PROPOSTAS, permission: foundUser.permissions.propostas },
+            { id: Tab.ACOMPANHAMENTO, permission: foundUser.permissions.gestaoDemandas },
+            { id: Tab.FINANCEIRO, permission: foundUser.permissions.financeiro },
+            { id: Tab.COMISSOES, permission: foundUser.permissions.comissoes },
+            { id: Tab.PLAN_CREDENCIAS, permission: foundUser.permissions.planCredencias },
+          ];
+          const savedTab = localStorage.getItem('sis_activeTab') as Tab | null;
+          if (savedTab && tabs.find(t => t.id === savedTab)?.permission) {
+             setActiveTab(savedTab);
+          } else {
+            setActiveTab(tabs.find(t => t.permission)?.id || null);
+          }
+        }
+      }
+
       if (transactionsRes.data) setTransactions(transactionsRes.data);
       if (proposalsRes.data) {
         setProposals(proposalsRes.data);
@@ -167,6 +198,8 @@ const App: React.FC = () => {
         return;
       }
       setUser(foundUser);
+      localStorage.setItem('sis_login', login);
+      localStorage.setItem('sis_pass', pass);
       
       const tabs = [
         { id: Tab.DASHBOARD, permission: foundUser.permissions.dashboard },
@@ -185,6 +218,9 @@ const App: React.FC = () => {
       
       const firstAllowedTab = tabs.find(t => t.permission)?.id || null;
       setActiveTab(firstAllowedTab);
+      if (firstAllowedTab) {
+        localStorage.setItem('sis_activeTab', firstAllowedTab);
+      }
     } else {
       alert('Login ou senha inválidos!');
     }
@@ -305,7 +341,21 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
   if (!user) return <Login onLogin={handleLogin} onRegister={handleRegister} />;
 
   return (
-    <Layout user={user} activeTab={activeTab} setActiveTab={setActiveTab} onLogout={() => setUser(null)}>
+    <Layout 
+      user={user} 
+      activeTab={activeTab} 
+      setActiveTab={(tab) => {
+        setActiveTab(tab);
+        if (tab) localStorage.setItem('sis_activeTab', tab);
+      }} 
+      onLogout={() => {
+        setUser(null);
+        setActiveTab(null);
+        localStorage.removeItem('sis_login');
+        localStorage.removeItem('sis_pass');
+        localStorage.removeItem('sis_activeTab');
+      }}
+    >
       {showAccountFilter && (
         <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-500">
           <div className="flex items-center gap-4 mb-3">
