@@ -107,7 +107,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       categoria: '',
       operadora: '',
       tipoPlano: '',
-      unidade: ''
+      unidade: '',
+      pagamentoCartao: false
     },
     financeiro: {
       valorContrato: 0,
@@ -231,7 +232,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
               categoria: proposal.categoria,
               operadora: proposal.operadora,
               tipoPlano: '', // Not in Proposal type
-              unidade: '' // Not in Proposal type
+              unidade: '', // Not in Proposal type
+              pagamentoCartao: proposal.detalhes?.proposta?.pagamentoCartao || false
             },
             financeiro: {
               ...initialData.financeiro,
@@ -263,8 +265,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       categoria: formData.proposta.categoria,
       valor: Number(formData.financeiro.valorContrato) || 0,
       vidas: Number(formData.financeiro.vidas) || 0,
-      status: proposal?.status || 'CADASTRADA',
-      comissao: Number(formData.financeiro.parcelas[0]?.comissao) || 0,
+      status: (proposal?.status && proposal.status !== 'CADASTRADA') ? proposal.status : (formData.proposta.pagamentoCartao ? 'ENVIADA AO FINANCEIRO' : 'CADASTRADA'),
+      comissao: formData.proposta.pagamentoCartao ? 0 : (Number(formData.financeiro.parcelas[0]?.comissao) || 0),
       detalhes: formData
     });
     onClose();
@@ -506,6 +508,28 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       options={getOptions('UNIDADE')}
                       onChange={(val) => setFormData(prev => ({ ...prev, proposta: { ...prev.proposta, unidade: val } }))}
                     />
+                  </div>
+                  <div className="flex items-center gap-3 mt-4">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <input 
+                        type="checkbox" 
+                        checked={formData.proposta.pagamentoCartao || false} 
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setFormData(prev => {
+                            const updated = { ...prev, proposta: { ...prev.proposta, pagamentoCartao: checked } };
+                            if (checked && updated.financeiro.parcelas[0]) {
+                              updated.financeiro.parcelas[0].comissao = 0;
+                            }
+                            return updated;
+                          });
+                        }}
+                        className="w-4 h-4 text-orange-600 bg-slate-100 border-slate-300 rounded focus:ring-orange-500 focus:ring-2"
+                      />
+                      <span className="text-sm font-bold text-slate-700 select-none group-hover:text-slate-900 transition-colors uppercase tracking-tight flex items-center gap-2">
+                        <i className="fa-regular fa-credit-card"></i> Pagamento no Cartão Corretora
+                      </span>
+                    </label>
                   </div>
                 </div>
               </Card>

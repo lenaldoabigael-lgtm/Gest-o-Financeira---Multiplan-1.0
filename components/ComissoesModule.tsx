@@ -336,7 +336,14 @@ function ComissoesView({ proposals, onUpdateProposal }: { proposals: Proposal[],
                       <TableCell className="font-bold text-slate-800 sticky left-0 bg-white group-hover:bg-slate-50 z-10 shadow-[1px_0_0_0_#e2e8f0]">{p.contrato}</TableCell>
                       <TableCell className="font-medium text-slate-600">{p.cliente}</TableCell>
                       <TableCell className="text-slate-600">{p.corretor}</TableCell>
-                      <TableCell className="text-slate-600">{p.operadora}</TableCell>
+                      <TableCell className="text-slate-600">
+                        {p.operadora}
+                        {p.detalhes?.proposta?.pagamentoCartao && (
+                          <div className="text-[8px] font-black uppercase tracking-widest bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200 mt-1 inline-block">
+                            💳 Cartão Corretora
+                          </div>
+                        )}
+                      </TableCell>
                       {Array.from({ length: 20 }).map((_, i) => {
                         const status = p.parcelas_status?.[i + 1] || 'PENDENTE';
                         const isAdiantamento = i === 0;
@@ -463,7 +470,7 @@ function RemuneracaoView({ proposals, onUpdateProposal, requirements }: { propos
         }
 
         const valorBase = p.parcelas_valores?.[i] || p.valor; // Use received value if available, fallback to total contract value
-        const valorPagar = valorBase * (pct / 100);
+        const valorPagar = (p.detalhes?.proposta?.pagamentoCartao && i === 1) ? 0 : valorBase * (pct / 100);
 
         pendingParcels.push({
           proposal: p,
@@ -558,7 +565,14 @@ function RemuneracaoView({ proposals, onUpdateProposal, requirements }: { propos
                         <tr key={idx} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
                           <td className="py-2 text-xs font-bold text-slate-800">{parcel.proposal.contrato}</td>
                           <td className="py-2 text-xs text-slate-600">{parcel.proposal.cliente}</td>
-                          <td className="py-2 text-xs text-slate-600">{parcel.proposal.operadora}</td>
+                          <td className="py-2 text-xs text-slate-600">
+                            {parcel.proposal.operadora}
+                            {parcel.proposal.detalhes?.proposta?.pagamentoCartao && (
+                               <div className="text-[8px] font-black uppercase tracking-widest bg-orange-100 text-orange-700 px-1 py-0.5 rounded border border-orange-200 mt-1 inline-block">
+                                 💳 Cartão Corretora
+                               </div>
+                            )}
+                          </td>
                           <td className="py-2 text-xs font-bold text-slate-600 text-center">{parcel.parcelaIndex}ª</td>
                           <td className="py-2 text-xs font-medium text-slate-600 text-right">R$ {(parcel.proposal.parcelas_valores?.[parcel.parcelaIndex] || parcel.proposal.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                           <td className="py-2 text-xs font-bold text-sky-600 text-right">{parcel.percentual}%</td>

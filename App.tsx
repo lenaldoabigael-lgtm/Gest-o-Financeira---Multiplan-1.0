@@ -670,8 +670,10 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               fetchData();
             }
           } else {
-            // Força status inicial
-            proposalData.status = 'CADASTRADA';
+            // Se não veio como "ENVIADA AO FINANCEIRO" (via cartão), força CADASTRADA
+            if (proposalData.status !== 'ENVIADA AO FINANCEIRO') {
+              proposalData.status = 'CADASTRADA';
+            }
             
             const { error } = await supabase.from('proposals').insert([proposalData]);
             if (error) {

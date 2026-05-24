@@ -162,9 +162,16 @@ const SellerBoard: React.FC<SellerBoardProps> = ({ proposals, requirements, onSt
                 return (
                   <div key={p.id} className={`${bgColor} p-4 rounded-2xl shadow-sm border border-slate-100 transition-all cursor-default`}> 
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                        {p.operadora} - {p.categoria}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                          {p.operadora} - {p.categoria}
+                        </span>
+                        {p.detalhes?.proposta?.pagamentoCartao && (
+                          <span className="text-[8px] font-black uppercase tracking-widest bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-200">
+                            💳 Cartão Corretora
+                          </span>
+                        )}
+                      </div>
                       {alertText && (
                         <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full ${
                           alertText === 'Atrasado' ? 'bg-red-100 text-red-700' : 
@@ -179,6 +186,8 @@ const SellerBoard: React.FC<SellerBoardProps> = ({ proposals, requirements, onSt
                     <div className="text-xs text-slate-500 mb-3">
                       <span className="block mb-1">CPF/CNPJ: {p.cpfCnpj}</span>
                       <span className="block font-bold">Contrato: {p.contrato || 'N/A'}</span>
+                      <span className="block mt-1 text-[10px]">Corretor: <span className="font-bold">{p.corretor}</span></span>
+                      <span className="block text-[10px]">Data: <span className="font-bold">{p.data}</span></span>
                     </div>
                     
                     <div className="flex flex-wrap gap-2 mb-3">

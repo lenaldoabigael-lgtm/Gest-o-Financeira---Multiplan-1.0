@@ -319,14 +319,21 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
                     <div className="text-[10px] text-slate-400 font-bold">{p.vidas} vidas</div>
                   </td>
                   <td className="p-4">
-                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                      p.status === 'CADASTRADA' ? 'bg-slate-100 text-slate-700' :
-                      p.status === 'ENVIADA AO FINANCEIRO' ? 'bg-blue-100 text-blue-700' :
-                      p.status === 'PAGO' ? 'bg-emerald-100 text-emerald-700' :
-                      'bg-slate-100 text-slate-700'
-                    }`}>
-                      {p.status}
-                    </span>
+                    <div className="flex flex-col gap-1 items-start">
+                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                        p.status === 'CADASTRADA' ? 'bg-slate-100 text-slate-700' :
+                        p.status === 'ENVIADA AO FINANCEIRO' ? 'bg-blue-100 text-blue-700' :
+                        p.status === 'PAGO' ? 'bg-emerald-100 text-emerald-700' :
+                        'bg-slate-100 text-slate-700'
+                      }`}>
+                        {p.status}
+                      </span>
+                      {p.detalhes?.proposta?.pagamentoCartao && (
+                        <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-orange-100 text-orange-700 border border-orange-200">
+                          💳 Cartão Corretora
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-2">
