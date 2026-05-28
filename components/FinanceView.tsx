@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { PaymentLot, Proposal, ProposalRequirement } from '../types';
+import { LOGO_BASE64 } from '../src/logo';
 
 interface FinanceViewProps {
   lots: PaymentLot[];
@@ -231,8 +232,14 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                       </button>
                     </td>
                     <td className="px-6 py-4">
-                      <p className="text-xs font-bold text-slate-700">{lot.aprovadoPor}</p>
-                      <p className="text-[9px] text-slate-400">{formatDataAprovacao(lot.dataAprovacao)}</p>
+                      {lot.status === 'PENDENTE' ? (
+                        <p className="text-xs font-bold text-slate-400 italic">Aguardando...</p>
+                      ) : (
+                        <>
+                          <p className="text-xs font-bold text-slate-700">{lot.aprovadoPor}</p>
+                          <p className="text-[9px] text-slate-400">{formatDataAprovacao(lot.dataAprovacao)}</p>
+                        </>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-xs text-slate-600">
                       {lot.qtdPropostas} {lot.qtdPropostas === 1 ? 'proposta' : 'propostas'}
@@ -346,10 +353,13 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                               </head>
                               <body>
                                 <div class="receipt-container">
-                                  <div class="header">
-                                    <div>
-                                      <h1 class="title">Comprovante de Pagamento</h1>
-                                      <p class="subtitle">Borderô / Lote No: <strong>${lot.codigo}</strong></p>
+                                  <div class="header" style="align-items: center;">
+                                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                                      <img src="${LOGO_BASE64 ? 'data:image/png;base64,' + LOGO_BASE64 : window.location.origin + '/logo.png'}" alt="Multi Plan Logo" style="height: 60px; object-fit: contain; object-position: left; border-radius: 4px;" onerror="this.style.display='none'" />
+                                      <div>
+                                        <h1 class="title">Comprovante de Pagamento</h1>
+                                        <p class="subtitle">Borderô / Lote No: <strong>${lot.codigo}</strong></p>
+                                      </div>
                                     </div>
                                     <div class="amount-box">
                                       <p class="amount-label">Valor Liquido Pago</p>

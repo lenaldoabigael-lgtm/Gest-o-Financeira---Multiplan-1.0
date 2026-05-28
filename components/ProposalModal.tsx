@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Proposal, ProposalRequirement } from '../types';
+import { Proposal, ProposalRequirement, User } from '../types';
 
 interface ProposalModalProps {
   isOpen: boolean;
@@ -8,6 +8,7 @@ interface ProposalModalProps {
   onSave: (proposal: Omit<Proposal, 'id'>) => void;
   requirements: ProposalRequirement[];
   proposal?: Proposal | null;
+  user: User;
 }
 
 const Card = ({ title, icon, children, action }: { title: string, icon: string, children: React.ReactNode, action?: React.ReactNode }) => (
@@ -82,7 +83,7 @@ const formatDate = (value: string) => {
   }
 };
 
-const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, requirements, proposal }) => {
+const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, requirements, proposal, user }) => {
   const initialData = {
     cliente: {
       nome: '',
@@ -138,7 +139,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
     const note = {
       id: Math.random().toString(36).substr(2, 9),
       data: new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }),
-      responsavel: 'Rafael Sampaio', // Mock current user
+      responsavel: user?.login || 'Sistema',
       observacao: newObservation
     };
     setFormData(prev => ({

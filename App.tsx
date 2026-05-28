@@ -540,8 +540,8 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               
               const newLot: Omit<PaymentLot, 'id'> = {
                 codigo: code,
-                aprovadoPor: user?.login || 'Sistema',
-                dataAprovacao: new Date().toISOString(),
+                aprovadoPor: 'Pendente',
+                dataAprovacao: '-',
                 qtdPropostas: ids.length,
                 vencimento: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Amanhã
                 valorTotal: totalValue,
@@ -590,7 +590,11 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               alert(`Proposta ${prop.contrato || ''} devolvida com sucesso para status Cadastrada.`);
             }}
             onPay={async (id) => {
-              const { error } = await supabase.from('payment_lots').update({ status: 'PAGO' }).eq('id', id);
+              const { error } = await supabase.from('payment_lots').update({ 
+                status: 'PAGO', 
+                aprovadoPor: user?.login || 'Sistema', 
+                dataAprovacao: new Date().toISOString() 
+              }).eq('id', id);
               if (error) {
                 console.error('Erro ao pagar lote:', error);
                 alert('Erro ao pagar lote. Verifique o console.');
@@ -641,6 +645,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         }} 
         requirements={proposalRequirements}
         proposal={editingProposal}
+        user={user!}
         onSave={async (proposalData) => {
           const contratoNumber = proposalData.contrato.trim();
           const isContratoDuplicado = proposals.some(
