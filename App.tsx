@@ -540,8 +540,8 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               
               const newLot: Omit<PaymentLot, 'id'> = {
                 codigo: code,
-                aprovadoPor: 'Pendente',
-                dataAprovacao: '-',
+                aprovadoPor: 'Aguardando',
+                dataAprovacao: new Date().toISOString(),
                 qtdPropostas: ids.length,
                 vencimento: new Date(Date.now() + 86400000).toISOString().split('T')[0], // Amanhã
                 valorTotal: totalValue,

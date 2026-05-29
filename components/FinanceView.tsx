@@ -49,6 +49,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
   };
 
   const formatDataAprovacao = (dateStr: string) => {
+    if (!dateStr) return '-';
     if (dateStr.includes('T')) {
       const d = new Date(dateStr);
       return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
