@@ -461,7 +461,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
                   <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 transition-all font-bold text-slate-700" value={formData.conta} onChange={e => setFormData({...formData, conta: e.target.value})}>
                     <option value="CAIXA">CAIXA</option>
                     <option value="INTER">INTER</option>
-                    <option value="BRADESCO">BRADESCO</option>
+                    <option value="BRADESCO">INFINIT</option>
                     <option value="GERAL">GERAL / DINHEIRO</option>
                   </select>
                 </div>
