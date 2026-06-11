@@ -170,30 +170,74 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const parseExcelDate = (val: any): string => {
+      if (!val) return new Date().toISOString().split('T')[0];
+      
+      if (val instanceof Date) {
+        if (!isNaN(val.getTime())) {
+          return val.toISOString().split('T')[0];
+        }
+      }
+      
+      const s = val.toString().trim();
+      if (!s) return new Date().toISOString().split('T')[0];
+      
+      const num = Number(s);
+      if (!isNaN(num) && num > 20000 && num < 60000) {
+        const date = new Date(Math.round((num - 25569) * 86400 * 1000));
+        if (!isNaN(date.getTime())) {
+          return date.toISOString().split('T')[0];
+        }
+      }
+      
+      const matchBR = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+      if (matchBR) {
+        return `${matchBR[3]}-${matchBR[2]}-${matchBR[1]}`;
+      }
+      
+      const matchISO = s.match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
+      if (matchISO) {
+        return `${matchISO[1]}-${matchISO[2]}-${matchISO[3]}`;
+      }
+      
+      const parsedDate = new Date(s);
+      if (!isNaN(parsedDate.getTime())) {
+        return parsedDate.toISOString().split('T')[0];
+      }
+      
+      return new Date().toISOString().split('T')[0];
+    };
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const json = XLSX.utils.sheet_to_json<any>(worksheet);
         
-        if (json.length === 0) {
-          alert('A planilha está vazia.');
+        const validRows = json.filter(row => {
+          const contract = row['Nº Contrato']?.toString() || row['Contrato']?.toString() || '';
+          const name = row['Nome']?.toString() || row['Cliente']?.toString() || '';
+          return contract.trim() !== '' || name.trim() !== '';
+        });
+
+        if (validRows.length === 0) {
+          alert('Nenhuma proposta válida encontrada na planilha.');
           return;
         }
 
-        const importedProposals = json.map(row => {
-          const clienteNome = row['Nome']?.toString() || row['Cliente']?.toString() || '';
-          const clienteCpfCnpj = row['CPF / CNPJ']?.toString() || row['CPF/CNPJ']?.toString() || row['CPF']?.toString() || row['CNPJ']?.toString() || '';
-          const contratoNum = row['Nº Contrato']?.toString() || row['Contrato']?.toString() || '';
-          const corretorNome = row['Corretor']?.toString() || '';
-          const operadoraNome = row['Operadora']?.toString() || '';
-          const categoriaNome = row['Categoria']?.toString() || '';
-          const valorNum = parseFloat(row['Valor Contrato']?.toString() || row['Valor']?.toString() || '0');
-          const vidasNum = parseInt(row['Vidas']?.toString() || '0', 10);
-          const dataVenda = row['Dt Venda']?.toString() || row['Data']?.toString() || new Date().toISOString().split('T')[0];
+        const importedProposals = validRows.map(row => {
+          const clienteNome = row['Nome']?.toString() || row['Cliente']?.toString() || 'Cliente Não Informado';
+          const clienteCpfCnpj = row['CPF / CNPJ']?.toString() || row['CPF/CNPJ']?.toString() || row['CPF']?.toString() || row['CNPJ']?.toString() || '000.000.000-00';
+          const contratoNum = row['Nº Contrato']?.toString() || row['Contrato']?.toString() || ('IMP-' + Math.random().toString(36).substr(2, 9).toUpperCase());
+          const corretorNome = row['Corretor']?.toString() || 'Corretor Geral';
+          const operadoraNome = row['Operadora']?.toString() || 'Operadora Geral';
+          const categoriaNome = row['Categoria']?.toString() || 'Geral';
+          const valorNum = parseFloat(row['Valor Contrato']?.toString() || row['Valor']?.toString() || '0') || 0;
+          const vidasNum = parseInt(row['Vidas']?.toString() || '0', 10) || 1;
+          const dataVenda = parseExcelDate(row['Dt Venda'] || row['Data']);
           
           return {
             contrato: contratoNum,
@@ -236,7 +280,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
               financeiro: {
                 valorContrato: valorNum,
                 vidas: vidasNum,
-                valorTaxa: parseFloat(row['Valor Taxa']?.toString() || '0'),
+                valorTaxa: parseFloat(row['Valor Taxa']?.toString() || '0') || 0,
                 parcelas: []
               },
               beneficiarios: [],

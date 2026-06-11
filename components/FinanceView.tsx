@@ -123,7 +123,8 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhuma proposta aguardando geração de lote</p>
              </div>
           ) : (
-            Object.entries(groupedProposals).map(([corretor, props]) => {
+            Object.entries(groupedProposals).map(([corretor, propsUncached]) => {
+              const props = propsUncached as Proposal[];
               const totalCorretor = props.reduce((acc, p) => acc + Number(p.comissao || 0), 0);
               return (
                 <div key={corretor} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
