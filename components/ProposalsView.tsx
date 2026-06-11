@@ -101,6 +101,71 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
     XLSX.writeFile(workbook, `propostas_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'Nº Contrato': '100203',
+        'Dt Venda': '2026-06-11',
+        'Nome': 'João da Silva',
+        'CPF / CNPJ': '123.456.789-00',
+        'Corretor': 'Carlos Medeiros',
+        'Operadora': 'Unimed',
+        'Categoria': 'Pinho',
+        'Valor Contrato': 450.00,
+        'Vidas': 2,
+        'Status': 'CADASTRADA',
+        'Data Nascimento': '1985-04-12',
+        'Email': 'joao@email.com',
+        'Telefone': '11999999999',
+        'CEP': '01001-000',
+        'Endereço': 'Praça da Sé',
+        'Número': '123',
+        'Complemento': 'Apt 42',
+        'Bairro': 'Sé',
+        'Cidade': 'São Paulo',
+        'Estado': 'SP',
+        'Tipo de Plano': 'Familiar',
+        'Unidade': 'São Paulo Centro',
+        'Valor Taxa': 15.00
+      },
+      {
+        'Nº Contrato': '100204',
+        'Dt Venda': '2026-06-12',
+        'Nome': 'Maria de Souza Ltda',
+        'CPF / CNPJ': '12.345.678/0001-99',
+        'Corretor': 'Carlos Medeiros',
+        'Operadora': 'Bradesco Saúde',
+        'Categoria': 'Top Nacional',
+        'Valor Contrato': 1500.00,
+        'Vidas': 5,
+        'Status': 'CADASTRADA',
+        'Data Nascimento': '1990-08-20',
+        'Email': 'contato@maria.com',
+        'Telefone': '11988888888',
+        'CEP': '01311-000',
+        'Endereço': 'Avenida Paulista',
+        'Número': '1000',
+        'Complemento': 'Sala 51',
+        'Bairro': 'Bela Vista',
+        'Cidade': 'São Paulo',
+        'Estado': 'SP',
+        'Tipo de Plano': 'Empresarial',
+        'Unidade': 'Paulista',
+        'Valor Taxa': 20.00
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo Importação");
+
+    // Auto-size columns
+    const max_width = 20;
+    worksheet["!cols"] = Object.keys(templateData[0]).map(() => ({ wch: max_width }));
+
+    XLSX.writeFile(workbook, 'modelo_importacao_propostas.xlsx');
+  };
+
   const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -201,6 +266,13 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
           <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Gerencie e consulte os contratos de saúde</p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleDownloadTemplate}
+            className="bg-sky-50 hover:bg-sky-100 text-sky-700 px-6 py-3 rounded-xl font-black uppercase tracking-widest transition-all border border-sky-200 flex items-center gap-3 shadow-sm"
+            title="Baixar planilha modelo com campos corretos preenchidos com exemplos"
+          >
+            <i className="fa-solid fa-download"></i> Baixar Modelo
+          </button>
           <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-xl font-black uppercase tracking-widest transition-all flex items-center gap-3">
             <i className="fa-solid fa-file-import"></i> Importar Planilha
             <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportExcel} />
