@@ -114,6 +114,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
         'Valor Contrato': 450.00,
         'Vidas': 2,
         'Status': 'CADASTRADA',
+        'Comissão': 225.00,
         'Data Nascimento': '1985-04-12',
         'Email': 'joao@email.com',
         'Telefone': '11999999999',
@@ -139,6 +140,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
         'Valor Contrato': 1500.00,
         'Vidas': 5,
         'Status': 'CADASTRADA',
+        'Comissão': 750.00,
         'Data Nascimento': '1990-08-20',
         'Email': 'contato@maria.com',
         'Telefone': '11988888888',
@@ -228,6 +230,37 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
           return;
         }
 
+        const cleanMoney = (val: any): number => {
+          if (val === undefined || val === null) return 0;
+          if (typeof val === 'number') return val;
+          const str = val.toString().trim();
+          if (!str) return 0;
+          // Remove R$, spaces, thousands separators (dot if Brazilian format, comma if US)
+          const cleanStr = str.replace('R$', '').replace(/\s/g, '');
+                                
+          const hasCommaAndDot = cleanStr.includes(',') && cleanStr.includes('.');
+          if (hasCommaAndDot) {
+            if (cleanStr.indexOf('.') < cleanStr.indexOf(',')) {
+              // Brazilian format: 1.234,56 -> 1234.56
+              return parseFloat(cleanStr.replace(/\./g, '').replace(',', '.'));
+            } else {
+              // US format: 1,234.56 -> 1234.56
+              return parseFloat(cleanStr.replace(/,/g, ''));
+            }
+          }
+          
+          if (cleanStr.includes(',')) {
+            const parts = cleanStr.split(',');
+            if (parts[parts.length - 1].length <= 2) {
+              return parseFloat(cleanStr.replace(',', '.'));
+            } else {
+              return parseFloat(cleanStr.replace(/,/g, ''));
+            }
+          }
+          
+          return parseFloat(cleanStr) || 0;
+        };
+
         const importedProposals = validRows.map(row => {
           const clienteNome = row['Nome']?.toString() || row['Cliente']?.toString() || 'Cliente Não Informado';
           const clienteCpfCnpj = row['CPF / CNPJ']?.toString() || row['CPF/CNPJ']?.toString() || row['CPF']?.toString() || row['CNPJ']?.toString() || '000.000.000-00';
@@ -235,9 +268,23 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
           const corretorNome = row['Corretor']?.toString() || 'Corretor Geral';
           const operadoraNome = row['Operadora']?.toString() || 'Operadora Geral';
           const categoriaNome = row['Categoria']?.toString() || 'Geral';
-          const valorNum = parseFloat(row['Valor Contrato']?.toString() || row['Valor']?.toString() || '0') || 0;
+          const valorNum = cleanMoney(row['Valor Contrato'] || row['Valor']);
           const vidasNum = parseInt(row['Vidas']?.toString() || '0', 10) || 1;
           const dataVenda = parseExcelDate(row['Dt Venda'] || row['Data']);
+          const valorTaxaNum = cleanMoney(row['Valor Taxa']);
+
+          // Attempt to find commission in standard column formats
+          const rawComissao = row['Comissão'] !== undefined ? row['Comissão'] :
+                              row['Comissao'] !== undefined ? row['Comissao'] :
+                              row['Valor Comissão'] !== undefined ? row['Valor Comissão'] :
+                              row['Valor Comissao'] !== undefined ? row['Valor Comissao'] :
+                              row['Comissao Bruta'] !== undefined ? row['Comissao Bruta'] :
+                              row['Comissão Bruta'] !== undefined ? row['Comissão Bruta'] :
+                              undefined;
+
+          const comissaoFromRow = rawComissao !== undefined ? cleanMoney(rawComissao) : NaN;
+          // Standard/Default commission to 50% if not specified in spreadsheet
+          const comissaoNum = !isNaN(comissaoFromRow) && rawComissao !== undefined ? comissaoFromRow : Math.max(0, valorNum * 0.50);
           
           return {
             contrato: contratoNum,
@@ -250,7 +297,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
             valor: valorNum,
             vidas: vidasNum,
             status: row['Status']?.toString() || 'CADASTRADA',
-            comissao: 0,
+            comissao: comissaoNum,
             detalhes: {
               cliente: {
                 nome: clienteNome,
@@ -280,8 +327,10 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
               financeiro: {
                 valorContrato: valorNum,
                 vidas: vidasNum,
-                valorTaxa: parseFloat(row['Valor Taxa']?.toString() || '0') || 0,
-                parcelas: []
+                valorTaxa: valorTaxaNum,
+                parcelas: [
+                  { id: '1', numero: '1ª Parcela', valor: valorNum, comissao: comissaoNum, vencimento: dataVenda }
+                ]
               },
               beneficiarios: [],
               documentos: [],
