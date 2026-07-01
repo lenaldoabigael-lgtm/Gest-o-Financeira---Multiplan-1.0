@@ -353,15 +353,38 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
                     </div>
                   </td>
                   <td className="p-5 text-center">
-                    <button onClick={() => {
-                      setEditingId(t.id);
-                      setFormData({
-                        vencimento: t.vencimento, pagamento: t.pagamento || '', descricao: t.descricao,
-                        valor: t.valor.toString(), formaPagamento: t.formaPagamento, centroCusto: t.centroCusto,
-                        subItem: t.subItem, status: t.status, conta: t.conta || 'GERAL'
-                      });
-                      setIsModalOpen(true);
-                    }} className="text-blue-900 hover:bg-blue-50 p-3 rounded-xl transition-all"><i className="fa-solid fa-pen-to-square"></i></button>
+                    <div className="flex items-center justify-center gap-2">
+                      <button onClick={() => {
+                        if (t.status === 'PENDENTE') {
+                          onUpdate({
+                            ...t,
+                            status: type === 'PAGAR' ? 'PAGO' : 'RECEBIDO',
+                            pagamento: new Date().toISOString().split('T')[0]
+                          });
+                        } else {
+                          onUpdate({
+                            ...t,
+                            status: 'PENDENTE',
+                            pagamento: undefined
+                          });
+                        }
+                      }} className={`p-3 rounded-xl transition-all ${
+                        t.status === 'PENDENTE' 
+                          ? 'text-emerald-600 hover:bg-emerald-50' 
+                          : 'text-amber-600 hover:bg-amber-50'
+                      }`} title={t.status === 'PENDENTE' ? (type === 'PAGAR' ? 'Marcar como Pago' : 'Marcar como Recebido') : 'Desfazer Baixa'}>
+                        <i className={`fa-solid ${t.status === 'PENDENTE' ? 'fa-check-circle' : 'fa-arrow-rotate-left'}`}></i>
+                      </button>
+                      <button onClick={() => {
+                        setEditingId(t.id);
+                        setFormData({
+                          vencimento: t.vencimento, pagamento: t.pagamento || '', descricao: t.descricao,
+                          valor: t.valor.toString(), formaPagamento: t.formaPagamento, centroCusto: t.centroCusto,
+                          subItem: t.subItem, status: t.status, conta: t.conta || 'GERAL'
+                        });
+                        setIsModalOpen(true);
+                      }} className="text-blue-900 hover:bg-blue-50 p-3 rounded-xl transition-all" title="Editar"><i className="fa-solid fa-pen-to-square"></i></button>
+                    </div>
                   </td>
                 </tr>
               );

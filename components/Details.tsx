@@ -5,9 +5,10 @@ import { Transaction, CostCenter } from '../types';
 interface DetailsProps {
   transactions: Transaction[];
   costCenters: CostCenter[];
+  onUpdate?: (transaction: Transaction) => void;
 }
 
-const Details: React.FC<DetailsProps> = ({ transactions, costCenters }) => {
+const Details: React.FC<DetailsProps> = ({ transactions, costCenters, onUpdate }) => {
   const [activeSubTab, setActiveSubTab] = useState<'PAGAR' | 'RECEBER'>('PAGAR');
   
   // Filter states
@@ -244,6 +245,7 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters }) => {
                <th className="p-4 text-left">Forma</th>
                <th className="p-4 text-left">Status</th>
                <th className="p-4 text-right">Valor</th>
+               <th className="p-4 text-center">Ações</th>
              </tr>
            </thead>
            <tbody className="divide-y divide-slate-100">
@@ -265,11 +267,36 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters }) => {
                  <td className={`p-4 text-right font-black text-sm ${activeSubTab === 'PAGAR' ? 'text-orange-500' : 'text-emerald-600'}`}>
                    R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                  </td>
+                 <td className="p-4 text-center">
+                   {onUpdate && (
+                     <button onClick={() => {
+                       if (t.status === 'PENDENTE') {
+                         onUpdate({
+                           ...t,
+                           status: activeSubTab === 'PAGAR' ? 'PAGO' : 'RECEBIDO',
+                           pagamento: new Date().toISOString().split('T')[0]
+                         });
+                       } else {
+                         onUpdate({
+                           ...t,
+                           status: 'PENDENTE',
+                           pagamento: undefined
+                         });
+                       }
+                     }} className={`p-2 rounded-xl transition-all ${
+                       t.status === 'PENDENTE' 
+                         ? 'text-emerald-600 hover:bg-emerald-50' 
+                         : 'text-amber-600 hover:bg-amber-50'
+                     }`} title={t.status === 'PENDENTE' ? (activeSubTab === 'PAGAR' ? 'Marcar como Pago' : 'Marcar como Recebido') : 'Desfazer Baixa'}>
+                       <i className={`fa-solid ${t.status === 'PENDENTE' ? 'fa-check-circle' : 'fa-arrow-rotate-left'}`}></i>
+                     </button>
+                   )}
+                 </td>
                </tr>
              ))}
              {filtered.length === 0 && (
                <tr>
-                 <td colSpan={8} className="p-20 text-center text-slate-300 font-black uppercase tracking-widest text-[10px]">Nenhum registro encontrado</td>
+                 <td colSpan={9} className="p-20 text-center text-slate-300 font-black uppercase tracking-widest text-[10px]">Nenhum registro encontrado</td>
                </tr>
              )}
            </tbody>
