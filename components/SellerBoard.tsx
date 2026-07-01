@@ -164,7 +164,7 @@ const SellerBoard: React.FC<SellerBoardProps> = ({ proposals, requirements, onSt
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex flex-col gap-1 items-start">
                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                          {p.operadora} - {p.categoria}
+                          {p.operadora} - {p.categoria} {p.detalhes?.proposta?.tipoPlano ? `- ${p.detalhes.proposta.tipoPlano}` : ''}
                         </span>
                         {p.detalhes?.proposta?.pagamentoCartao && (
                           <span className="text-[8px] font-black uppercase tracking-widest bg-orange-100 text-orange-700 px-2 py-0.5 rounded border border-orange-200">

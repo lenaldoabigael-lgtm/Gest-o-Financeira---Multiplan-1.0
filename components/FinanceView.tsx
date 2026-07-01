@@ -152,6 +152,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                         <tr className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
                           <th className="px-4 py-3 rounded-l-xl">Contrato</th>
                           <th className="px-4 py-3">Operadora</th>
+                          <th className="px-4 py-3">Tipo do Plano</th>
                           <th className="px-4 py-3">Cliente</th>
                           <th className="px-4 py-3">Vidas</th>
                           <th className="px-4 py-3 rounded-r-xl">Comissão</th>
@@ -162,6 +163,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                           <tr key={p.id} className="text-xs font-bold text-slate-600 hover:bg-slate-50">
                             <td className="px-4 py-3">{p.contrato}</td>
                             <td className="px-4 py-3">{p.operadora}</td>
+                            <td className="px-4 py-3">{p.detalhes?.proposta?.tipoPlano || '-'}</td>
                             <td className="px-4 py-3">{p.cliente}</td>
                             <td className="px-4 py-3">{p.vidas}</td>
                             <td className="px-4 py-3 text-emerald-600">R$ {Number(p.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
@@ -306,6 +308,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                                   <td>${p.contrato}</td>
                                   <td>${p.cliente}</td>
                                   <td>${p.operadora}</td>
+                                  <td>${p.detalhes?.proposta?.tipoPlano || '-'}</td>
                                   <td class="text-right">R$ ${comissaoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                   <td class="text-right text-red-500">-${txPercentual.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}% (R$ ${desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</td>
                                   <td class="text-right text-emerald">R$ ${liquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -390,6 +393,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                                           <th>Contrato</th>
                                           <th>Cliente</th>
                                           <th>Operadora</th>
+                                          <th>Tipo do Plano</th>
                                           <th class="text-right">Comissão Base</th>
                                           <th class="text-right">Imposto/NF (%)</th>
                                           <th class="text-right">Líquido Pago</th>
@@ -437,6 +441,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                                 <th className="px-4 py-3">Corretor</th>
                                 <th className="px-4 py-3">Contrato</th>
                                 <th className="px-4 py-3">Operadora</th>
+                                <th className="px-4 py-3">Tipo do Plano</th>
                                 <th className="px-4 py-3">Vidas</th>
                                 <th className="px-4 py-3">Valor do Contrato</th>
                                 <th className="px-4 py-3">Comissão</th>
@@ -449,6 +454,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                                   <td className="px-4 py-3 text-xs font-bold text-slate-700">{prop.corretor}</td>
                                   <td className="px-4 py-3 text-xs text-slate-600">{prop.contrato || '-'}</td>
                                   <td className="px-4 py-3 text-xs text-slate-600">{prop.operadora}</td>
+                                  <td className="px-4 py-3 text-xs text-slate-600">{prop.detalhes?.proposta?.tipoPlano || '-'}</td>
                                   <td className="px-4 py-3 text-xs text-slate-600">{prop.vidas}</td>
                                   <td className="px-4 py-3 text-xs text-slate-600">
                                     R$ {Number(prop.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
