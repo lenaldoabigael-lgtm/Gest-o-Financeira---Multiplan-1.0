@@ -434,7 +434,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       options={getOptions('OPERADORA')}
                       onChange={(val) => {
                         setFormData(prev => {
-                          let novaTaxa = prev.financeiro.valorTaxa;
+                          let novaTaxa = 0; // Default to 0 instead of retaining old value
                           const taxasAdesao = requirements?.filter(r => r.tipo === 'TAXA_ADESAO') || [];
                           
                           // Handle modern format: OPERADORA - TIPO_PLANO - VALOR and legacy: OPERADORA - VALOR
@@ -460,7 +460,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                             financeiro: {
                               ...prev.financeiro,
                               valorTaxa: novaTaxa,
-                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
+                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: prev.proposta.pagamentoCartao ? -novaTaxa : Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
                             }
                           };
                         });
@@ -472,7 +472,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       options={getOptions('TIPO_PLANO')}
                       onChange={(val) => {
                         setFormData(prev => {
-                          let novaTaxa = prev.financeiro.valorTaxa;
+                          let novaTaxa = 0; // Default to 0 instead of retaining old value
                           const taxasAdesao = requirements?.filter(r => r.tipo === 'TAXA_ADESAO') || [];
                           
                           const findTaxa = (op: string, tipo: string) => {
@@ -497,7 +497,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                             financeiro: {
                               ...prev.financeiro,
                               valorTaxa: novaTaxa,
-                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
+                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: prev.proposta.pagamentoCartao ? -novaTaxa : Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
                             }
                           };
                         });
@@ -519,8 +519,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                           const checked = e.target.checked;
                           setFormData(prev => {
                             const updated = { ...prev, proposta: { ...prev.proposta, pagamentoCartao: checked } };
-                            if (checked && updated.financeiro.parcelas[0]) {
-                              updated.financeiro.parcelas[0].comissao = 0;
+                            if (updated.financeiro.parcelas[0]) {
+                              updated.financeiro.parcelas[0].comissao = checked ? -updated.financeiro.valorTaxa : Math.max(0, updated.financeiro.valorContrato - updated.financeiro.valorTaxa);
                             }
                             return updated;
                           });
@@ -702,7 +702,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                             financeiro: { 
                               ...prev.financeiro, 
                               valorContrato: val,
-                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, valor: val, comissao: Math.max(0, val - prev.financeiro.valorTaxa) } : p)
+                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, valor: val, comissao: prev.proposta.pagamentoCartao ? -prev.financeiro.valorTaxa : Math.max(0, val - prev.financeiro.valorTaxa) } : p)
                             } 
                           }));
                         }}
@@ -745,7 +745,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                           <tr key={p.id} className="text-[11px] text-slate-600">
                             <td className="py-2.5">{p.numero}</td>
                             <td className="py-2.5">R$ {p.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                            <td className="py-2.5 font-bold text-emerald-600">R$ {p.comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className={`py-2.5 font-bold ${p.comissao < 0 ? 'text-red-600' : 'text-emerald-600'}`}>R$ {p.comissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                             <td className="py-2.5">{p.vencimento}</td>
                           </tr>
                         ))}

@@ -166,7 +166,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                             <td className="px-4 py-3">{p.detalhes?.proposta?.tipoPlano || '-'}</td>
                             <td className="px-4 py-3">{p.cliente}</td>
                             <td className="px-4 py-3">{p.vidas}</td>
-                            <td className="px-4 py-3 text-emerald-600">R$ {Number(p.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            <td className={`px-4 py-3 ${Number(p.comissao || 0) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>R$ {Number(p.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -459,7 +459,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                                   <td className="px-4 py-3 text-xs text-slate-600">
                                     R$ {Number(prop.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                   </td>
-                                  <td className="px-4 py-3 text-xs font-bold text-emerald-600">
+                                  <td className={`px-4 py-3 text-xs font-bold ${Number(prop.comissao || 0) < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                                     R$ {Number(prop.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                   </td>
                                   <td className="px-4 py-3 text-right">

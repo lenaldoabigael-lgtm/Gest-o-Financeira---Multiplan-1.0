@@ -444,6 +444,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         {activeTab === Tab.PROPOSTAS && (
           <ProposalsView 
             proposals={proposals} 
+            requirements={proposalRequirements}
             onAddProposal={() => {
               setEditingProposal(null);
               setIsProposalModalOpen(true);

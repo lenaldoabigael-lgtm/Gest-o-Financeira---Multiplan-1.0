@@ -1,21 +1,23 @@
 
 import React, { useState, useMemo } from 'react';
-import { Proposal } from '../types';
+import { Proposal, ProposalRequirement } from '../types';
 import * as XLSX from 'xlsx';
 
 interface ProposalsViewProps {
   proposals: Proposal[];
+  requirements?: ProposalRequirement[];
   onAddProposal: () => void;
   onEditProposal: (proposal: Proposal) => void;
   onDeleteProposal: (id: string) => void;
   onImportProposals?: (proposals: any[]) => void;
 }
 
-const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal, onEditProposal, onDeleteProposal, onImportProposals }) => {
+const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements = [], onAddProposal, onEditProposal, onDeleteProposal, onImportProposals }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterOperadora, setFilterOperadora] = useState('Todas');
   const [filterTipoPlano, setFilterTipoPlano] = useState('Todos');
+  const [filterCorretor, setFilterCorretor] = useState('Todos');
   const [filterValor, setFilterValor] = useState('');
   const [confirmingSendId, setConfirmingSendId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -33,12 +35,13 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
       
       const tipoPlano = p.detalhes?.proposta?.tipoPlano || 'Não Informado';
       const matchTipoPlano = filterTipoPlano === 'Todos' || tipoPlano === filterTipoPlano;
+      const matchCorretor = filterCorretor === 'Todos' || p.corretor === filterCorretor;
 
       const matchValor = !filterValor || p.valor.toString().includes(filterValor) || p.valor.toFixed(2).includes(filterValor);
 
-      return matchSearch && matchStatus && matchOperadora && matchTipoPlano && matchValor;
+      return matchSearch && matchStatus && matchOperadora && matchTipoPlano && matchCorretor && matchValor;
     });
-  }, [proposals, searchTerm, filterStatus, filterOperadora, filterTipoPlano, filterValor]);
+  }, [proposals, searchTerm, filterStatus, filterOperadora, filterTipoPlano, filterCorretor, filterValor]);
 
   const operadoras = useMemo(() => {
     const unique = Array.from(new Set(proposals.map(p => p.operadora)));
@@ -47,6 +50,11 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
 
   const tiposPlano = useMemo(() => {
     const unique = Array.from(new Set(proposals.map(p => p.detalhes?.proposta?.tipoPlano || 'Não Informado')));
+    return ['Todos', ...unique.sort()];
+  }, [proposals]);
+
+  const corretores = useMemo(() => {
+    const unique = Array.from(new Set(proposals.map(p => p.corretor).filter(c => c)));
     return ['Todos', ...unique.sort()];
   }, [proposals]);
 
@@ -273,6 +281,26 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
           const dataVenda = parseExcelDate(row['Dt Venda'] || row['Data']);
           const valorTaxaNum = cleanMoney(row['Valor Taxa']);
 
+          const tipoPlanoExtracted = row['Tipo de Plano']?.toString() || row['Tipo']?.toString() || '';
+
+          let finalTaxaNum = valorTaxaNum;
+          if (finalTaxaNum === 0 && (row['Valor Taxa'] === undefined || row['Valor Taxa'] === '')) {
+             const taxasAdesao = requirements?.filter(r => r.tipo === 'TAXA_ADESAO') || [];
+             const findTaxa = (op: string, tipo: string) => {
+                return taxasAdesao.find(t => {
+                   const parts = t.nome.split(' - ');
+                   const reqOp = parts[0];
+                   const reqTipo = parts.length > 2 ? parts[1] : 'TODOS';
+                   return (reqOp === op || reqOp === 'TODAS') && (reqTipo === tipo || reqTipo === 'TODOS');
+                });
+             };
+             const req = findTaxa(operadoraNome.toUpperCase(), tipoPlanoExtracted.toUpperCase() || 'TODOS');
+             if (req) {
+                 const parts = req.nome.split(' - ');
+                 finalTaxaNum = parseFloat(parts.length > 2 ? parts[2] : parts[1]) || 0;
+             }
+          }
+
           // Attempt to find commission in standard column formats
           const rawComissao = row['Comissão'] !== undefined ? row['Comissão'] :
                               row['Comissao'] !== undefined ? row['Comissao'] :
@@ -282,9 +310,16 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
                               row['Comissão Bruta'] !== undefined ? row['Comissão Bruta'] :
                               undefined;
 
-          const comissaoFromRow = rawComissao !== undefined ? cleanMoney(rawComissao) : NaN;
-          // Standard/Default commission to 50% if not specified in spreadsheet
-          const comissaoNum = !isNaN(comissaoFromRow) && rawComissao !== undefined ? comissaoFromRow : Math.max(0, valorNum * 0.50);
+          const comissaoStr = rawComissao?.toString().trim();
+          const hasComissao = comissaoStr !== undefined && comissaoStr !== '';
+          const comissaoFromRow = hasComissao ? cleanMoney(rawComissao) : NaN;
+          
+          let comissaoNum = 0;
+          if (!isNaN(comissaoFromRow)) {
+            comissaoNum = comissaoFromRow;
+          } else {
+            comissaoNum = Math.max(0, valorNum - finalTaxaNum);
+          }
           
           return {
             contrato: contratoNum,
@@ -321,13 +356,13 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
                 corretor: corretorNome,
                 categoria: categoriaNome,
                 operadora: operadoraNome,
-                tipoPlano: row['Tipo de Plano']?.toString() || '',
+                tipoPlano: tipoPlanoExtracted,
                 unidade: row['Unidade']?.toString() || ''
               },
               financeiro: {
                 valorContrato: valorNum,
                 vidas: vidasNum,
-                valorTaxa: valorTaxaNum,
+                valorTaxa: finalTaxaNum,
                 parcelas: [
                   { id: '1', numero: '1ª Parcela', valor: valorNum, comissao: comissaoNum, vencimento: dataVenda }
                 ]
@@ -417,6 +452,13 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, onAddProposal,
             className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
           >
             {tiposPlano.map(tp => <option key={tp} value={tp}>{tp === 'Todos' ? 'Tipo de Plano: Todos' : tp}</option>)}
+          </select>
+          <select
+            value={filterCorretor}
+            onChange={(e) => setFilterCorretor(e.target.value)}
+            className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
+          >
+            {corretores.map(c => <option key={c} value={c}>{c === 'Todos' ? 'Corretor: Todos' : c}</option>)}
           </select>
           <input
             type="text"
