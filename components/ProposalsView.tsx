@@ -297,7 +297,17 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
              const req = findTaxa(operadoraNome.toUpperCase(), tipoPlanoExtracted.toUpperCase() || 'TODOS');
              if (req) {
                  const parts = req.nome.split(' - ');
-                 finalTaxaNum = parseFloat(parts.length > 2 ? parts[2] : parts[1]) || 0;
+                 let baseTaxa = parseFloat(parts.length > 2 ? parts[2] : parts[1]) || 0;
+                 
+                 const isPorVida = 
+                    (operadoraNome.toUpperCase() === 'SELECT' && tipoPlanoExtracted.toUpperCase() === 'EMPRESARIAL') ||
+                    (operadoraNome.toUpperCase() === 'PLAMED' && tipoPlanoExtracted.toUpperCase() === 'EMPRESARIAL');
+                    
+                 if (isPorVida) {
+                    baseTaxa = baseTaxa * (vidasNum || 0);
+                 }
+                 
+                 finalTaxaNum = baseTaxa;
              }
           }
 

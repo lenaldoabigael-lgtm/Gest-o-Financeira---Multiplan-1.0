@@ -277,6 +277,36 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
     return requirements.filter(r => r.tipo === tipo).map(r => r.nome);
   };
 
+  const calcularTaxaAdesao = (opStr: string, tpStr: string, vidas: number) => {
+    const taxasAdesao = requirements?.filter(r => r.tipo === 'TAXA_ADESAO') || [];
+    
+    const findTaxa = (op: string, tipo: string) => {
+      return taxasAdesao.find(t => {
+         const parts = t.nome.split(' - ');
+         const reqOp = parts[0];
+         const reqTipo = parts.length > 2 ? parts[1] : 'TODOS';
+         return (reqOp === op || reqOp === 'TODAS') && (reqTipo === tipo || reqTipo === 'TODOS');
+      });
+    };
+
+    const req = findTaxa(opStr.toUpperCase() || 'TODAS', tpStr.toUpperCase() || 'TODOS');
+    let baseTaxa = 0;
+    
+    if (req) {
+       const parts = req.nome.split(' - ');
+       baseTaxa = parseFloat(parts.length > 2 ? parts[2] : parts[1]) || 0;
+       
+       const isPorVida = 
+          (opStr.toUpperCase() === 'SELECT' && tpStr.toUpperCase() === 'EMPRESARIAL') ||
+          (opStr.toUpperCase() === 'PLAMED' && tpStr.toUpperCase() === 'EMPRESARIAL');
+          
+       if (isPorVida) {
+          return baseTaxa * (vidas || 0);
+       }
+    }
+    return baseTaxa;
+  };
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-[2px] animate-in fade-in duration-300">
       <div className="bg-[#f8fafc] w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
@@ -434,26 +464,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       options={getOptions('OPERADORA')}
                       onChange={(val) => {
                         setFormData(prev => {
-                          let novaTaxa = 0; // Default to 0 instead of retaining old value
-                          const taxasAdesao = requirements?.filter(r => r.tipo === 'TAXA_ADESAO') || [];
-                          
-                          // Handle modern format: OPERADORA - TIPO_PLANO - VALOR and legacy: OPERADORA - VALOR
-                          const findTaxa = (op: string, tipo: string) => {
-                            return taxasAdesao.find(t => {
-                               const parts = t.nome.split(' - ');
-                               const reqOp = parts[0];
-                               const reqTipo = parts.length > 2 ? parts[1] : 'TODOS';
-                               return (reqOp === op || reqOp === 'TODAS') && (reqTipo === tipo || reqTipo === 'TODOS');
-                            });
-                          };
-
-                          const req = findTaxa(val.toUpperCase(), prev.proposta.tipoPlano?.toUpperCase() || 'TODOS');
-                          
-                          if (req) {
-                             const parts = req.nome.split(' - ');
-                             novaTaxa = parseFloat(parts.length > 2 ? parts[2] : parts[1]) || 0;
-                          }
-
+                          const novaTaxa = calcularTaxaAdesao(val, prev.proposta.tipoPlano || '', prev.financeiro.vidas);
                           return { 
                             ...prev, 
                             proposta: { ...prev.proposta, operadora: val },
@@ -472,25 +483,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       options={getOptions('TIPO_PLANO')}
                       onChange={(val) => {
                         setFormData(prev => {
-                          let novaTaxa = 0; // Default to 0 instead of retaining old value
-                          const taxasAdesao = requirements?.filter(r => r.tipo === 'TAXA_ADESAO') || [];
-                          
-                          const findTaxa = (op: string, tipo: string) => {
-                            return taxasAdesao.find(t => {
-                               const parts = t.nome.split(' - ');
-                               const reqOp = parts[0];
-                               const reqTipo = parts.length > 2 ? parts[1] : 'TODOS';
-                               return (reqOp === op || reqOp === 'TODAS') && (reqTipo === tipo || reqTipo === 'TODOS');
-                            });
-                          };
-
-                          const req = findTaxa(prev.proposta.operadora?.toUpperCase() || 'TODAS', val.toUpperCase());
-                          
-                          if (req) {
-                             const parts = req.nome.split(' - ');
-                             novaTaxa = parseFloat(parts.length > 2 ? parts[2] : parts[1]) || 0;
-                          }
-
+                          const novaTaxa = calcularTaxaAdesao(prev.proposta.operadora || '', val, prev.financeiro.vidas);
                           return { 
                             ...prev, 
                             proposta: { ...prev.proposta, tipoPlano: val },
@@ -714,7 +707,21 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       <input 
                         type="number"
                         value={formData.financeiro.vidas}
-                        onChange={(e) => setFormData(prev => ({ ...prev, financeiro: { ...prev.financeiro, vidas: parseInt(e.target.value) || 0 } }))}
+                        onChange={(e) => {
+                          const novasVidas = parseInt(e.target.value) || 0;
+                          setFormData(prev => {
+                            const novaTaxa = calcularTaxaAdesao(prev.proposta.operadora || '', prev.proposta.tipoPlano || '', novasVidas);
+                            return { 
+                              ...prev, 
+                              financeiro: { 
+                                ...prev.financeiro, 
+                                vidas: novasVidas,
+                                valorTaxa: novaTaxa,
+                                parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: prev.proposta.pagamentoCartao ? -novaTaxa : Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
+                              } 
+                            };
+                          });
+                        }}
                         className="w-full bg-transparent border-none p-0 text-[13px] font-bold text-slate-800 outline-none focus:ring-0"
                       />
                     </div>

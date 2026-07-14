@@ -39,7 +39,7 @@ const App: React.FC = () => {
       const { data: usersData, error: uErr, status } = await supabase.from('users').select('*');
       
       if (uErr) {
-        console.error("Erro Supabase:", uErr);
+        console.warn("Aviso Supabase:", uErr);
         if (uErr.code === 'PGRST106' || uErr.message.includes('Invalid schema')) {
           setErrorType('SCHEMA_HIDDEN');
           setIsLoading(false);
