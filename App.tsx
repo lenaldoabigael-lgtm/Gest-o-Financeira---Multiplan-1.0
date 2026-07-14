@@ -399,6 +399,10 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             onAdd={async t => { await supabase.from('transactions').insert(t); fetchData(); }} 
             onBulkAdd={async items => { await supabase.from('transactions').insert(items); fetchData(); }}
             onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }} 
+            onBulkUpdate={async items => { 
+              await Promise.all(items.map(t => supabase.from('transactions').update(t).eq('id', t.id)));
+              fetchData();
+            }}
             onDelete={async ids => { await supabase.from('transactions').delete().in('id', ids); fetchData(); }} 
           />
         )}
@@ -410,6 +414,10 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             onAdd={async t => { await supabase.from('transactions').insert(t); fetchData(); }} 
             onBulkAdd={async items => { await supabase.from('transactions').insert(items); fetchData(); }}
             onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }} 
+            onBulkUpdate={async items => { 
+              await Promise.all(items.map(t => supabase.from('transactions').update(t).eq('id', t.id)));
+              fetchData();
+            }}
             onDelete={async ids => { await supabase.from('transactions').delete().in('id', ids); fetchData(); }} 
           />
         )}

@@ -36,7 +36,7 @@ export interface Transaction {
   status: Status;
   centroCusto: string;
   subItem: string;
-  cliente?: string;
+  cliente?: string; // Utilizado para armazenar o comprovanteUrl/boleto sem alterar o schema do DB
   conta?: string; // Ex: Santander, Nubank, Caixa
 }
 

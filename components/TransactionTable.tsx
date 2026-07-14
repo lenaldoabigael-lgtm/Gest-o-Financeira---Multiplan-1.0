@@ -9,13 +9,14 @@ interface TransactionTableProps {
   onAdd: (transaction: Transaction) => void;
   onBulkAdd?: (transactions: Transaction[]) => Promise<void>;
   onUpdate: (transaction: Transaction) => void;
+  onBulkUpdate?: (transactions: Transaction[]) => Promise<void>;
   onDelete: (ids: string[]) => void;
 }
 
 type SortField = 'vencimento' | 'valor';
 type SortOrder = 'asc' | 'desc';
 
-const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions, costCenters, onAdd, onBulkAdd, onUpdate, onDelete }) => {
+const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions, costCenters, onAdd, onBulkAdd, onUpdate, onBulkUpdate, onDelete }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -26,6 +27,11 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
   
   const [sortField, setSortField] = useState<SortField>('vencimento');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
+  const [filterStatus, setFilterStatus] = useState<Status | 'TODOS'>('TODOS');
+  const [filterPeriod, setFilterPeriod] = useState<'TODOS' | 'MES_ATUAL' | 'ULTIMOS_30_DIAS'>('TODOS');
+  const [filterCentroCusto, setFilterCentroCusto] = useState<string>('TODOS');
+  const [filterConta, setFilterConta] = useState<string>('TODOS');
   
   const [formData, setFormData] = useState({
     vencimento: new Date().toISOString().split('T')[0],
@@ -36,7 +42,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     centroCusto: '',
     subItem: '',
     status: 'PENDENTE' as Status,
-    conta: 'GERAL'
+    conta: 'GERAL',
+    comprovanteUrl: ''
   });
 
   const availableCostCenters = costCenters.filter(cc => cc.tipo === (type === 'RECEBER' ? 'RECEITA' : 'DESPESA'));
@@ -53,12 +60,40 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
 
   const sortedAndFiltered = useMemo(() => {
     const search = searchTerm.toLowerCase();
+    
+    const now = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+    
     let result = transactions.filter(t => {
-      return (
+      // Busca por texto
+      const matchesSearch = (
         t.descricao.toLowerCase().includes(search) ||
         t.centroCusto.toLowerCase().includes(search) ||
         (t.conta || '').toLowerCase().includes(search)
       );
+
+      // Filtro por Status
+      const matchesStatus = filterStatus === 'TODOS' || t.status === filterStatus;
+      
+      // Filtro por Centro de Custo
+      const matchesCentroCusto = filterCentroCusto === 'TODOS' || t.centroCusto === filterCentroCusto;
+      
+      // Filtro por Conta
+      const matchesConta = filterConta === 'TODOS' || (t.conta || 'GERAL') === filterConta;
+
+      // Filtro por Período
+      let matchesPeriod = true;
+      if (filterPeriod !== 'TODOS') {
+        const transDate = new Date(t.vencimento);
+        if (filterPeriod === 'MES_ATUAL') {
+          matchesPeriod = transDate.getMonth() === now.getMonth() && transDate.getFullYear() === now.getFullYear();
+        } else if (filterPeriod === 'ULTIMOS_30_DIAS') {
+          matchesPeriod = transDate >= thirtyDaysAgo && transDate <= now;
+        }
+      }
+
+      return matchesSearch && matchesStatus && matchesCentroCusto && matchesConta && matchesPeriod;
     });
 
     result.sort((a, b) => {
@@ -72,7 +107,34 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     });
 
     return result;
-  }, [transactions, searchTerm, sortField, sortOrder]);
+  }, [transactions, searchTerm, sortField, sortOrder, filterStatus, filterPeriod, filterCentroCusto, filterConta]);
+
+  const summary = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    let totalPendente = 0;
+    let totalPagoMes = 0;
+    let totalAtrasado = 0;
+
+    transactions.forEach(t => {
+      if (t.status === 'PENDENTE') {
+        totalPendente += t.valor;
+        if (t.vencimento < today) {
+          totalAtrasado += t.valor;
+        }
+      } else {
+        const pagDate = t.pagamento ? new Date(t.pagamento) : new Date(t.vencimento);
+        if (pagDate.getMonth() === currentMonth && pagDate.getFullYear() === currentYear) {
+          totalPagoMes += t.valor;
+        }
+      }
+    });
+
+    return { totalPendente, totalPagoMes, totalAtrasado };
+  }, [transactions]);
 
   const handleStatusChange = (newStatus: Status) => {
     setFormData(prev => ({
@@ -95,7 +157,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
       status: formData.status,
       centroCusto: formData.centroCusto,
       subItem: formData.subItem,
-      conta: formData.conta
+      conta: formData.conta,
+      cliente: formData.comprovanteUrl
     };
 
     if (editingId) onUpdate(transactionData);
@@ -115,7 +178,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
       centroCusto: '',
       subItem: '',
       status: 'PENDENTE',
-      conta: 'GERAL'
+      conta: 'GERAL',
+      comprovanteUrl: ''
     });
     setEditingId(null);
   };
@@ -249,13 +313,60 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
       : <i className="fa-solid fa-sort-down ml-1 text-blue-900"></i>;
   };
 
+  const handleBulkMarkAsPaid = async () => {
+    if (!onBulkUpdate) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const itemsToUpdate = transactions
+      .filter(t => selectedIds.includes(t.id) && t.status === 'PENDENTE')
+      .map(t => ({
+        ...t,
+        status: type === 'PAGAR' ? 'PAGO' : 'RECEBIDO' as Status,
+        pagamento: today
+      }));
+      
+    if (itemsToUpdate.length > 0) {
+      await onBulkUpdate(itemsToUpdate);
+      setSelectedIds([]);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
-      <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
+    <div className="space-y-6">
+      {/* Cards de Resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+            {type === 'PAGAR' ? 'Total a Pagar (Pendente)' : 'Total a Receber (Pendente)'}
+          </p>
+          <p className="text-2xl font-black text-blue-900">
+            R$ {summary.totalPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
+        </div>
+        <div className="bg-white p-5 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+            {type === 'PAGAR' ? 'Total Pago (Mês)' : 'Total Recebido (Mês)'}
+          </p>
+          <p className="text-2xl font-black text-emerald-600">
+            R$ {summary.totalPagoMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
+        </div>
+        <div className="bg-white p-5 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+            Total Atrasado
+          </p>
+          <p className="text-2xl font-black text-red-500">
+            R$ {summary.totalAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
+        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
         <h2 className="text-xl font-black text-blue-900 uppercase tracking-tighter">
           {type === 'PAGAR' ? 'Contas a Pagar' : 'Contas a Receber'}
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
            <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
            <button onClick={() => fileInputRef.current?.click()} className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20">
              <i className="fa-solid fa-file-import"></i> Importar CSV
@@ -263,22 +374,80 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
            <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-blue-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20">
              <i className="fa-solid fa-plus"></i> Novo Registro
            </button>
+           {selectedIds.length > 0 && onBulkUpdate && (
+             <button onClick={handleBulkMarkAsPaid} className="px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-600">
+               <i className="fa-solid fa-check-double"></i> {type === 'PAGAR' ? 'Pagar' : 'Receber'} ({selectedIds.length})
+             </button>
+           )}
            <button onClick={() => onDelete(selectedIds)} disabled={selectedIds.length === 0} className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all ${selectedIds.length > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
              <i className="fa-solid fa-trash-can"></i> {selectedIds.length > 0 ? `Excluir (${selectedIds.length})` : 'Excluir'}
            </button>
         </div>
       </div>
 
-      <div className="p-4 bg-white border-b border-slate-50">
+      <div className="p-4 bg-white border-b border-slate-50 space-y-4">
         <div className="relative group">
           <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-900 transition-colors"></i>
           <input 
             type="text" 
             placeholder="Pesquisar por descrição, conta, categoria..." 
-            className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-900/5 focus:border-blue-900 outline-none text-sm transition-all"
+            className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-900/5 focus:border-blue-900 outline-none text-sm transition-all font-bold text-slate-700"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Status</label>
+            <select 
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs text-slate-700 font-bold focus:ring-2 focus:ring-blue-900/10"
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value as any)}
+            >
+              <option value="TODOS">Todos os Status</option>
+              <option value="PENDENTE">Pendente</option>
+              {type === 'PAGAR' ? <option value="PAGO">Pago</option> : <option value="RECEBIDO">Recebido</option>}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Período</label>
+            <select 
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs text-slate-700 font-bold focus:ring-2 focus:ring-blue-900/10"
+              value={filterPeriod}
+              onChange={e => setFilterPeriod(e.target.value as any)}
+            >
+              <option value="TODOS">Todo o Período</option>
+              <option value="MES_ATUAL">Mês Atual</option>
+              <option value="ULTIMOS_30_DIAS">Últimos 30 Dias</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Centro de Custo</label>
+            <select 
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs text-slate-700 font-bold focus:ring-2 focus:ring-blue-900/10"
+              value={filterCentroCusto}
+              onChange={e => setFilterCentroCusto(e.target.value)}
+            >
+              <option value="TODOS">Todos os Centros</option>
+              {Array.from(new Set(transactions.map(t => t.centroCusto))).map(cc => (
+                <option key={cc} value={cc}>{cc}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Conta</label>
+            <select 
+              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs text-slate-700 font-bold focus:ring-2 focus:ring-blue-900/10"
+              value={filterConta}
+              onChange={e => setFilterConta(e.target.value)}
+            >
+              <option value="TODOS">Todas as Contas</option>
+              {Array.from(new Set(transactions.map(t => t.conta || 'GERAL'))).map(conta => (
+                <option key={conta} value={conta}>{conta}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -325,7 +494,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
                     </div>
                   </td>
                   <td className="p-5">
-                    <div className="font-black text-blue-900 uppercase tracking-tight leading-none mb-1">{t.descricao}</div>
+                    <div className="font-black text-blue-900 uppercase tracking-tight leading-none mb-1 flex items-center gap-2">
+                      {t.descricao}
+                      {t.cliente && (
+                        <a href={t.cliente} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors" title="Ver Comprovante/Boleto">
+                          <i className="fa-solid fa-link text-xs"></i>
+                        </a>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded font-black text-slate-500 uppercase">{t.conta || 'GERAL'}</span>
                       <span className="text-[9px] text-slate-400 uppercase font-bold">{t.formaPagamento}</span>
@@ -380,7 +556,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
                         setFormData({
                           vencimento: t.vencimento, pagamento: t.pagamento || '', descricao: t.descricao,
                           valor: t.valor.toString(), formaPagamento: t.formaPagamento, centroCusto: t.centroCusto,
-                          subItem: t.subItem, status: t.status, conta: t.conta || 'GERAL'
+                          subItem: t.subItem, status: t.status, conta: t.conta || 'GERAL',
+                          comprovanteUrl: t.cliente || ''
                         });
                         setIsModalOpen(true);
                       }} className="text-blue-900 hover:bg-blue-50 p-3 rounded-xl transition-all" title="Editar"><i className="fa-solid fa-pen-to-square"></i></button>
@@ -517,6 +694,14 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
                 </div>
               </div>
 
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Link do Comprovante / Boleto (Opcional)</label>
+                <div className="relative group">
+                  <i className="fa-solid fa-link absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-900 transition-colors"></i>
+                  <input type="url" className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 font-medium text-slate-700 transition-all" placeholder="https://" value={formData.comprovanteUrl} onChange={e => setFormData({...formData, comprovanteUrl: e.target.value})} />
+                </div>
+              </div>
+
               <div className="flex gap-4 pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-4 bg-slate-100 rounded-2xl font-black text-slate-500 hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">Cancelar</button>
                 <button type="submit" className="flex-1 px-4 py-4 bg-blue-900 text-white rounded-2xl font-black hover:bg-blue-800 shadow-xl shadow-blue-900/30 transition-all uppercase text-[10px] tracking-widest flex items-center justify-center gap-2">
@@ -527,6 +712,7 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 };
