@@ -46,6 +46,9 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     comprovanteUrl: ''
   });
 
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrences, setRecurrences] = useState(2);
+
   const availableCostCenters = costCenters.filter(cc => cc.tipo === (type === 'RECEBER' ? 'RECEITA' : 'DESPESA'));
   const availableSubItems = availableCostCenters.find(cc => cc.nome === formData.centroCusto)?.subItens || [];
 
@@ -144,25 +147,58 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     }));
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const transactionData: Transaction = {
-      id: editingId || crypto.randomUUID(),
-      type: type,
-      vencimento: formData.vencimento,
-      pagamento: formData.status !== 'PENDENTE' ? (formData.pagamento || formData.vencimento) : undefined,
-      descricao: formData.descricao,
-      valor: parseFloat(formData.valor),
-      formaPagamento: formData.formaPagamento,
-      status: formData.status,
-      centroCusto: formData.centroCusto,
-      subItem: formData.subItem,
-      conta: formData.conta,
-      cliente: formData.comprovanteUrl
-    };
+    
+    if (!editingId && isRecurring && recurrences > 1) {
+      const transactionsToInsert: Transaction[] = [];
+      const [year, month, day] = formData.vencimento.split('-').map(Number);
+      
+      for (let i = 0; i < recurrences; i++) {
+        const date = new Date(year, month - 1 + i, day);
+        const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        
+        const transactionData: Transaction = {
+          id: crypto.randomUUID(),
+          type: type,
+          vencimento: dateString,
+          pagamento: i === 0 && formData.status !== 'PENDENTE' ? (formData.pagamento || dateString) : undefined,
+          descricao: `${formData.descricao} (${i + 1}/${recurrences})`,
+          valor: parseFloat(formData.valor),
+          formaPagamento: formData.formaPagamento,
+          status: i === 0 ? formData.status : 'PENDENTE',
+          centroCusto: formData.centroCusto,
+          subItem: formData.subItem,
+          conta: formData.conta,
+          cliente: formData.comprovanteUrl
+        };
+        transactionsToInsert.push(transactionData);
+      }
+      
+      if (onBulkAdd) {
+        await onBulkAdd(transactionsToInsert);
+      } else {
+        transactionsToInsert.forEach(t => onAdd(t));
+      }
+    } else {
+      const transactionData: Transaction = {
+        id: editingId || crypto.randomUUID(),
+        type: type,
+        vencimento: formData.vencimento,
+        pagamento: formData.status !== 'PENDENTE' ? (formData.pagamento || formData.vencimento) : undefined,
+        descricao: formData.descricao,
+        valor: parseFloat(formData.valor),
+        formaPagamento: formData.formaPagamento,
+        status: formData.status,
+        centroCusto: formData.centroCusto,
+        subItem: formData.subItem,
+        conta: formData.conta,
+        cliente: formData.comprovanteUrl
+      };
 
-    if (editingId) onUpdate(transactionData);
-    else onAdd(transactionData);
+      if (editingId) onUpdate(transactionData);
+      else onAdd(transactionData);
+    }
 
     setIsModalOpen(false);
     resetForm();
@@ -181,6 +217,8 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
       conta: 'GERAL',
       comprovanteUrl: ''
     });
+    setIsRecurring(false);
+    setRecurrences(2);
     setEditingId(null);
   };
 
@@ -701,6 +739,22 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
                   <input type="url" className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 font-medium text-slate-700 transition-all" placeholder="https://" value={formData.comprovanteUrl} onChange={e => setFormData({...formData, comprovanteUrl: e.target.value})} />
                 </div>
               </div>
+
+              {!editingId && (
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
+                  <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsRecurring(!isRecurring)}>
+                    <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="w-4 h-4 text-blue-900 rounded border-slate-300 focus:ring-blue-900" />
+                    <label className="text-xs font-bold text-slate-700 cursor-pointer">Lançamento Recorrente?</label>
+                  </div>
+                  {isRecurring && (
+                    <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Qtd. Meses:</label>
+                      <input type="number" min="2" max="60" className="w-24 p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-4 focus:ring-blue-900/5 font-bold text-slate-700 text-center" value={recurrences} onChange={e => setRecurrences(Math.max(2, parseInt(e.target.value) || 2))} />
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">({recurrences} parcelas mensais)</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-4 pt-4">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-4 bg-slate-100 rounded-2xl font-black text-slate-500 hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">Cancelar</button>

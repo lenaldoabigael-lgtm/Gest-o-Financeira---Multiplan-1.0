@@ -605,6 +605,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               alert(`Proposta ${prop.contrato || ''} devolvida com sucesso para status Cadastrada.`);
             }}
             onPay={async (id) => {
+              const lot = paymentLots.find(l => l.id === id);
               const { error } = await supabase.from('payment_lots').update({ 
                 status: 'PAGO', 
                 aprovadoPor: user?.login || 'Sistema', 
@@ -620,6 +621,24 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                   console.error('Erro ao atualizar status das propostas para PAGO:', propError);
                   alert('Aviso: Lote pago, mas houve erro ao atualizar as propostas vinculadas.');
                 }
+                
+                // Gerar transação automática em Contas a Pagar
+                if (lot) {
+                  const newTransaction = {
+                    type: 'PAGAR',
+                    vencimento: lot.vencimento,
+                    pagamento: new Date().toISOString().split('T')[0],
+                    descricao: `PAGAMENTO COMISSÃO - ${lot.codigo}`,
+                    valor: lot.valorTotal,
+                    formaPagamento: 'PIX',
+                    status: 'PAGO',
+                    centroCusto: 'COMISSÕES',
+                    subItem: 'CORRETORES',
+                    conta: 'CAIXA'
+                  };
+                  await supabase.from('transactions').insert(newTransaction);
+                }
+                
                 fetchData();
               }
             }}
