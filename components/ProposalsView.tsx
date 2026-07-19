@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Proposal, ProposalRequirement } from '../types';
 import * as XLSX from 'xlsx';
 
@@ -22,9 +22,31 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
   const [confirmingSendId, setConfirmingSendId] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [importPreviewData, setImportPreviewData] = useState<any[] | null>(null);
+  const [viewingProposal, setViewingProposal] = useState<Proposal | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  
+  type SortColumn = 'contrato' | 'cliente' | 'corretor' | 'operadora' | 'valor' | 'status' | null;
+  type SortDirection = 'asc' | 'desc';
+
+  const [sortColumn, setSortColumn] = useState<SortColumn>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [filterPeriodo, setFilterPeriodo] = useState('Todos'); // 'Todos', 'Últimos 7 dias', 'Este mês'
+
+  const handleSort = (column: NonNullable<SortColumn>) => {
+    if (sortColumn === column) {
+      if (sortDirection === 'asc') setSortDirection('desc');
+      else setSortColumn(null);
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
 
   const filteredProposals = useMemo(() => {
-    return proposals.filter(p => {
+    let result = proposals.filter(p => {
       const matchSearch = (
         p.cliente.toLowerCase().includes(searchTerm.toLowerCase()) || 
         p.cpfCnpj.includes(searchTerm) || 
@@ -39,9 +61,62 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
 
       const matchValor = !filterValor || p.valor.toString().includes(filterValor) || p.valor.toFixed(2).includes(filterValor);
 
-      return matchSearch && matchStatus && matchOperadora && matchTipoPlano && matchCorretor && matchValor;
+      let matchPeriod = true;
+      if (filterPeriodo !== 'Todos' && p.data) {
+        const today = new Date();
+        const pDate = new Date(p.data);
+        if (!isNaN(pDate.getTime())) {
+          if (filterPeriodo === 'Últimos 7 dias') {
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            matchPeriod = pDate >= sevenDaysAgo && pDate <= today;
+          } else if (filterPeriodo === 'Este mês') {
+            matchPeriod = pDate.getMonth() === today.getMonth() && pDate.getFullYear() === today.getFullYear();
+          }
+        }
+      }
+
+      return matchSearch && matchStatus && matchOperadora && matchTipoPlano && matchCorretor && matchValor && matchPeriod;
     });
-  }, [proposals, searchTerm, filterStatus, filterOperadora, filterTipoPlano, filterCorretor, filterValor]);
+
+    if (sortColumn) {
+      result.sort((a, b) => {
+        let valA: any = a[sortColumn as keyof Proposal];
+        let valB: any = b[sortColumn as keyof Proposal];
+        
+        if (sortColumn === 'contrato') {
+           valA = a.contrato; valB = b.contrato;
+        } else if (sortColumn === 'cliente') {
+           valA = a.cliente; valB = b.cliente;
+        } else if (sortColumn === 'corretor') {
+           valA = a.corretor; valB = b.corretor;
+        } else if (sortColumn === 'operadora') {
+           valA = a.operadora; valB = b.operadora;
+        } else if (sortColumn === 'valor') {
+           valA = Number(a.valor); valB = Number(b.valor);
+        } else if (sortColumn === 'status') {
+           valA = a.status; valB = b.status;
+        }
+
+        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [proposals, searchTerm, filterStatus, filterOperadora, filterTipoPlano, filterCorretor, filterValor, filterPeriodo, sortColumn, sortDirection]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus, filterOperadora, filterTipoPlano, filterCorretor, filterValor, filterPeriodo, sortColumn, sortDirection]);
+
+  const totalPages = Math.ceil(filteredProposals.length / itemsPerPage);
+  
+  const paginatedProposals = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredProposals.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredProposals, currentPage, itemsPerPage]);
 
   const operadoras = useMemo(() => {
     const unique = Array.from(new Set(proposals.map(p => p.operadora)));
@@ -385,7 +460,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
         });
 
         if (onImportProposals) {
-          onImportProposals(importedProposals);
+          setImportPreviewData(importedProposals);
         }
       } catch (err) {
         console.error("Error importing file:", err);
@@ -395,6 +470,10 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
     reader.readAsArrayBuffer(file);
     e.target.value = ''; // Reset input
   };
+
+  const totalVidas = filteredProposals.reduce((acc, p) => acc + (p.vidas || 0), 0);
+  const valorTotal = filteredProposals.reduce((acc, p) => acc + (p.valor || 0), 0);
+  const pendentesEnvio = filteredProposals.filter(p => p.status === 'CADASTRADA').length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -430,6 +509,38 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">
+            <i className="fa-solid fa-users"></i>
+          </div>
+          <div>
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Vidas (Filtro)</div>
+            <div className="text-2xl font-black text-slate-800">{totalVidas}</div>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl">
+            <i className="fa-solid fa-dollar-sign"></i>
+          </div>
+          <div>
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Total (Filtro)</div>
+            <div className="text-2xl font-black text-slate-800">
+              R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center text-xl">
+            <i className="fa-solid fa-clock-rotate-left"></i>
+          </div>
+          <div>
+            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aguardando Envio (Filtro)</div>
+            <div className="text-2xl font-black text-slate-800">{pendentesEnvio}</div>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col lg:flex-row gap-4">
         <div className="flex-1 relative">
           <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
@@ -442,6 +553,15 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
           />
         </div>
         <div className="flex flex-wrap gap-2">
+          <select
+            value={filterPeriodo}
+            onChange={(e) => setFilterPeriodo(e.target.value)}
+            className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
+          >
+            <option value="Todos">Período: Todos</option>
+            <option value="Últimos 7 dias">Últimos 7 dias</option>
+            <option value="Este mês">Este mês</option>
+          </select>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
@@ -496,17 +616,29 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                     checked={filteredProposals.length > 0 && selectedIds.length === filteredProposals.length}
                   />
                 </th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contrato / Data</th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Corretor</th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Operadora</th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor / Vidas</th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('contrato')}>
+                  Contrato / Data {sortColumn === 'contrato' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('cliente')}>
+                  Cliente {sortColumn === 'cliente' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('corretor')}>
+                  Corretor {sortColumn === 'corretor' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('operadora')}>
+                  Operadora {sortColumn === 'operadora' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('valor')}>
+                  Valor / Vidas {sortColumn === 'valor' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
+                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('status')}>
+                  Status {sortColumn === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
+                </th>
                 <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredProposals.map((p) => (
+              {paginatedProposals.map((p) => (
                 <tr key={p.id} className={`hover:bg-slate-50/50 transition-colors group ${selectedIds.includes(p.id) ? 'bg-blue-50/30' : ''}`}>
                   <td className="p-4">
                     <input 
@@ -537,92 +669,129 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                   </td>
                   <td className="p-4">
                     <div className="flex flex-col gap-1 items-start">
-                      <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                        p.status === 'CADASTRADA' ? 'bg-slate-100 text-slate-700' :
-                        p.status === 'ENVIADA AO FINANCEIRO' ? 'bg-blue-100 text-blue-700' :
-                        p.status === 'PAGO' ? 'bg-emerald-100 text-emerald-700' :
-                        'bg-slate-100 text-slate-700'
+                      <span className={`flex items-center gap-1.5 text-xs font-bold ${
+                        p.status === 'CADASTRADA' ? 'text-slate-600' :
+                        p.status === 'ENVIADA AO FINANCEIRO' ? 'text-blue-600' :
+                        p.status === 'PAGO' ? 'text-emerald-600' :
+                        'text-slate-600'
                       }`}>
-                        {p.status}
+                        {p.status === 'CADASTRADA' && '🕒 Cadastrada'}
+                        {p.status === 'ENVIADA AO FINANCEIRO' && '🚀 Enviada'}
+                        {p.status === 'PAGO' && '✅ Pago'}
+                        {p.status !== 'CADASTRADA' && p.status !== 'ENVIADA AO FINANCEIRO' && p.status !== 'PAGO' && p.status}
                       </span>
                       {p.detalhes?.proposta?.pagamentoCartao && (
-                        <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-orange-100 text-orange-700 border border-orange-200">
+                        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-orange-600">
                           💳 Cartão Corretora
                         </span>
                       )}
                     </div>
                   </td>
-                  <td className="p-4">
+                  <td className="p-4 relative">
                     <div className="flex items-center gap-2">
+                      {openDropdownId === p.id && (
+                        <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
+                      )}
+                      
                       <button 
-                        onClick={() => onEditProposal(p)}
-                        disabled={p.status === 'PAGO'}
-                        className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all ${
-                          p.status === 'PAGO' ? 'bg-slate-50 text-slate-300 cursor-not-allowed' : 'bg-slate-100 text-slate-500 hover:bg-blue-600 hover:text-white'
-                        }`}
-                        title={p.status === 'PAGO' ? 'Não é possível editar proposta paga' : 'Editar'}
+                        onClick={() => setOpenDropdownId(openDropdownId === p.id ? null : p.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all z-10"
+                        title="Opções"
                       >
-                        <i className="fa-solid fa-pen-to-square text-xs"></i>
+                        <i className="fa-solid fa-ellipsis-vertical text-xs"></i>
                       </button>
 
-                      {p.status === 'CADASTRADA' && (
-                        confirmingSendId === p.id ? (
-                          <div className="flex gap-1 bg-emerald-50 rounded-lg p-1">
-                            <button
-                              onClick={() => {
-                                onEditProposal({ ...p, status: 'ENVIADA AO FINANCEIRO' } as any);
-                                setConfirmingSendId(null);
-                              }}
-                              className="px-2 bg-emerald-600 text-white rounded text-[10px] font-bold"
-                            >
-                              Confirmar
-                            </button>
-                            <button
-                              onClick={() => setConfirmingSendId(null)}
-                              className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300"
-                            >
-                              X
-                            </button>
-                          </div>
-                        ) : (
-                          <button 
-                            onClick={() => setConfirmingSendId(p.id)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg transition-all bg-slate-100 text-slate-500 hover:bg-emerald-600 hover:text-white"
-                            title="Enviar ao Financeiro"
+                      {openDropdownId === p.id && (
+                        <div className="absolute right-12 top-10 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                          <button
+                            onClick={() => {
+                              setViewingProposal(p);
+                              setOpenDropdownId(null);
+                            }}
+                            className="w-full text-left px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2"
                           >
-                            <i className="fa-solid fa-paper-plane text-xs"></i>
+                            <i className="fa-solid fa-eye text-slate-400 w-4 text-center"></i> Visualizar
                           </button>
-                        )
-                      )}
+                          
+                          <button
+                            onClick={() => {
+                              onEditProposal(p);
+                              setOpenDropdownId(null);
+                            }}
+                            disabled={p.status === 'PAGO'}
+                            className={`w-full text-left px-4 py-2 text-xs font-bold flex items-center gap-2 ${
+                              p.status === 'PAGO' ? 'text-slate-300 cursor-not-allowed' : 'text-blue-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <i className="fa-solid fa-pen-to-square w-4 text-center"></i> Editar
+                          </button>
 
-                      {p.status !== 'PAGO' && p.status !== 'ENVIADA AO FINANCEIRO' && (
-                        confirmingDeleteId === p.id ? (
-                          <div className="flex gap-1 bg-red-50 rounded-lg p-1">
-                            <button
-                              onClick={() => {
-                                onDeleteProposal(p.id);
-                                setConfirmingDeleteId(null);
-                              }}
-                              className="px-2 bg-red-600 text-white rounded text-[10px] font-bold"
-                            >
-                              Deletar
-                            </button>
-                            <button
-                              onClick={() => setConfirmingDeleteId(null)}
-                              className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300"
-                            >
-                              X
-                            </button>
-                          </div>
-                        ) : (
-                          <button 
-                            onClick={() => setConfirmingDeleteId(p.id)}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg transition-all bg-slate-100 text-slate-500 hover:bg-red-600 hover:text-white"
-                            title="Excluir"
-                          >
-                            <i className="fa-solid fa-trash text-xs"></i>
-                          </button>
-                        )
+                          {p.status === 'CADASTRADA' && (
+                            confirmingSendId === p.id ? (
+                              <div className="px-2 py-1 mx-2 flex gap-1 bg-emerald-50 rounded-lg">
+                                <button
+                                  onClick={() => {
+                                    onEditProposal({ ...p, status: 'ENVIADA AO FINANCEIRO' } as any);
+                                    setConfirmingSendId(null);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  className="flex-1 bg-emerald-600 text-white rounded text-[10px] font-bold py-1"
+                                >
+                                  Confirmar
+                                </button>
+                                <button
+                                  onClick={() => setConfirmingSendId(null)}
+                                  className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300"
+                                >
+                                  X
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmingSendId(p.id);
+                                }}
+                                className="w-full text-left px-4 py-2 text-xs font-bold text-emerald-600 hover:bg-slate-50 flex items-center gap-2"
+                              >
+                                <i className="fa-solid fa-paper-plane w-4 text-center"></i> Enviar ao Financeiro
+                              </button>
+                            )
+                          )}
+
+                          {p.status !== 'PAGO' && p.status !== 'ENVIADA AO FINANCEIRO' && (
+                            confirmingDeleteId === p.id ? (
+                              <div className="px-2 py-1 mx-2 flex gap-1 bg-red-50 rounded-lg">
+                                <button
+                                  onClick={() => {
+                                    onDeleteProposal(p.id);
+                                    setConfirmingDeleteId(null);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  className="flex-1 bg-red-600 text-white rounded text-[10px] font-bold py-1"
+                                >
+                                  Deletar
+                                </button>
+                                <button
+                                  onClick={() => setConfirmingDeleteId(null)}
+                                  className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300"
+                                >
+                                  X
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmingDeleteId(p.id);
+                                }}
+                                className="w-full text-left px-4 py-2 text-xs font-bold text-red-600 hover:bg-slate-50 flex items-center gap-2"
+                              >
+                                <i className="fa-solid fa-trash w-4 text-center"></i> Excluir
+                              </button>
+                            )
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>
@@ -639,7 +808,253 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
             </tbody>
           </table>
         </div>
+
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">
+              Mostrando {((currentPage - 1) * itemsPerPage) + 1} até {Math.min(currentPage * itemsPerPage, filteredProposals.length)} de {filteredProposals.length} registros
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                <i className="fa-solid fa-chevron-left text-[10px]"></i>
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(page => {
+                    return page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1;
+                  })
+                  .map((page, index, array) => (
+                    <React.Fragment key={page}>
+                      {index > 0 && array[index - 1] !== page - 1 && (
+                        <span className="text-slate-400 font-bold px-1">...</span>
+                      )}
+                      <button
+                        onClick={() => setCurrentPage(page)}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-all ${
+                          currentPage === page 
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' 
+                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    </React.Fragment>
+                  ))}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                <i className="fa-solid fa-chevron-right text-[10px]"></i>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {importPreviewData && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-xl shadow-inner">
+                  <i className="fa-solid fa-file-import"></i>
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Revisão de Importação</h2>
+                  <p className="text-sm font-bold text-slate-500">Foram encontradas {importPreviewData.length} propostas na planilha.</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setImportPreviewData(null)}
+                className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-all"
+              >
+                <i className="fa-solid fa-xmark text-xl"></i>
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 bg-slate-50/30">
+              <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</th>
+                        <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contrato</th>
+                        <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Operadora</th>
+                        <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {importPreviewData.slice(0, 50).map((p, index) => (
+                        <tr key={index} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="p-4">
+                            <div className="font-bold text-slate-700 uppercase">{p.cliente}</div>
+                            <div className="text-[10px] text-slate-400 font-bold">CPF: {p.cpfCnpj}</div>
+                          </td>
+                          <td className="p-4">
+                            <div className="font-bold text-blue-600">{p.contrato}</div>
+                          </td>
+                          <td className="p-4">
+                            <div className="font-bold text-slate-700">{p.detalhes?.proposta?.operadora || p.operadora || 'N/A'}</div>
+                          </td>
+                          <td className="p-4">
+                            <div className="font-bold text-emerald-600">
+                              R$ {Number(p.valor || p.detalhes?.financeiro?.valorContrato || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {importPreviewData.length > 50 && (
+                  <div className="p-4 text-center bg-slate-50 border-t border-slate-100 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                    Mostrando as primeiras 50 de {importPreviewData.length} propostas...
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-100 flex gap-4 bg-white">
+              <button
+                type="button"
+                onClick={() => setImportPreviewData(null)}
+                className="flex-1 px-4 py-4 bg-slate-100 rounded-2xl font-black text-slate-500 hover:bg-slate-200 transition-all uppercase text-xs tracking-widest"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onImportProposals) {
+                    onImportProposals(importPreviewData);
+                  }
+                  setImportPreviewData(null);
+                }}
+                className="flex-1 px-4 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 shadow-xl shadow-blue-600/30 transition-all uppercase text-xs tracking-widest flex items-center justify-center gap-2"
+              >
+                <i className="fa-solid fa-check"></i> Confirmar Importação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingProposal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-xl shadow-inner">
+                  <i className="fa-solid fa-file-contract"></i>
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Detalhes da Proposta</h2>
+                  <p className="text-sm font-bold text-slate-500">Contrato: {viewingProposal.contrato}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setViewingProposal(null)}
+                className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-all"
+              >
+                <i className="fa-solid fa-xmark text-xl"></i>
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 bg-white">
+              <div className="space-y-6">
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Cliente</label>
+                    <div className="font-bold text-slate-800">{viewingProposal.cliente}</div>
+                    <div className="text-xs text-slate-500 font-bold mt-1">CPF/CNPJ: {viewingProposal.cpfCnpj}</div>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Corretor / Venda</label>
+                    <div className="font-bold text-slate-800">{viewingProposal.corretor}</div>
+                    <div className="text-xs text-slate-500 font-bold mt-1">Data: {viewingProposal.data}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Operadora</label>
+                    <div className="font-bold text-slate-800">{viewingProposal.operadora}</div>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Categoria</label>
+                    <div className="font-bold text-slate-800">{viewingProposal.categoria}</div>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Tipo de Plano</label>
+                    <div className="font-bold text-slate-800">{viewingProposal.detalhes?.proposta?.tipoPlano || 'N/A'}</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest block mb-1">Valor do Contrato</label>
+                    <div className="text-xl font-black text-blue-700">R$ {Number(viewingProposal.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+                    <div className="text-xs text-blue-500 font-bold mt-1">{viewingProposal.vidas} vidas</div>
+                  </div>
+                  <div className={`p-4 rounded-xl border ${
+                    viewingProposal.status === 'CADASTRADA' ? 'bg-slate-50 border-slate-100' :
+                    viewingProposal.status === 'ENVIADA AO FINANCEIRO' ? 'bg-blue-50 border-blue-100' :
+                    viewingProposal.status === 'PAGO' ? 'bg-emerald-50 border-emerald-100' :
+                    'bg-slate-50 border-slate-100'
+                  }`}>
+                    <label className={`text-[10px] font-black uppercase tracking-widest block mb-1 ${
+                      viewingProposal.status === 'CADASTRADA' ? 'text-slate-400' :
+                      viewingProposal.status === 'ENVIADA AO FINANCEIRO' ? 'text-blue-400' :
+                      viewingProposal.status === 'PAGO' ? 'text-emerald-400' :
+                      'text-slate-400'
+                    }`}>Status Atual</label>
+                    <div className={`text-xl font-bold flex items-center gap-2 ${
+                      viewingProposal.status === 'CADASTRADA' ? 'text-slate-700' :
+                      viewingProposal.status === 'ENVIADA AO FINANCEIRO' ? 'text-blue-700' :
+                      viewingProposal.status === 'PAGO' ? 'text-emerald-700' :
+                      'text-slate-700'
+                    }`}>
+                      {viewingProposal.status === 'CADASTRADA' && '🕒 Cadastrada'}
+                      {viewingProposal.status === 'ENVIADA AO FINANCEIRO' && '🚀 Enviada ao Financeiro'}
+                      {viewingProposal.status === 'PAGO' && '✅ Pago'}
+                      {viewingProposal.status !== 'CADASTRADA' && viewingProposal.status !== 'ENVIADA AO FINANCEIRO' && viewingProposal.status !== 'PAGO' && viewingProposal.status}
+                    </div>
+                  </div>
+                </div>
+
+                {viewingProposal.observacoes && (
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Observações</label>
+                    <p className="text-sm font-medium text-slate-700 whitespace-pre-wrap">{viewingProposal.observacoes}</p>
+                  </div>
+                )}
+                
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingProposal(null)}
+                className="px-6 py-3 bg-slate-200 text-slate-600 rounded-xl font-black hover:bg-slate-300 transition-all uppercase text-xs tracking-widest"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
