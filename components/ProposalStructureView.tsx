@@ -32,6 +32,7 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
   const [newImposto, setNewImposto] = useState({
     corretor: '',
     operadora: '',
+    tipoPlano: '',
     valor: ''
   });
 
@@ -76,9 +77,10 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
 
   const handleAddImposto = () => {
     if (!newImposto.corretor || !newImposto.operadora || !newImposto.valor) return;
-    const nome = `${newImposto.corretor} - ${newImposto.operadora} - ${newImposto.valor}`.toUpperCase();
+    const tipo = newImposto.tipoPlano || 'TODOS OS TIPOS';
+    const nome = `${newImposto.corretor} - ${newImposto.operadora} - ${tipo} - ${newImposto.valor}`.toUpperCase();
     onSave({ tipo: 'IMPOSTO_CORRETOR', nome });
-    setNewImposto({ corretor: '', operadora: '', valor: '' });
+    setNewImposto({ corretor: '', operadora: '', tipoPlano: '', valor: '' });
   };
 
   const handleAddPercentual = () => {
@@ -453,6 +455,17 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
                   <option key={op.id} value={op.nome}>{op.nome}</option>
                 ))}
               </select>
+              <select
+                value={newImposto.tipoPlano}
+                onChange={(e) => setNewImposto(prev => ({ ...prev, tipoPlano: e.target.value }))}
+                className="flex-1 bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-emerald-700/10 outline-none uppercase font-bold text-slate-700"
+              >
+                <option value="">Selec. o Tipo de Plano...</option>
+                <option value="TODOS">TODOS OS TIPOS</option>
+                {groupedRequirements.TIPO_PLANO.map(tp => (
+                  <option key={tp.id} value={tp.nome}>{tp.nome}</option>
+                ))}
+              </select>
               <div className="flex gap-2">
                 <input 
                   type="number" 
@@ -474,7 +487,13 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
             <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {groupedRequirements.IMPOSTO_CORRETOR.map(req => (
                 <div key={req.id} className="group flex items-center justify-between p-3 bg-slate-50 hover:bg-white hover:shadow-md hover:shadow-slate-200/50 border border-transparent hover:border-slate-100 rounded-xl transition-all">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase"><i className="fa-solid fa-percent text-emerald-700 mr-2"></i> {req.nome.split(' - ')[2]}% - {req.nome.split(' - ')[0]} ({req.nome.split(' - ')[1]})</span>
+                  <span className="text-[11px] font-bold text-slate-700 uppercase">
+                    <i className="fa-solid fa-percent text-emerald-700 mr-2"></i>
+                    {req.nome.split(' - ').length === 4 
+                      ? `${req.nome.split(' - ')[3]}% - ${req.nome.split(' - ')[0]} (${req.nome.split(' - ')[1]} / ${req.nome.split(' - ')[2]})`
+                      : `${req.nome.split(' - ')[2]}% - ${req.nome.split(' - ')[0]} (${req.nome.split(' - ')[1]})`
+                    }
+                  </span>
                   <button 
                     onClick={() => onDelete(req.id)}
                     className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"

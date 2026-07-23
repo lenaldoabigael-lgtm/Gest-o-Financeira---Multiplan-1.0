@@ -286,14 +286,31 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
 
                             const rowsHtml = lotProposals.map(p => {
                               const comissaoBase = Number(p.comissao || 0);
-                              const pctStr = impostos.find(r => r.nome.startsWith(`${p.corretor.toUpperCase()} - ${p.operadora.toUpperCase()} - `)) ||
-                                             impostos.find(r => r.nome.startsWith(`TODOS - ${p.operadora.toUpperCase()} - `)) ||
-                                             impostos.find(r => r.nome.startsWith(`${p.corretor.toUpperCase()} - TODAS - `)) ||
-                                             impostos.find(r => r.nome.startsWith(`TODOS - TODAS - `));
-                              
+                              const tipoPlano = (p.detalhes?.proposta?.tipoPlano || "").toUpperCase();
+                              const corretor = p.corretor.toUpperCase();
+                              const operadora = p.operadora.toUpperCase();
+
+                              const pctStr = impostos.find(r => {
+                                const parts = r.nome.split(" - ");
+                                if (parts.length === 4) {
+                                  const [c, op, tp] = parts;
+                                  const matchCorretor = c === corretor || c === "TODOS" || c === "TODOS OS CORRETORES";
+                                  const matchOperadora = op === operadora || op === "TODAS" || op === "TODAS AS OPERADORAS";
+                                  const matchTipoPlano = tp === tipoPlano || tp === "TODOS OS TIPOS" || tp === "TODOS";
+                                  return matchCorretor && matchOperadora && matchTipoPlano;
+                                } else if (parts.length >= 3) {
+                                  const [c, op] = parts;
+                                  const matchCorretor = c === corretor || c === "TODOS" || c === "TODOS OS CORRETORES";
+                                  const matchOperadora = op === operadora || op === "TODAS" || op === "TODAS AS OPERADORAS";
+                                  return matchCorretor && matchOperadora;
+                                }
+                                return false;
+                              });
+
                               let txPercentual = 0;
                               if (pctStr) {
-                                txPercentual = parseFloat(pctStr.nome.split(' - ')[2]) || 0;
+                                const parts = pctStr.nome.split(" - ");
+                                txPercentual = parseFloat(parts[parts.length - 1]) || 0;
                               }
 
                               const desconto = Number((comissaoBase * (txPercentual / 100)).toFixed(2));
