@@ -16,6 +16,8 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
   const [activeSubTab, setActiveSubTab] = useState<'LOTES' | 'AGUARDANDO'>('AGUARDANDO');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
+  const [dateFilter, setDateFilter] = useState('Todos');
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' } | null>(null);
   const [expandedLotId, setExpandedLotId] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({});
   const [confirmingReturnId, setConfirmingReturnId] = useState<string | null>(null);
@@ -33,19 +35,117 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
     }
   };
 
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
   const filteredLots = lots.filter(lot => {
-    const matchesSearch = lot.codigo.toLowerCase().includes(searchTerm.toLowerCase());
+    const lotProps = proposals.filter(p => p.lote_id === lot.id);
+    const matchesSearch = 
+      lot.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lotProps.some(p => 
+        p.corretor.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (p.contrato && p.contrato.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
     const matchesStatus = statusFilter === 'Todos' || 
                          (statusFilter === 'Pendente' && lot.status === 'PENDENTE') ||
                          (statusFilter === 'Pago' && lot.status === 'PAGO');
-    return matchesSearch && matchesStatus;
+    let matchesDate = true;
+    if (dateFilter !== 'Todos' && lot.vencimento) {
+      const today = new Date();
+      let lotDate = new Date();
+      if (lot.vencimento !== 'Hoje') {
+        if (lot.vencimento.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          lotDate = new Date(lot.vencimento);
+        } else {
+          lotDate = new Date(0);
+        }
+      }
+      
+      if (!isNaN(lotDate.getTime())) {
+        if (dateFilter === 'Últimos 7 dias') {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(today.getDate() - 7);
+          matchesDate = lotDate >= sevenDaysAgo && lotDate <= today;
+        } else if (dateFilter === 'Últimos 30 dias') {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(today.getDate() - 30);
+          matchesDate = lotDate >= thirtyDaysAgo && lotDate <= today;
+        } else if (dateFilter === 'Este mês') {
+          matchesDate = lotDate.getMonth() === today.getMonth() && lotDate.getFullYear() === today.getFullYear();
+        } else if (dateFilter === 'Mês passado') {
+          const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+          matchesDate = lotDate.getMonth() === lastMonth.getMonth() && lotDate.getFullYear() === lastMonth.getFullYear();
+        }
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesDate;
   });
 
+  const sortedLots = [...filteredLots].sort((a, b) => {
+    if (!sortConfig) return 0;
+    
+    let aValue: any = a[sortConfig.key as keyof PaymentLot];
+    let bValue: any = b[sortConfig.key as keyof PaymentLot];
+
+    if (sortConfig.key === 'valorTotal') {
+      aValue = Number(aValue);
+      bValue = Number(bValue);
+    } else if (sortConfig.key === 'qtdPropostas') {
+      aValue = Number(aValue);
+      bValue = Number(bValue);
+    } else if (sortConfig.key === 'vencimento') {
+      const getMs = (v: string) => {
+         if (v === 'Hoje') return new Date().getTime();
+         const d = new Date(v);
+         return isNaN(d.getTime()) ? 0 : d.getTime();
+      };
+      aValue = getMs(aValue as string);
+      bValue = getMs(bValue as string);
+    }
+
+    if (aValue < bValue) {
+      return sortConfig.direction === 'asc' ? -1 : 1;
+    }
+    if (aValue > bValue) {
+      return sortConfig.direction === 'asc' ? 1 : -1;
+    }
+    return 0;
+  });
+
+  const today = new Date();
+  const pagoEsteMes = filteredLots.filter(l => {
+    if (l.status !== 'PAGO' || !l.vencimento) return false;
+    let d = new Date(l.vencimento === 'Hoje' ? today.getTime() : l.vencimento);
+    if(isNaN(d.getTime())) return false;
+    return d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+  }).reduce((acc, l) => acc + Number(l.valorTotal), 0);
+
+  const pagoMesPassado = filteredLots.filter(l => {
+    if (l.status !== 'PAGO' || !l.vencimento) return false;
+    let d = new Date(l.vencimento === 'Hoje' ? today.getTime() : l.vencimento);
+    if(isNaN(d.getTime())) return false;
+    const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    return d.getMonth() === lastMonth.getMonth() && d.getFullYear() === lastMonth.getFullYear();
+  }).reduce((acc, l) => acc + Number(l.valorTotal), 0);
+
+  let percentualCrescimento = 0;
+  if (pagoMesPassado > 0) {
+    percentualCrescimento = ((pagoEsteMes - pagoMesPassado) / pagoMesPassado) * 100;
+  } else if (pagoEsteMes > 0) {
+    percentualCrescimento = 100;
+  }
+
   const totals = {
-    pendente: lots.filter(l => l.status === 'PENDENTE').reduce((acc, l) => acc + Number(l.valorTotal), 0),
-    pagoHoje: lots.filter(l => l.status === 'PAGO').reduce((acc, l) => acc + Number(l.valorTotal), 0), // Simplification
-    countPendente: lots.filter(l => l.status === 'PENDENTE').length,
-    countPago: lots.filter(l => l.status === 'PAGO').length
+    pendente: filteredLots.filter(l => l.status === 'PENDENTE').reduce((acc, l) => acc + Number(l.valorTotal), 0),
+    pagoHoje: filteredLots.filter(l => l.status === 'PAGO').reduce((acc, l) => acc + Number(l.valorTotal), 0), // Simplification
+    countPendente: filteredLots.filter(l => l.status === 'PENDENTE').length,
+    countPago: filteredLots.filter(l => l.status === 'PAGO').length
   };
 
   const formatDataAprovacao = (dateStr: string) => {
@@ -87,12 +187,23 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
           </div>
           <span className="bg-orange-100 text-orange-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">{totals.countPendente} {totals.countPendente === 1 ? 'Lote' : 'Lotes'}</span>
         </div>
-        <div className="bg-white p-6 rounded-xl border-l-4 border-emerald-500 shadow-sm flex justify-between items-start">
+        <div className="bg-white p-6 rounded-xl border-l-4 border-emerald-500 shadow-sm flex flex-col justify-center gap-2">
+          <div className="flex justify-between items-start w-full">
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Pago (Total)</p>
             <h2 className="text-2xl font-black text-slate-800">R$ {totals.pagoHoje.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
           </div>
           <span className="bg-emerald-100 text-emerald-600 text-[9px] font-black px-2 py-1 rounded-full uppercase">{totals.countPago} {totals.countPago === 1 ? 'Lote' : 'Lotes'}</span>
+          </div>
+          {percentualCrescimento !== 0 && (
+             <div className="flex items-center gap-2 mt-1">
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 ${percentualCrescimento > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                  {percentualCrescimento > 0 ? <i className="fa-solid fa-arrow-trend-up"></i> : <i className="fa-solid fa-arrow-trend-down"></i>}
+                  {Math.abs(percentualCrescimento).toFixed(1)}%
+                </span>
+                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">vs. mês anterior</span>
+             </div>
+          )}
         </div>
         <div className="bg-white p-6 rounded-xl border-l-4 border-blue-500 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Previsão da Semana</p>
@@ -191,12 +302,23 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
               <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
               <input 
                 type="text" 
-                placeholder="Buscar por código do lote..." 
+                placeholder="Buscar por código, corretor, contrato..." 
                 className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
             </div>
+            <select 
+              className="bg-slate-50 border border-slate-200 rounded-lg text-xs px-3 py-2 outline-none"
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value)}
+            >
+              <option value="Todos">Vencimento: Todos</option>
+              <option value="Últimos 7 dias">Últimos 7 dias</option>
+              <option value="Últimos 30 dias">Últimos 30 dias</option>
+              <option value="Este mês">Este mês</option>
+              <option value="Mês passado">Mês passado</option>
+            </select>
             <select 
               className="bg-slate-50 border border-slate-200 rounded-lg text-xs px-3 py-2 outline-none"
               value={statusFilter}
@@ -213,17 +335,29 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                <th className="px-6 py-4">Código do Lote</th>
-                <th className="px-6 py-4">Aprovado por</th>
-                <th className="px-6 py-4">Qtd. Propostas</th>
-                <th className="px-6 py-4">Vencimento</th>
-                <th className="px-6 py-4">Valor Total</th>
-                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('codigo')}>
+                  Código do Lote {sortConfig?.key === 'codigo' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-sort-up ml-1"></i> : <i className="fa-solid fa-sort-down ml-1"></i>)}
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('aprovadoPor')}>
+                  Aprovado por {sortConfig?.key === 'aprovadoPor' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-sort-up ml-1"></i> : <i className="fa-solid fa-sort-down ml-1"></i>)}
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('qtdPropostas')}>
+                  Qtd. Propostas {sortConfig?.key === 'qtdPropostas' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-sort-up ml-1"></i> : <i className="fa-solid fa-sort-down ml-1"></i>)}
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('vencimento')}>
+                  Vencimento {sortConfig?.key === 'vencimento' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-sort-up ml-1"></i> : <i className="fa-solid fa-sort-down ml-1"></i>)}
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('valorTotal')}>
+                  Valor Total {sortConfig?.key === 'valorTotal' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-sort-up ml-1"></i> : <i className="fa-solid fa-sort-down ml-1"></i>)}
+                </th>
+                <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('status')}>
+                  Status {sortConfig?.key === 'status' && (sortConfig.direction === 'asc' ? <i className="fa-solid fa-sort-up ml-1"></i> : <i className="fa-solid fa-sort-down ml-1"></i>)}
+                </th>
                 <th className="px-6 py-4 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredLots.map(lot => (
+              {sortedLots.map(lot => (
                 <React.Fragment key={lot.id}>
                   <tr className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
@@ -529,7 +663,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                   )}
                 </React.Fragment>
               ))}
-              {filteredLots.length === 0 && (
+              {sortedLots.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center">
                     <i className="fa-solid fa-folder-open text-4xl text-slate-200 mb-3"></i>
