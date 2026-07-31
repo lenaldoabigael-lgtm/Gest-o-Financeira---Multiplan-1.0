@@ -515,6 +515,13 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             proposals={proposals} 
             requirements={proposalRequirements}
             onStatusChange={async (id, novoStatus) => {
+              if (novoStatus === 'ENVIADA AO FINANCEIRO') {
+                const p = proposals.find(p => p.id === id);
+                if (p && (!p.vidas || p.vidas === 0)) {
+                  alert('Não é possível enviar propostas com 0 vidas para o financeiro.');
+                  return;
+                }
+              }
               const { error } = await supabase.from('proposals').update({ status: novoStatus }).eq('id', id);
               if (error) {
                 console.error('Erro ao atualizar status:', error);

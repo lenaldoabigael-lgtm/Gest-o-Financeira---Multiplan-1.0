@@ -21,6 +21,7 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
   const [expandedLotId, setExpandedLotId] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File>>({});
   const [confirmingReturnId, setConfirmingReturnId] = useState<string | null>(null);
+  const [alertMessage, setAlertMessage] = useState<string>('');
 
   const pendingProposals = proposals.filter(p => p.status === 'ENVIADA AO FINANCEIRO' && !p.lote_id);
   const groupedProposals = pendingProposals.reduce((acc, p) => {
@@ -250,7 +251,14 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                         <p className="text-lg font-black text-emerald-600 leading-none">R$ {totalCorretor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                       </div>
                       <button 
-                        onClick={() => onGenerateLot(corretor, props.map(p => p.id))}
+                        onClick={() => {
+                          const hasZeroVidas = props.some(p => !p.vidas || p.vidas === 0);
+                          if (hasZeroVidas) {
+                            setAlertMessage('Não é possível gerar lote: existem propostas com 0 vidas. Por favor, edite-as e informe a quantidade correta.');
+                            return;
+                          }
+                          onGenerateLot(corretor, props.map(p => p.id));
+                        }}
                         className="bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] uppercase tracking-widest py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2"
                       >
                         <i className="fa-solid fa-layer-group"></i> Gerar Lote
@@ -675,6 +683,27 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
           </table>
         </div>
       </div>
+      )}
+
+      {alertMessage !== '' && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500 text-2xl">
+                <i className="fa-solid fa-triangle-exclamation"></i>
+              </div>
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-2">Atenção</h3>
+              <p className="text-sm text-slate-600 mb-6">{alertMessage}</p>
+              <button 
+                type="button"
+                onClick={() => setAlertMessage('')}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

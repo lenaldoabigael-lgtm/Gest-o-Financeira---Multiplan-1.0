@@ -263,8 +263,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       ? proposal.status 
       : (formData.proposta.pagamentoCartao ? 'ENVIADA AO FINANCEIRO' : 'CADASTRADA');
       
-    if (nextStatus === 'ENVIADA AO FINANCEIRO' && vidas === 0) {
-      setAlertMessage('Não é possível avançar a proposta para o financeiro com 0 vidas. Por favor, insira a quantidade de vidas correta.');
+    if ((nextStatus === 'ENVIADA AO FINANCEIRO' || formData.proposta.pagamentoCartao) && vidas === 0) {
+      setAlertMessage('Não é possível salvar propostas de Cartão Corretora ou avançar para o financeiro com 0 vidas. Por favor, insira a quantidade de vidas correta.');
       return;
     }
 
