@@ -34,6 +34,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
   const [sortColumn, setSortColumn] = useState<SortColumn>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [filterPeriodo, setFilterPeriodo] = useState('Todos'); // 'Todos', 'Últimos 7 dias', 'Este mês'
+  const [alertMessage, setAlertMessage] = useState('');
 
   const handleSort = (column: NonNullable<SortColumn>) => {
     if (sortColumn === column) {
@@ -665,7 +666,10 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                   </td>
                   <td className="p-4">
                     <div className="font-bold text-slate-700">R$ {Number(p.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                    <div className="text-[10px] text-slate-400 font-bold">{p.vidas} vidas</div>
+                    <div className={`text-[10px] font-bold ${!p.vidas || p.vidas === 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                      {!p.vidas || p.vidas === 0 ? <i className="fa-solid fa-triangle-exclamation mr-1"></i> : null}
+                      {p.vidas} vidas
+                    </div>
                   </td>
                   <td className="p-4">
                     <div className="flex flex-col gap-1 items-start">
@@ -750,6 +754,10 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (!p.vidas || p.vidas === 0) {
+                                    setAlertMessage('Não é possível enviar propostas com 0 vidas para o financeiro. Edite a proposta e insira a quantidade de vidas corretamente.');
+                                    return;
+                                  }
                                   setConfirmingSendId(p.id);
                                 }}
                                 className="w-full text-left px-4 py-2 text-xs font-bold text-emerald-600 hover:bg-slate-50 flex items-center gap-2"
@@ -1055,6 +1063,25 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
         </div>
       )}
 
+      {alertMessage !== '' && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500 text-2xl">
+                <i className="fa-solid fa-triangle-exclamation"></i>
+              </div>
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-2">Atenção</h3>
+              <p className="text-sm text-slate-600 mb-6">{alertMessage}</p>
+              <button 
+                onClick={() => setAlertMessage('')}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

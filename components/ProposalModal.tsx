@@ -84,6 +84,7 @@ const formatDate = (value: string) => {
 };
 
 const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, requirements, proposal, user }) => {
+  const [alertMessage, setAlertMessage] = useState('');
   const initialData = {
     cliente: {
       nome: '',
@@ -256,6 +257,17 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const vidas = Number(formData.financeiro.vidas) || 0;
+    const nextStatus = (proposal?.status && proposal.status !== 'CADASTRADA') 
+      ? proposal.status 
+      : (formData.proposta.pagamentoCartao ? 'ENVIADA AO FINANCEIRO' : 'CADASTRADA');
+      
+    if (nextStatus === 'ENVIADA AO FINANCEIRO' && vidas === 0) {
+      setAlertMessage('Não é possível avançar a proposta para o financeiro com 0 vidas. Por favor, insira a quantidade de vidas correta.');
+      return;
+    }
+
     onSave({
       contrato: formData.proposta.contrato || 'NOVO',
       data: formData.proposta.dataVenda || new Date().toISOString().split('T')[0],
@@ -265,8 +277,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       operadora: formData.proposta.operadora,
       categoria: formData.proposta.categoria,
       valor: Number(formData.financeiro.valorContrato) || 0,
-      vidas: Number(formData.financeiro.vidas) || 0,
-      status: (proposal?.status && proposal.status !== 'CADASTRADA') ? proposal.status : (formData.proposta.pagamentoCartao ? 'ENVIADA AO FINANCEIRO' : 'CADASTRADA'),
+      vidas: vidas,
+      status: nextStatus,
       comissao: formData.proposta.pagamentoCartao ? 0 : (Number(formData.financeiro.parcelas[0]?.comissao) || 0),
       detalhes: formData
     });
@@ -855,6 +867,26 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
           </div>
         </div>
       </div>
+
+      {alertMessage !== '' && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500 text-2xl">
+                <i className="fa-solid fa-triangle-exclamation"></i>
+              </div>
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-2">Atenção</h3>
+              <p className="text-sm text-slate-600 mb-6">{alertMessage}</p>
+              <button 
+                onClick={() => setAlertMessage('')}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

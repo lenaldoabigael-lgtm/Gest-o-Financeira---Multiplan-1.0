@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Proposal, ProposalRequirement } from '../types';
 
 interface SellerBoardProps {
@@ -99,6 +99,7 @@ export function getDiasParaPagamento(operadora: string, tipoPlano: string, categ
 }
 
 const SellerBoard: React.FC<SellerBoardProps> = ({ proposals, requirements, onStatusChange }) => {
+  const [alertMessage, setAlertMessage] = useState('');
   const columns = [
     { id: 'CADASTRADA', title: 'Cadastradas' },
     { id: 'ENVIADA AO FINANCEIRO', title: 'Enviadas ao Financeiro (Aguardando Pagamento)' },
@@ -191,7 +192,8 @@ const SellerBoard: React.FC<SellerBoardProps> = ({ proposals, requirements, onSt
                     </div>
                     
                     <div className="flex flex-wrap gap-2 mb-3">
-                      <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${!p.vidas || p.vidas === 0 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'}`}>
+                        {!p.vidas || p.vidas === 0 ? <i className="fa-solid fa-triangle-exclamation mr-1"></i> : null}
                         Vidas: {p.vidas}
                       </span>
                       <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">
@@ -222,7 +224,13 @@ const SellerBoard: React.FC<SellerBoardProps> = ({ proposals, requirements, onSt
 
                     {p.status === 'CADASTRADA' && (
                       <button
-                        onClick={() => onStatusChange(p.id, 'ENVIADA AO FINANCEIRO')}
+                        onClick={() => {
+                          if (!p.vidas || p.vidas === 0) {
+                            setAlertMessage('Não é possível enviar propostas com 0 vidas para o financeiro. Edite a proposta e insira a quantidade de vidas corretamente.');
+                            return;
+                          }
+                          onStatusChange(p.id, 'ENVIADA AO FINANCEIRO');
+                        }}
                         className="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black py-2 rounded-xl uppercase tracking-widest transition-all"
                       >
                         Enviar Financeiro <i className="fa-solid fa-arrow-right ml-1"></i>
@@ -235,6 +243,26 @@ const SellerBoard: React.FC<SellerBoardProps> = ({ proposals, requirements, onSt
           </div>
         ))}
       </div>
+
+      {alertMessage !== '' && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500 text-2xl">
+                <i className="fa-solid fa-triangle-exclamation"></i>
+              </div>
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-2">Atenção</h3>
+              <p className="text-sm text-slate-600 mb-6">{alertMessage}</p>
+              <button 
+                onClick={() => setAlertMessage('')}
+                className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl transition-all"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
