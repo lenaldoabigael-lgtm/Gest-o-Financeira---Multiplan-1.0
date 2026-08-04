@@ -247,16 +247,6 @@ const App: React.FC = () => {
     return true;
   };
 
-  const showAccountFilter = useMemo(() => {
-    return activeTab !== null &&
-           activeTab !== Tab.CENTRO_CUSTO && 
-           activeTab !== Tab.PLAN_CREDENCIAS && 
-           activeTab !== Tab.PROPOSTAS && 
-           activeTab !== Tab.ACOMPANHAMENTO &&
-           activeTab !== Tab.ESTRUTURA_PROPOSTA &&
-           activeTab !== Tab.FINANCEIRO &&
-           activeTab !== Tab.COMISSOES;
-  }, [activeTab]);
 
   if (errorType === 'SCHEMA_HIDDEN') {
     return (
@@ -356,31 +346,6 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         localStorage.removeItem('sis_activeTab');
       }}
     >
-      {showAccountFilter && (
-        <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-500">
-          <div className="flex items-center gap-4 mb-3">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-              <i className="fa-solid fa-building-columns"></i> Filtro por Conta
-            </h3>
-            <div className="h-px bg-slate-200 flex-1"></div>
-          </div>
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
-            {accounts.map(acc => (
-              <button
-                key={acc}
-                onClick={() => setActiveAccount(acc)}
-                className={`px-5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border-2 ${
-                  activeAccount === acc 
-                  ? 'bg-blue-900 text-white border-blue-900 shadow-lg shadow-blue-900/20' 
-                  : 'bg-white text-slate-500 border-slate-100 hover:border-blue-200 hover:text-blue-900 shadow-sm'
-                }`}
-              >
-                {acc}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
         {activeTab === null && (
@@ -390,7 +355,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             <p className="text-slate-500 max-w-md">Você não possui permissão para acessar nenhuma tela do sistema. Por favor, contate o administrador para solicitar acesso.</p>
           </div>
         )}
-        {activeTab === Tab.DASHBOARD && <Dashboard transactions={filteredTransactions} />}
+        {activeTab === Tab.DASHBOARD && <Dashboard proposals={proposals} />}
         {activeTab === Tab.CONTAS_PAGAR && (
           <TransactionTable 
             type="PAGAR" 
@@ -441,10 +406,10 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             fetchData(); 
           }
         }} />}
-        {activeTab === Tab.FLUXO_CAIXA && <CashFlow transactions={filteredTransactions} />}
+        {activeTab === Tab.FLUXO_CAIXA && <CashFlow proposals={proposals} />}
         {activeTab === Tab.DETALHES && (
           <Details 
-            transactions={filteredTransactions} 
+            proposals={proposals} 
             costCenters={costCenters} 
             onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }}
           />

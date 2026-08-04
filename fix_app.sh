@@ -1,1 +1,1 @@
-sed -i 's/onStatusChange={async (id, novoStatus) => {/onStatusChange={async (id, novoStatus) => {\n              if (novoStatus === '\''ENVIADA AO FINANCEIRO'\'') {\n                const p = proposals.find(p => p.id === id);\n                if (p \&\& (!p.vidas || p.vidas === 0)) {\n                  alert('\''Não é possível enviar propostas com 0 vidas para o financeiro.'\'');\n                  return;\n                }\n              }/' App.tsx
+sed -i '359,382d' App.tsx
