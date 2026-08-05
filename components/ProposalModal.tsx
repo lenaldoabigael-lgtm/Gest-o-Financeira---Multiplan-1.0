@@ -121,7 +121,7 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       ]
     },
     beneficiarios: [] as { id: string, nome: string, cpf: string, nascimento: string, parentesco: string, titularPlanoSaude?: boolean }[],
-    documentos: [] as { id: string, nome: string, data: string, tamanho: string }[],
+    documentos: [] as { id: string, nome: string, data: string, tamanho: string, url?: string }[],
     historico: [] as any[]
   };
 
@@ -196,7 +196,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
           id: Math.random().toString(36).substr(2, 9),
           nome: file.name,
           data: new Date().toLocaleDateString('pt-BR'),
-          tamanho: (file.size / 1024).toFixed(1) + ' KB'
+          tamanho: (file.size / 1024).toFixed(1) + ' KB',
+          url: URL.createObjectURL(file)
         };
         setFormData(prev => ({
           ...prev,
@@ -800,7 +801,22 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                         </div>
                       </div>
                       <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button className="text-blue-500 hover:text-blue-700">
+                        <button 
+                          className="text-blue-500 hover:text-blue-700"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (doc.url) {
+                              const link = document.createElement('a');
+                              link.href = doc.url;
+                              link.download = doc.nome;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            } else {
+                              alert('Não foi possível fazer o download do documento. Arquivo original não encontrado.');
+                            }
+                          }}
+                        >
                           <i className="fa-solid fa-download text-[10px]"></i>
                         </button>
                         <button 
