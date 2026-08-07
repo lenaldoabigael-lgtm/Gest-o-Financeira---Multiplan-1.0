@@ -48,10 +48,11 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
 
   const filteredProposals = useMemo(() => {
     let result = proposals.filter(p => {
-      const matchSearch = (
-        p.cliente.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        p.cpfCnpj.includes(searchTerm) || 
-        p.contrato.toLowerCase().includes(searchTerm.toLowerCase())
+      const searchTerms = searchTerm.toLowerCase().trim().split(/\s+/);
+      const matchSearch = searchTerms.every(term => 
+        (p.cliente || '').toLowerCase().includes(term) || 
+        (p.cpfCnpj || '').toLowerCase().includes(term) || 
+        (p.contrato || '').toLowerCase().includes(term)
       );
       const matchStatus = filterStatus === 'Todos' || p.status === filterStatus;
       const matchOperadora = filterOperadora === 'Todas' || p.operadora === filterOperadora;
@@ -318,31 +319,39 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
           if (val === undefined || val === null) return 0;
           if (typeof val === 'number') return val;
           const str = val.toString().trim();
-          if (!str) return 0;
-          // Remove R$, spaces, thousands separators (dot if Brazilian format, comma if US)
-          const cleanStr = str.replace('R$', '').replace(/\s/g, '');
-                                
-          const hasCommaAndDot = cleanStr.includes(',') && cleanStr.includes('.');
-          if (hasCommaAndDot) {
+          if (!str || str === '-') return 0;
+          
+          let cleanStr = str.replace(/R\$\s?/gi, '').replace(/\s/g, '').replace(/\u00A0/g, '');
+          
+          const commas = (cleanStr.match(/,/g) || []).length;
+          const dots = (cleanStr.match(/\./g) || []).length;
+          
+          if (commas === 1 && dots === 1) {
             if (cleanStr.indexOf('.') < cleanStr.indexOf(',')) {
-              // Brazilian format: 1.234,56 -> 1234.56
-              return parseFloat(cleanStr.replace(/\./g, '').replace(',', '.'));
+               return parseFloat(cleanStr.replace(/\./g, '').replace(',', '.'));
             } else {
-              // US format: 1,234.56 -> 1234.56
-              return parseFloat(cleanStr.replace(/,/g, ''));
+               return parseFloat(cleanStr.replace(/,/g, ''));
             }
           }
           
-          if (cleanStr.includes(',')) {
+          if (commas === 1 && dots === 0) {
             const parts = cleanStr.split(',');
-            if (parts[parts.length - 1].length <= 2) {
-              return parseFloat(cleanStr.replace(',', '.'));
+            if (parts[1].length <= 2) {
+               return parseFloat(cleanStr.replace(',', '.'));
             } else {
-              return parseFloat(cleanStr.replace(/,/g, ''));
+               return parseFloat(cleanStr.replace(',', ''));
             }
           }
           
-          return parseFloat(cleanStr) || 0;
+          if (dots === 1 && commas === 0) {
+            const parts = cleanStr.split('.');
+            if (parts[1].length === 3) {
+               return parseFloat(cleanStr.replace('.', ''));
+            }
+          }
+          
+          const parsed = parseFloat(cleanStr);
+          return isNaN(parsed) ? 0 : parsed;
         };
 
         const importedProposals = validRows.map(row => {
@@ -401,7 +410,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
           const comissaoFromRow = hasComissao ? cleanMoney(rawComissao) : NaN;
           
           let comissaoNum = 0;
-          if (!isNaN(comissaoFromRow)) {
+          if (!isNaN(comissaoFromRow) && comissaoFromRow !== 0) {
             comissaoNum = comissaoFromRow;
           } else {
             comissaoNum = Math.max(0, valorNum - finalTaxaNum);
@@ -650,7 +659,12 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                     />
                   </td>
                   <td className="p-4">
-                    <div className="font-bold text-blue-600">{p.contrato}</div>
+                    <div className="font-bold text-blue-600 flex items-center gap-2">
+                      {p.contrato}
+                      {p.contrato.startsWith('IMP-') && (
+                        <i className="fa-solid fa-triangle-exclamation text-amber-500" title="Número de contrato provisório (gerado automaticamente)"></i>
+                      )}
+                    </div>
                     <div className="text-[10px] text-slate-400 font-bold">{p.data}</div>
                   </td>
                   <td className="p-4">
@@ -756,6 +770,10 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                                   e.stopPropagation();
                                   if (!p.vidas || p.vidas === 0) {
                                     setAlertMessage('Não é possível enviar propostas com 0 vidas para o financeiro. Edite a proposta e insira a quantidade de vidas corretamente.');
+                                    return;
+                                  }
+                                  if (!p.contrato || p.contrato.trim() === '' || p.contrato.startsWith('IMP-')) {
+                                    setAlertMessage('Não é possível enviar propostas sem número de contrato para o financeiro. Edite a proposta e informe o contrato.');
                                     return;
                                   }
                                   setConfirmingSendId(p.id);
@@ -880,6 +898,16 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                   <p className="text-sm font-bold text-slate-500">Foram encontradas {importPreviewData.length} propostas na planilha.</p>
                 </div>
               </div>
+              
+              {importPreviewData.filter(p => p.contrato.startsWith('IMP-')).length > 0 && (
+                <div className="ml-auto mr-4 flex items-center gap-3 bg-amber-50 text-amber-700 px-4 py-2 rounded-xl border border-amber-200">
+                  <i className="fa-solid fa-triangle-exclamation text-amber-500 text-lg"></i>
+                  <div className="text-xs font-bold">
+                    <span className="block">{importPreviewData.filter(p => p.contrato.startsWith('IMP-')).length} proposta(s) sem contrato!</span>
+                    <span className="text-[10px] opacity-80">IDs provisórios (IMP-...) foram gerados.</span>
+                  </div>
+                </div>
+              )}
               <button 
                 onClick={() => setImportPreviewData(null)}
                 className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-all"
@@ -908,7 +936,12 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                             <div className="text-[10px] text-slate-400 font-bold">CPF: {p.cpfCnpj}</div>
                           </td>
                           <td className="p-4">
-                            <div className="font-bold text-blue-600">{p.contrato}</div>
+                            <div className="font-bold text-blue-600 flex items-center gap-2">
+                              {p.contrato}
+                              {p.contrato.startsWith('IMP-') && (
+                                <i className="fa-solid fa-triangle-exclamation text-amber-500" title="Número de contrato provisório (gerado automaticamente)"></i>
+                              )}
+                            </div>
                           </td>
                           <td className="p-4">
                             <div className="font-bold text-slate-700">{p.detalhes?.proposta?.operadora || p.operadora || 'N/A'}</div>
@@ -942,6 +975,11 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
               <button
                 type="button"
                 onClick={() => {
+                  const hasMissingContract = importPreviewData.some(p => !p.contrato || p.contrato.trim() === '' || p.contrato.startsWith('IMP-'));
+                  if (hasMissingContract) {
+                    setAlertMessage('Não é possível confirmar a importação: existem propostas sem número de contrato. Por favor, edite a planilha e informe a numeração correta.');
+                    return;
+                  }
                   if (onImportProposals) {
                     onImportProposals(importPreviewData);
                   }

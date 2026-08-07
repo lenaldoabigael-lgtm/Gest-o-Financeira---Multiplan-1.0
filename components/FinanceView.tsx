@@ -257,6 +257,11 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                             setAlertMessage('Não é possível gerar lote: existem propostas com 0 vidas. Por favor, edite-as e informe a quantidade correta.');
                             return;
                           }
+                          const hasMissingContract = props.some(p => !p.contrato || p.contrato.trim() === '' || p.contrato.startsWith('IMP-'));
+                          if (hasMissingContract) {
+                            setAlertMessage('Não é possível gerar lote: existem propostas sem número de contrato. Por favor, edite-as e informe o contrato corretamente.');
+                            return;
+                          }
                           onGenerateLot(corretor, props.map(p => p.id));
                         }}
                         className="bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] uppercase tracking-widest py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2"
