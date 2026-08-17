@@ -463,7 +463,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               const { error } = await supabase.from('proposals').insert(uniqueImported);
               if (error) {
                 console.error('Erro ao importar propostas:', error);
-                alert('Erro ao importar propostas. Verifique o console.');
+                alert('Erro ao importar propostas no Supabase: ' + (error.message || 'Verifique o console e o RLS da tabela proposals.'));
               } else {
                 let msg = `${uniqueImported.length} propostas importadas com sucesso!`;
                 if (duplicadasCount > 0) {
@@ -676,7 +676,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             const { error } = await supabase.from('proposals').update(proposalData).eq('id', editingProposal.id);
             if (error) {
               console.error('Erro ao atualizar proposta:', error);
-              alert('Erro ao atualizar proposta. Verifique o console.');
+              alert('Erro ao atualizar proposta no Supabase: ' + (error.message || 'Verifique o console.'));
             } else {
               fetchData();
             }
@@ -689,7 +689,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             const { error } = await supabase.from('proposals').insert([proposalData]);
             if (error) {
               console.error('Erro ao salvar proposta:', error);
-              alert('Erro ao salvar proposta. Verifique o console.');
+              alert('Erro ao salvar proposta no Supabase: ' + (error.message || 'Verifique o console e o RLS da tabela proposals.'));
             } else {
               fetchData();
             }

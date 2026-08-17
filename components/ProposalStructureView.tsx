@@ -39,6 +39,7 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
   const [newPercentual, setNewPercentual] = useState({
     corretor: '',
     operadora: '',
+    tipoPlano: '',
     parcela: '',
     valor: ''
   });
@@ -85,9 +86,10 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
 
   const handleAddPercentual = () => {
     if (!newPercentual.corretor || !newPercentual.operadora || !newPercentual.parcela || !newPercentual.valor) return;
-    const nome = `${newPercentual.parcela} - ${newPercentual.corretor} - ${newPercentual.operadora} - ${newPercentual.valor}`.toUpperCase();
+    const tipo = newPercentual.tipoPlano || 'TODOS OS TIPOS';
+    const nome = `${newPercentual.parcela} - ${newPercentual.corretor} - ${newPercentual.operadora} - ${tipo} - ${newPercentual.valor}`.toUpperCase();
     onSave({ tipo: 'PERCENTUAL_COMISSAO', nome });
-    setNewPercentual({ corretor: '', operadora: '', parcela: '', valor: '' });
+    setNewPercentual({ corretor: '', operadora: '', tipoPlano: '', parcela: '', valor: '' });
   };
 
   const groupedRequirements = useMemo(() => {
@@ -369,6 +371,17 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
                 ))}
               </select>
               <select
+                value={newPercentual.tipoPlano}
+                onChange={(e) => setNewPercentual(prev => ({ ...prev, tipoPlano: e.target.value }))}
+                className="flex-1 bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-sky-600/10 outline-none uppercase font-bold text-slate-700"
+              >
+                <option value="">Selecione o Tipo...</option>
+                <option value="TODOS">TODOS OS TIPOS</option>
+                {groupedRequirements.TIPO_PLANO.map(t => (
+                  <option key={t.id} value={t.nome}>{t.nome}</option>
+                ))}
+              </select>
+              <select
                 value={newPercentual.parcela}
                 onChange={(e) => setNewPercentual(prev => ({ ...prev, parcela: e.target.value }))}
                 className="flex-1 bg-slate-50 border-none rounded-xl text-xs py-2.5 px-4 focus:ring-2 focus:ring-sky-600/10 outline-none uppercase font-bold text-slate-700"
@@ -400,7 +413,7 @@ const ProposalStructureView: React.FC<ProposalStructureViewProps> = ({ requireme
             <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
               {groupedRequirements.PERCENTUAL_COMISSAO.map(req => (
                 <div key={req.id} className="group flex items-center justify-between p-3 bg-slate-50 hover:bg-white hover:shadow-md hover:shadow-slate-200/50 border border-transparent hover:border-slate-100 rounded-xl transition-all">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase"><i className="fa-solid fa-chart-pie text-sky-600 mr-2"></i> {req.nome.split(' - ')[3]}% - Parcela: {req.nome.split(' - ')[0].replace('_', ' ')} - {req.nome.split(' - ')[1]} ({req.nome.split(' - ')[2]})</span>
+                  <span className="text-[11px] font-bold text-slate-700 uppercase"><i className="fa-solid fa-chart-pie text-sky-600 mr-2"></i> {req.nome.split(' - ').length === 5 ? req.nome.split(' - ')[4] : req.nome.split(' - ')[3]}% - Parcela: {req.nome.split(' - ')[0].replace('_', ' ')} - {req.nome.split(' - ')[1]} ({req.nome.split(' - ')[2]}{req.nome.split(' - ').length === 5 && req.nome.split(' - ')[3] !== 'TODOS OS TIPOS' ? ' / ' + req.nome.split(' - ')[3] : ''})</span>
                   <button 
                     onClick={() => onDelete(req.id)}
                     className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"

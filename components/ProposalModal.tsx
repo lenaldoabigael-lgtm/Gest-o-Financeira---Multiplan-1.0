@@ -234,8 +234,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
               corretor: proposal.corretor,
               categoria: proposal.categoria,
               operadora: proposal.operadora,
-              tipoPlano: '', // Not in Proposal type
-              unidade: '', // Not in Proposal type
+              tipoPlano: proposal.detalhes?.proposta?.tipoPlano || '',
+              unidade: proposal.detalhes?.proposta?.unidade || '',
               pagamentoCartao: proposal.detalhes?.proposta?.pagamentoCartao || false
             },
             financeiro: {
@@ -266,6 +266,12 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       
     if ((nextStatus === 'ENVIADA AO FINANCEIRO' || formData.proposta.pagamentoCartao) && vidas === 0) {
       setAlertMessage('Não é possível salvar propostas de Cartão Corretora ou avançar para o financeiro com 0 vidas. Por favor, insira a quantidade de vidas correta.');
+      return;
+    }
+
+    const valorContrato = Number(formData.financeiro.valorContrato) || 0;
+    if (nextStatus === 'ENVIADA AO FINANCEIRO' && valorContrato === 0 && !formData.proposta.pagamentoCartao) {
+      setAlertMessage('Não é possível avançar para o financeiro com valor de R$ 0,00 (exceto Cartão Corretora). Por favor, insira o valor do contrato.');
       return;
     }
     

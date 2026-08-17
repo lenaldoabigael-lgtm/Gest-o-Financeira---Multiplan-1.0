@@ -453,20 +453,40 @@ function RemuneracaoView({ proposals, onUpdateProposal, requirements }: { propos
     for (let i = 1; i <= 20; i++) {
       if (p.parcelas_status[i] === 'PAGO' && p.parcelas_repassadas?.[i] !== 'PAGO') {
         
-        // Find percentual: match parcela, corretor, operadora
+        // Find percentual: match parcela, corretor, operadora, tipoPlano
         const strParcela = `${i}ª_PARCELA`;
-        const match = percentuaisConf.find(r => r.nome.startsWith(`${strParcela} - ${p.corretor.toUpperCase()} - ${p.operadora.toUpperCase()} - `)) ||
-                      percentuaisConf.find(r => r.nome.startsWith(`${strParcela} - TODOS - ${p.operadora.toUpperCase()} - `)) ||
-                      percentuaisConf.find(r => r.nome.startsWith(`${strParcela} - ${p.corretor.toUpperCase()} - TODAS - `)) ||
-                      percentuaisConf.find(r => r.nome.startsWith(`${strParcela} - TODOS - TODAS - `)) ||
-                      percentuaisConf.find(r => r.nome.startsWith(`TODAS - ${p.corretor.toUpperCase()} - ${p.operadora.toUpperCase()} - `)) ||
-                      percentuaisConf.find(r => r.nome.startsWith(`TODAS - TODOS - ${p.operadora.toUpperCase()} - `)) ||
-                      percentuaisConf.find(r => r.nome.startsWith(`TODAS - ${p.corretor.toUpperCase()} - TODAS - `)) ||
-                      percentuaisConf.find(r => r.nome.startsWith(`TODAS - TODOS - TODAS - `));
+        const tipoPlano = (p.detalhes?.proposta?.tipoPlano || '').toUpperCase();
+        const baseSearch = [
+          `${strParcela} - ${p.corretor.toUpperCase()} - ${p.operadora.toUpperCase()}`,
+          `${strParcela} - TODOS - ${p.operadora.toUpperCase()}`,
+          `${strParcela} - ${p.corretor.toUpperCase()} - TODAS`,
+          `${strParcela} - TODOS - TODAS`,
+          `TODAS - ${p.corretor.toUpperCase()} - ${p.operadora.toUpperCase()}`,
+          `TODAS - TODOS - ${p.operadora.toUpperCase()}`,
+          `TODAS - ${p.corretor.toUpperCase()} - TODAS`,
+          `TODAS - TODOS - TODAS`
+        ];
+        
+        let match;
+        for (const base of baseSearch) {
+          // First try exact match with tipoPlano
+          match = percentuaisConf.find(r => r.nome.startsWith(`${base} - ${tipoPlano} - `));
+          if (match) break;
+          // Then try TODOS OS TIPOS
+          match = percentuaisConf.find(r => r.nome.startsWith(`${base} - TODOS OS TIPOS - `));
+          if (match) break;
+          // Fallback for older formats without tipoPlano
+          match = percentuaisConf.find(r => {
+             const parts = r.nome.split(' - ');
+             return parts.length === 4 && r.nome.startsWith(`${base} - `);
+          });
+          if (match) break;
+        }
         
         let pct = 0;
         if (match) {
-          pct = parseFloat(match.nome.split(' - ')[3]) || 0;
+          const parts = match.nome.split(' - ');
+          pct = parseFloat(parts[parts.length - 1]) || 0;
         }
 
         const valorBase = p.parcelas_valores?.[i] || p.valor; // Use received value if available, fallback to total contract value

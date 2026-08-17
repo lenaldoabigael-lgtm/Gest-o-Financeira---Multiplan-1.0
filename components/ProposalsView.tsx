@@ -772,6 +772,10 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                                     setAlertMessage('Não é possível enviar propostas com 0 vidas para o financeiro. Edite a proposta e insira a quantidade de vidas corretamente.');
                                     return;
                                   }
+                                  if ((!p.valor || p.valor === 0) && !p.detalhes?.proposta?.pagamentoCartao) {
+                                    setAlertMessage('Não é possível enviar propostas com valor R$ 0,00 para o financeiro (exceto Cartão Corretora). Edite a proposta e insira o valor do contrato.');
+                                    return;
+                                  }
                                   if (!p.contrato || p.contrato.trim() === '' || p.contrato.startsWith('IMP-')) {
                                     setAlertMessage('Não é possível enviar propostas sem número de contrato para o financeiro. Edite a proposta e informe o contrato.');
                                     return;
