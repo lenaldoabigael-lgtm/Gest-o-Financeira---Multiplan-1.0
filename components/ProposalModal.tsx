@@ -72,6 +72,54 @@ const formatCpfCnpj = (value: string) => {
   }
 };
 
+const validateCpfCnpj = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return false;
+
+  if (digits.length === 11) {
+    if (/^(\d)\1+$/.test(digits)) return false;
+    let sum = 0;
+    let remainder;
+    for (let i = 1; i <= 9; i++) sum += parseInt(digits.substring(i - 1, i)) * (11 - i);
+    remainder = (sum * 10) % 11;
+    if (remainder === 10 || remainder === 11) remainder = 0;
+    if (remainder !== parseInt(digits.substring(9, 10))) return false;
+    
+    sum = 0;
+    for (let i = 1; i <= 10; i++) sum += parseInt(digits.substring(i - 1, i)) * (12 - i);
+    remainder = (sum * 10) % 11;
+    if (remainder === 10 || remainder === 11) remainder = 0;
+    if (remainder !== parseInt(digits.substring(10, 11))) return false;
+    return true;
+  } else if (digits.length === 14) {
+    if (/^(\d)\1+$/.test(digits)) return false;
+    let size = digits.length - 2;
+    let numbers = digits.substring(0, size);
+    const digitsCNPJ = digits.substring(size);
+    let sum = 0;
+    let pos = size - 7;
+    for (let i = size; i >= 1; i--) {
+      sum += parseInt(numbers.charAt(size - i)) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    let result = sum % 11 < 2 ? 0 : 11 - sum % 11;
+    if (result !== parseInt(digitsCNPJ.charAt(0))) return false;
+    
+    size = size + 1;
+    numbers = digits.substring(0, size);
+    sum = 0;
+    pos = size - 7;
+    for (let i = size; i >= 1; i--) {
+      sum += parseInt(numbers.charAt(size - i)) * pos--;
+      if (pos < 2) pos = 9;
+    }
+    result = sum % 11 < 2 ? 0 : 11 - sum % 11;
+    if (result !== parseInt(digitsCNPJ.charAt(1))) return false;
+    return true;
+  }
+  return false;
+};
+
 const formatDate = (value: string) => {
   const digits = value.replace(/\D/g, '');
   if (digits.length <= 2) {
@@ -152,6 +200,11 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
 
   const handleAddBeneficiary = () => {
     if (!newBeneficiaryInput.nome) return;
+    
+    if (newBeneficiaryInput.cpf && !validateCpfCnpj(newBeneficiaryInput.cpf)) {
+      setAlertMessage('O CPF/CNPJ do beneficiário é inválido. Por favor, verifique.');
+      return;
+    }
 
     const newBeneficiary = {
       id: Math.random().toString(36).substr(2, 9),
@@ -275,6 +328,18 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       return;
     }
     
+    if (!validateCpfCnpj(formData.cliente.cpfCnpj)) {
+      setAlertMessage('O CPF ou CNPJ do Cliente é inválido. Por favor, verifique os dígitos e tente novamente.');
+      return;
+    }
+    
+    // Validate beneficiaries CPF if they exist
+    const invalidBeneficiarios = formData.beneficiarios.filter(b => b.cpf && !validateCpfCnpj(b.cpf));
+    if (invalidBeneficiarios.length > 0) {
+      setAlertMessage(`Existem beneficiários com CPF inválido: ${invalidBeneficiarios.map(b => b.nome).join(', ')}. Por favor, verifique.`);
+      return;
+    }
+
     if (!formData.proposta.contrato || formData.proposta.contrato.trim() === '' || formData.proposta.contrato.startsWith('IMP-') || formData.proposta.contrato === 'NOVO') {
       setAlertMessage('Não é possível salvar a proposta sem um número de contrato definitivo. Por favor, insira o número do contrato.');
       return;
