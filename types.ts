@@ -1,25 +1,29 @@
 
-export type UserRole = 'admin' | 'teste1' | 'teste2' | 'teste3';
+export type UserRole = 'admin' | 'cadastro_propostas' | 'pagamento_comissoes' | 'corretor';
+
+export interface UserPermissions {
+  centroCusto: boolean;
+  contasPagar: boolean;
+  contasReceber: boolean;
+  dashboard: boolean;
+  fluxoCaixa: boolean;
+  detalhes: boolean;
+  planCredencias: boolean;
+  gestaoDemandas: boolean;
+  propostas: boolean;
+  financeiro: boolean;
+  estruturaProposta: boolean;
+  comissoes: boolean;
+}
 
 export interface User {
+  id?: string;
   login: string;
-  senha: string;
+  senha?: string;
   email?: string;
-  approved?: boolean; // Novo campo para controle de aprovação
-  permissions: {
-    centroCusto: boolean;
-    contasPagar: boolean;
-    contasReceber: boolean;
-    dashboard: boolean;
-    fluxoCaixa: boolean;
-    detalhes: boolean;
-    planCredencias: boolean;
-    gestaoDemandas: boolean;
-    propostas: boolean;
-    financeiro: boolean;
-    estruturaProposta: boolean;
-    comissoes: boolean;
-  };
+  role?: UserRole;
+  approved?: boolean;
+  permissions: UserPermissions;
 }
 
 export type TransactionType = 'PAGAR' | 'RECEBER';

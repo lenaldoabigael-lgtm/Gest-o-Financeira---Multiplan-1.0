@@ -2,29 +2,40 @@
 import React, { useState } from 'react';
 
 interface LoginProps {
-  onLogin: (user: string, pass: string) => void;
+  onLogin: (emailOrLogin: string, pass: string) => Promise<boolean>;
   onRegister: (login: string, email: string, pass: string) => Promise<boolean>;
+  error?: string | null;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, onRegister }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [login, setLogin] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isRegistering) {
-      setLoading(true);
-      const success = await onRegister(login, email, senha);
-      setLoading(false);
-      if (success) {
-        setIsRegistering(false);
-        setSenha('');
+    setLocalError(null);
+    setLoading(true);
+    try {
+      if (isRegistering) {
+        const success = await onRegister(login, email, senha);
+        if (success) {
+          setIsRegistering(false);
+          setSenha('');
+        }
+      } else {
+        const success = await onLogin(email || login, senha);
+        if (!success) {
+          setLocalError('E-mail ou senha incorretos, ou conta pendente de aprovação.');
+        }
       }
-    } else {
-      onLogin(login, senha);
+    } catch (err: any) {
+      setLocalError(err?.message || 'Ocorreu um erro ao autenticar.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -45,18 +56,26 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister }) => {
           </p>
         </div>
 
+        {(localError || error) && (
+          <div className="mb-6 p-3 bg-red-50 border border-red-200 text-red-600 rounded text-xs font-semibold text-center">
+            {localError || error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-1 group">
             <div className="flex items-center justify-between">
-               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest" htmlFor="login">Login</label>
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest" htmlFor="login">
+                 {isRegistering ? 'Nome de Usuário' : 'E-mail ou Usuário'}
+               </label>
             </div>
             <input
               id="login"
-              type="text"
+              type={isRegistering ? "text" : "text"}
               value={login}
               onChange={(e) => setLogin(e.target.value)}
               className="w-full bg-transparent border-b-2 border-slate-100 py-2.5 text-sm font-bold text-slate-700 outline-none focus:border-[#1e3a8a] transition-all placeholder:text-slate-200"
-              placeholder="Usuario"
+              placeholder={isRegistering ? "Seu Nome" : "email@multiplan.com"}
               required
             />
           </div>

@@ -17,6 +17,75 @@ import ProposalStructureView from './components/ProposalStructureView';
 import ComissoesModule from './components/ComissoesModule';
 import { supabase } from './lib/supabase';
 
+const DEFAULT_USERS: User[] = [
+  {
+    login: 'admin',
+    senha: 'Davi2017',
+    email: 'Lenaldo.abigael@hotmail.com',
+    approved: true,
+    permissions: {
+      centroCusto: true, contasPagar: true, contasReceber: true,
+      dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
+      gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
+    }
+  },
+  {
+    login: 'admin2',
+    senha: '123',
+    email: 'admin2@gmail.com',
+    approved: true,
+    permissions: {
+      centroCusto: false, contasPagar: false, contasReceber: false,
+      dashboard: true, fluxoCaixa: false, detalhes: false, planCredencias: false,
+      gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
+    }
+  },
+  {
+    login: 'Gestor',
+    senha: '123',
+    email: 'Gestor@gmail.com',
+    approved: true,
+    permissions: {
+      centroCusto: false, contasPagar: false, contasReceber: false,
+      dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+      gestaoDemandas: true, propostas: false, financeiro: true, estruturaProposta: false, comissoes: false
+    }
+  },
+  {
+    login: 'Renan Rodrigues',
+    senha: 'a1b2c3',
+    email: 'Renan.Rodrigues@multiplan.com',
+    approved: false,
+    permissions: {
+      centroCusto: false, contasPagar: false, contasReceber: false,
+      dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+      gestaoDemandas: true, propostas: true, financeiro: false, estruturaProposta: false, comissoes: false
+    }
+  },
+  {
+    login: 'Rodrigo.Mendes',
+    senha: '123456',
+    email: 'Rodrigo.Mendes@Gmail.com',
+    approved: false,
+    permissions: {
+      centroCusto: true, contasPagar: true, contasReceber: true,
+      dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: false,
+      gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
+    }
+  }
+];
+
+const mergeWithDefaultUsers = (dbUsers: User[] = []): User[] => {
+  const merged = [...dbUsers];
+  for (const defUser of DEFAULT_USERS) {
+    const exists = merged.some(u => (u.login || '').trim().toLowerCase() === defUser.login.toLowerCase());
+    if (!exists) {
+      merged.push(defUser);
+    }
+  }
+  return merged;
+};
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<Tab | null>(null);
@@ -25,124 +94,72 @@ const App: React.FC = () => {
   const [paymentLots, setPaymentLots] = useState<PaymentLot[]>([]);
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [editingProposal, setEditingProposal] = useState<Proposal | null>(null);
-  const [appUsers, setAppUsers] = useState<User[]>([]);
+  const [appUsers, setAppUsers] = useState<User[]>(DEFAULT_USERS);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [proposalRequirements, setProposalRequirements] = useState<ProposalRequirement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorType, setErrorType] = useState<'SCHEMA_HIDDEN' | 'TABLES_MISSING' | null>(null);
   const [activeAccount, setActiveAccount] = useState<string>('TODAS');
 
+  const getDefaultPermissionsForRole = (role?: string) => {
+    if (role === 'admin') {
+      return {
+        centroCusto: true, contasPagar: true, contasReceber: true,
+        dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
+        gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
+      };
+    }
+    if (role === 'cadastro_propostas') {
+      return {
+        centroCusto: false, contasPagar: false, contasReceber: false,
+        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+        gestaoDemandas: true, propostas: true, financeiro: false, estruturaProposta: false, comissoes: false
+      };
+    }
+    if (role === 'pagamento_comissoes') {
+      return {
+        centroCusto: false, contasPagar: false, contasReceber: false,
+        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+        gestaoDemandas: false, propostas: true, financeiro: true, estruturaProposta: false, comissoes: true
+      };
+    }
+    if (role === 'corretor') {
+      return {
+        centroCusto: false, contasPagar: false, contasReceber: false,
+        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+        gestaoDemandas: false, propostas: true, financeiro: false, estruturaProposta: false, comissoes: true
+      };
+    }
+    return {
+      centroCusto: false, contasPagar: false, contasReceber: false,
+      dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+      gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
+    };
+  };
+
   const fetchData = async () => {
     setIsLoading(true);
     setErrorType(null);
     try {
-      const { data: usersData, error: uErr, status } = await supabase.from('users').select('*');
-      
-      if (uErr) {
-        console.warn("Aviso Supabase:", uErr);
-        if (uErr.code === 'PGRST106' || uErr.message.includes('Invalid schema')) {
-          setErrorType('SCHEMA_HIDDEN');
-          setIsLoading(false);
-          return;
-        }
-        if (uErr.code === '42P01' || status === 406) {
-          setErrorType('TABLES_MISSING');
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      const [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes] = await Promise.all([
+      const [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes, usersRes] = await Promise.all([
         supabase.from('transactions').select('*').order('vencimento', { ascending: false }),
         supabase.from('cost_centers').select('*').order('nome'),
         supabase.from('proposals').select('*').order('data', { ascending: false }),
         supabase.from('proposal_requirements').select('*').order('nome'),
-        supabase.from('payment_lots').select('*').order('dataAprovacao', { ascending: false })
+        supabase.from('payment_lots').select('*').order('dataAprovacao', { ascending: false }),
+        supabase.from('users').select('*')
       ]);
 
-      // Check if any table is missing
-      const anyMissing = [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes].some(
-        res => res.error && res.error.code === '42P01'
-      );
-
-      if (anyMissing) {
-        setErrorType('TABLES_MISSING');
-        setIsLoading(false);
-        return;
-      }
-
-      // Check if proposals table is missing lote_id column
-      const { error: colError } = await supabase.from('proposals').select('lote_id').limit(1);
-      if (colError) {
-        setErrorType('TABLES_MISSING');
-        setIsLoading(false);
-        return;
-      }
-
-      let currentUsers = (usersData || []) as User[];
-      const adminUser = currentUsers.find(u => u.login === 'admin');
-      
-      if (!adminUser && !uErr) {
-        const newAdmin: User = {
-          login: 'admin',
-          senha: '123',
-          email: 'admin@multiplan.com',
-          approved: true,
-          permissions: {
-            centroCusto: true, contasPagar: true, contasReceber: true,
-            dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
-            gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
-          }
-        };
-        await supabase.from('users').insert(newAdmin);
-        currentUsers = [...currentUsers, newAdmin];
-      } else if (adminUser && adminUser.permissions.comissoes === undefined) {
-        // Patch existing admin to have comissoes permission
-        const updatedAdmin = {
-          ...adminUser,
-          permissions: { ...adminUser.permissions, comissoes: true }
-        };
-        await supabase.from('users').update({ permissions: updatedAdmin.permissions }).eq('login', 'admin');
-        currentUsers = currentUsers.map(u => u.login === 'admin' ? updatedAdmin : u);
-      }
-
-      setAppUsers(currentUsers);
-
-      // Auto-login from localStorage to prevent flash
-      const savedLogin = localStorage.getItem('sis_login');
-      const savedPass = localStorage.getItem('sis_pass');
-      if (savedLogin && savedPass && !user) {
-        const foundUser = currentUsers.find(u => u.login === savedLogin && u.senha === savedPass);
-        if (foundUser && foundUser.approved) {
-          setUser(foundUser);
-          const tabs = [
-            { id: Tab.DASHBOARD, permission: foundUser.permissions.dashboard },
-            { id: Tab.CONTAS_PAGAR, permission: foundUser.permissions.contasPagar },
-            { id: Tab.CONTAS_RECEBER, permission: foundUser.permissions.contasReceber },
-            { id: Tab.FLUXO_CAIXA, permission: foundUser.permissions.fluxoCaixa },
-            { id: Tab.CENTRO_CUSTO, permission: foundUser.permissions.centroCusto },
-            { id: Tab.ESTRUTURA_PROPOSTA, permission: foundUser.permissions.estruturaProposta },
-            { id: Tab.DETALHES, permission: foundUser.permissions.detalhes },
-            { id: Tab.PROPOSTAS, permission: foundUser.permissions.propostas },
-            { id: Tab.ACOMPANHAMENTO, permission: foundUser.permissions.gestaoDemandas },
-            { id: Tab.FINANCEIRO, permission: foundUser.permissions.financeiro },
-            { id: Tab.COMISSOES, permission: foundUser.permissions.comissoes },
-            { id: Tab.PLAN_CREDENCIAS, permission: foundUser.permissions.planCredencias },
-          ];
-          const savedTab = localStorage.getItem('sis_activeTab') as Tab | null;
-          if (savedTab && tabs.find(t => t.id === savedTab)?.permission) {
-             setActiveTab(savedTab);
-          } else {
-            setActiveTab(tabs.find(t => t.permission)?.id || null);
-          }
-        }
+      if (usersRes.data) {
+        setAppUsers(mergeWithDefaultUsers(usersRes.data as User[]));
+      } else {
+        setAppUsers(mergeWithDefaultUsers([]));
       }
 
       if (transactionsRes.data) setTransactions(transactionsRes.data);
       if (proposalsRes.data) {
         setProposals(proposalsRes.data);
       } else if (!proposalsRes.error) {
-        // Mock data if table is empty but exists
         const mockProposals: Proposal[] = [
           { id: '1', contrato: '6GTLW', data: '2026-04-20', cliente: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 1566.62, vidas: 4, status: 'CADASTRADA', comissao: 783.31 },
           { id: '2', contrato: 'GPLRG', data: '2026-04-20', cliente: 'T.F.S. SILVA FARMACIA', cpfCnpj: '12.345.678/0001-90', corretor: 'Michele', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 2379.28, vidas: 6, status: 'CADASTRADA', comissao: 1189.64 },
@@ -161,7 +178,6 @@ const App: React.FC = () => {
       if (lotsRes.data) {
         setPaymentLots(lotsRes.data);
       } else if (!lotsRes.error) {
-        // Mock data if table is empty but exists
         const mockLots: PaymentLot[] = [
           { id: '1', codigo: 'LOTE-2603-042', aprovadoPor: 'Arley (Gestor)', dataAprovacao: '16/03/2026 às 14:30', qtdPropostas: 2, vencimento: '17/03/2026', valorTotal: 946.49, status: 'PENDENTE' },
           { id: '2', codigo: 'LOTE-2603-041', aprovadoPor: 'João (Gestor)', dataAprovacao: '15/03/2026 às 16:15', qtdPropostas: 5, vencimento: 'Hoje', valorTotal: 3946.01, status: 'PENDENTE' },
@@ -177,7 +193,69 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchData();
+    const restoreSession = async () => {
+      setIsLoading(true);
+      const savedLogin = localStorage.getItem('sis_login');
+      const savedPass = localStorage.getItem('sis_pass');
+
+      const { data: usersData } = await supabase.from('users').select('*');
+      const currentUsers = mergeWithDefaultUsers((usersData || []) as User[]);
+      setAppUsers(currentUsers);
+
+      if (savedLogin && savedPass) {
+        const cleanSavedLogin = savedLogin.trim().toLowerCase();
+        const cleanSavedPass = savedPass.trim();
+
+        const foundUser = currentUsers.find(u => {
+          const uLogin = (u.login || '').trim().toLowerCase();
+          const uEmail = (u.email || '').trim().toLowerCase();
+          return (uLogin === cleanSavedLogin || uEmail === cleanSavedLogin) && (u.senha || '').trim() === cleanSavedPass;
+        });
+
+        if (foundUser && foundUser.approved !== false && String(foundUser.approved) !== 'false') {
+          let userPerms = foundUser.permissions || {
+            centroCusto: false, contasPagar: false, contasReceber: false,
+            dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+            gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
+          };
+          if (foundUser.login === 'admin') {
+            userPerms = {
+              centroCusto: true, contasPagar: true, contasReceber: true,
+              dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
+              gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
+            };
+          }
+          const appUser: User = { ...foundUser, permissions: userPerms };
+          setUser(appUser);
+          await fetchData();
+
+          const tabs = [
+            { id: Tab.DASHBOARD, permission: appUser.permissions.dashboard },
+            { id: Tab.CONTAS_PAGAR, permission: appUser.permissions.contasPagar },
+            { id: Tab.CONTAS_RECEBER, permission: appUser.permissions.contasReceber },
+            { id: Tab.FLUXO_CAIXA, permission: appUser.permissions.fluxoCaixa },
+            { id: Tab.CENTRO_CUSTO, permission: appUser.permissions.centroCusto },
+            { id: Tab.ESTRUTURA_PROPOSTA, permission: appUser.permissions.estruturaProposta },
+            { id: Tab.DETALHES, permission: appUser.permissions.detalhes },
+            { id: Tab.PROPOSTAS, permission: appUser.permissions.propostas },
+            { id: Tab.ACOMPANHAMENTO, permission: appUser.permissions.gestaoDemandas },
+            { id: Tab.FINANCEIRO, permission: appUser.permissions.financeiro },
+            { id: Tab.COMISSOES, permission: appUser.permissions.comissoes },
+            { id: Tab.PLAN_CREDENCIAS, permission: appUser.permissions.planCredencias },
+          ];
+
+          const savedTab = localStorage.getItem('sis_activeTab') as Tab | null;
+          if (savedTab && tabs.find(t => t.id === savedTab)?.permission) {
+            setActiveTab(savedTab);
+          } else {
+            setActiveTab(tabs.find(t => t.permission)?.id || null);
+          }
+        }
+      }
+      setIsLoading(false);
+    };
+
+    restoreSession();
   }, []);
 
   const accounts = useMemo(() => {
@@ -190,59 +268,118 @@ const App: React.FC = () => {
     return transactions.filter(t => (t.conta || 'GERAL') === activeAccount);
   }, [transactions, activeAccount]);
 
-  const handleLogin = (login: string, pass: string) => {
-    const foundUser = appUsers.find(u => u.login === login && u.senha === pass);
-    if (foundUser) {
-      if (foundUser.approved === false) {
+  const handleLogin = async (emailOrLogin: string, pass: string): Promise<boolean> => {
+    setIsLoading(true);
+    try {
+      const cleanInput = emailOrLogin.trim().toLowerCase();
+      const cleanPass = pass.trim();
+
+      const { data: usersData } = await supabase.from('users').select('*');
+      const currentUsers = mergeWithDefaultUsers((usersData || []) as User[]);
+      setAppUsers(currentUsers);
+
+      const foundUser = currentUsers.find(u => {
+        const uLogin = (u.login || '').trim().toLowerCase();
+        const uEmail = (u.email || '').trim().toLowerCase();
+        return (uLogin === cleanInput || uEmail === cleanInput) && (u.senha || '').trim() === cleanPass;
+      });
+
+      if (!foundUser) {
+        setIsLoading(false);
+        return false;
+      }
+
+      if (foundUser.approved === false || String(foundUser.approved) === 'false') {
+        setIsLoading(false);
         alert('Sua solicitação de acesso está aguardando aprovação do administrador.');
-        return;
+        return false;
       }
-      setUser(foundUser);
-      localStorage.setItem('sis_login', login);
-      localStorage.setItem('sis_pass', pass);
-      
+
+      let userPerms = foundUser.permissions || {
+        centroCusto: false, contasPagar: false, contasReceber: false,
+        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+        gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
+      };
+
+      if (foundUser.login === 'admin') {
+        userPerms = {
+          centroCusto: true, contasPagar: true, contasReceber: true,
+          dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
+          gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
+        };
+      }
+
+      const appUser: User = { ...foundUser, permissions: userPerms };
+      setUser(appUser);
+      localStorage.setItem('sis_login', appUser.login);
+      localStorage.setItem('sis_pass', appUser.senha || '');
+
+      await fetchData();
+
       const tabs = [
-        { id: Tab.DASHBOARD, permission: foundUser.permissions.dashboard },
-        { id: Tab.CONTAS_PAGAR, permission: foundUser.permissions.contasPagar },
-        { id: Tab.CONTAS_RECEBER, permission: foundUser.permissions.contasReceber },
-        { id: Tab.FLUXO_CAIXA, permission: foundUser.permissions.fluxoCaixa },
-        { id: Tab.CENTRO_CUSTO, permission: foundUser.permissions.centroCusto },
-        { id: Tab.ESTRUTURA_PROPOSTA, permission: foundUser.permissions.estruturaProposta },
-        { id: Tab.DETALHES, permission: foundUser.permissions.detalhes },
-        { id: Tab.PROPOSTAS, permission: foundUser.permissions.propostas },
-        { id: Tab.ACOMPANHAMENTO, permission: foundUser.permissions.gestaoDemandas },
-        { id: Tab.FINANCEIRO, permission: foundUser.permissions.financeiro },
-        { id: Tab.COMISSOES, permission: foundUser.permissions.comissoes },
-        { id: Tab.PLAN_CREDENCIAS, permission: foundUser.permissions.planCredencias },
+        { id: Tab.DASHBOARD, permission: appUser.permissions.dashboard },
+        { id: Tab.CONTAS_PAGAR, permission: appUser.permissions.contasPagar },
+        { id: Tab.CONTAS_RECEBER, permission: appUser.permissions.contasReceber },
+        { id: Tab.FLUXO_CAIXA, permission: appUser.permissions.fluxoCaixa },
+        { id: Tab.CENTRO_CUSTO, permission: appUser.permissions.centroCusto },
+        { id: Tab.ESTRUTURA_PROPOSTA, permission: appUser.permissions.estruturaProposta },
+        { id: Tab.DETALHES, permission: appUser.permissions.detalhes },
+        { id: Tab.PROPOSTAS, permission: appUser.permissions.propostas },
+        { id: Tab.ACOMPANHAMENTO, permission: appUser.permissions.gestaoDemandas },
+        { id: Tab.FINANCEIRO, permission: appUser.permissions.financeiro },
+        { id: Tab.COMISSOES, permission: appUser.permissions.comissoes },
+        { id: Tab.PLAN_CREDENCIAS, permission: appUser.permissions.planCredencias },
       ];
-      
-      const firstAllowedTab = tabs.find(t => t.permission)?.id || null;
-      setActiveTab(firstAllowedTab);
-      if (firstAllowedTab) {
-        localStorage.setItem('sis_activeTab', firstAllowedTab);
+
+      const savedTab = localStorage.getItem('sis_activeTab') as Tab | null;
+      if (savedTab && tabs.find(t => t.id === savedTab)?.permission) {
+        setActiveTab(savedTab);
+      } else {
+        setActiveTab(tabs.find(t => t.permission)?.id || null);
       }
-    } else {
-      alert('Login ou senha inválidos!');
+
+      setIsLoading(false);
+      return true;
+    } catch (err) {
+      console.error('Erro de login:', err);
+      setIsLoading(false);
+      return false;
     }
   };
 
-  const handleRegister = async (login: string, email: string, pass: string) => {
-    const newUser: User = {
-      login, senha: pass, email,
-      approved: false,
-      permissions: { 
-        centroCusto: false, contasPagar: false, contasReceber: false, 
-        dashboard: false, fluxoCaixa: false, detalhes: false, 
-        planCredencias: false, gestaoDemandas: false, propostas: false,
-        financeiro: false, estruturaProposta: false, comissoes: false
-      }
-    };
-    const { error } = await supabase.from('users').insert(newUser);
-    if (error) {
-      alert('Erro ao solicitar acesso. Este login já pode existir.');
+  const handleRegister = async (login: string, email: string, pass: string): Promise<boolean> => {
+    const cleanLogin = login.trim();
+    const cleanEmail = email.trim();
+    
+    // Check if user already exists
+    const existing = appUsers.find(u => 
+      (u.login && u.login.trim().toLowerCase() === cleanLogin.toLowerCase()) ||
+      (cleanEmail && u.email && u.email.trim().toLowerCase() === cleanEmail.toLowerCase())
+    );
+    if (existing) {
+      alert('Este login ou e-mail já está cadastrado no sistema.');
       return false;
     }
-    await fetchData();
+
+    const newUser: User = {
+      login: cleanLogin,
+      senha: pass,
+      email: cleanEmail,
+      approved: false,
+      permissions: {
+        centroCusto: false, contasPagar: false, contasReceber: false,
+        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+        gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
+      }
+    };
+
+    try {
+      await supabase.from('users').insert([newUser]);
+    } catch (e) {
+      console.warn('DB insert notice:', e);
+    }
+
+    setAppUsers(prev => [...prev, newUser]);
     alert('Sua solicitação foi enviada com sucesso! Aguarde a aprovação do administrador.');
     return true;
   };
@@ -338,12 +475,18 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         setActiveTab(tab);
         if (tab) localStorage.setItem('sis_activeTab', tab);
       }} 
-      onLogout={() => {
+      onLogout={async () => {
+        await supabase.auth.signOut();
         setUser(null);
         setActiveTab(null);
+        setTransactions([]);
+        setProposals([]);
+        setPaymentLots([]);
+        setCostCenters([]);
+        setProposalRequirements([]);
+        localStorage.removeItem('sis_activeTab');
         localStorage.removeItem('sis_login');
         localStorage.removeItem('sis_pass');
-        localStorage.removeItem('sis_activeTab');
       }}
     >
 
@@ -656,7 +799,35 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             }}
           />
         )}
-        {activeTab === Tab.PLAN_CREDENCIAS && user.permissions.planCredencias && <CredentialsManager users={appUsers} onUpdateUsers={async nu => { for(const u of nu) { await supabase.from('users').upsert(u); } fetchData(); }} />}
+        {activeTab === Tab.PLAN_CREDENCIAS && user.permissions.planCredencias && (
+          <CredentialsManager 
+            users={appUsers} 
+            onUpdateUsers={async nu => { 
+              setAppUsers(nu);
+              const deletedUsers = appUsers.filter(u => !nu.some(item => item.login === u.login));
+              for (const du of deletedUsers) {
+                try {
+                  await supabase.from('users').delete().eq('login', du.login);
+                } catch (e) {
+                  console.warn('Error deleting user:', e);
+                }
+              }
+              for (const u of nu) { 
+                try {
+                  await supabase.from('users').upsert({
+                    login: u.login,
+                    senha: u.senha,
+                    email: u.email,
+                    approved: u.approved !== false,
+                    permissions: u.permissions
+                  }); 
+                } catch (e) {
+                  console.warn('Error upserting user:', e);
+                }
+              } 
+            }} 
+          />
+        )}
       </div>
 
       <ProposalModal 
