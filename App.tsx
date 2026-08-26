@@ -549,10 +549,10 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             fetchData(); 
           }
         }} />}
-        {activeTab === Tab.FLUXO_CAIXA && <CashFlow proposals={proposals} />}
+        {activeTab === Tab.FLUXO_CAIXA && <CashFlow transactions={filteredTransactions} />}
         {activeTab === Tab.DETALHES && (
           <Details 
-            proposals={proposals} 
+            transactions={filteredTransactions} 
             costCenters={costCenters} 
             onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }}
           />

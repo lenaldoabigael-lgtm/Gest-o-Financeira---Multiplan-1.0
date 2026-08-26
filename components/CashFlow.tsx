@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Transaction } from '../types';
 
 interface CashFlowProps {
-  transactions: Transaction[];
+  transactions?: Transaction[];
 }
 
 interface RowData {
@@ -14,17 +14,18 @@ interface RowData {
   values: number[];
 }
 
-const CashFlow: React.FC<CashFlowProps> = ({ transactions }) => {
+const CashFlow: React.FC<CashFlowProps> = ({ transactions = [] }) => {
   const [showSubItems, setShowSubItems] = useState(false);
   const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   
   const data = useMemo(() => {
-    const incomeCategories = Array.from(new Set<string>(transactions.filter(t => t.type === 'RECEBER').map(t => t.centroCusto))).sort();
-    const expenseCategories = Array.from(new Set<string>(transactions.filter(t => t.type === 'PAGAR').map(t => t.centroCusto))).sort();
+    const safeTransactions = transactions || [];
+    const incomeCategories = Array.from(new Set<string>(safeTransactions.filter(t => t?.type === 'RECEBER').map(t => t?.centroCusto))).sort();
+    const expenseCategories = Array.from(new Set<string>(safeTransactions.filter(t => t?.type === 'PAGAR').map(t => t?.centroCusto))).sort();
 
     const getValues = (filterFn: (t: Transaction) => boolean) => {
       const values = new Array(12).fill(0);
-      transactions.filter(filterFn).forEach(t => {
+      safeTransactions.filter(filterFn).forEach(t => {
         const month = new Date(t.vencimento).getMonth();
         values[month] += t.valor;
       });
@@ -44,7 +45,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions }) => {
       // Rows for Sub-items
       if (showSubItems) {
         // Fix: Explicitly type Set as string to avoid 'unknown' being assigned to label: string
-        const subItems = Array.from(new Set<string>(transactions.filter(t => t.type === 'RECEBER' && t.centroCusto === cat).map(t => t.subItem))).sort();
+        const subItems = Array.from(new Set<string>(safeTransactions.filter(t => t.type === 'RECEBER' && t.centroCusto === cat).map(t => t.subItem))).sort();
         subItems.forEach(sub => {
           incomeRows.push({
             label: sub,
@@ -70,7 +71,7 @@ const CashFlow: React.FC<CashFlowProps> = ({ transactions }) => {
       // Rows for Sub-items
       if (showSubItems) {
         // Fix: Explicitly type Set as string to avoid 'unknown' being assigned to label: string
-        const subItems = Array.from(new Set<string>(transactions.filter(t => t.type === 'PAGAR' && t.centroCusto === cat).map(t => t.subItem))).sort();
+        const subItems = Array.from(new Set<string>(safeTransactions.filter(t => t.type === 'PAGAR' && t.centroCusto === cat).map(t => t.subItem))).sort();
         subItems.forEach(sub => {
           expenseRows.push({
             label: sub,

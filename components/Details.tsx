@@ -3,12 +3,12 @@ import React, { useState, useMemo } from 'react';
 import { Transaction, CostCenter } from '../types';
 
 interface DetailsProps {
-  transactions: Transaction[];
-  costCenters: CostCenter[];
+  transactions?: Transaction[];
+  costCenters?: CostCenter[];
   onUpdate?: (transaction: Transaction) => void;
 }
 
-const Details: React.FC<DetailsProps> = ({ transactions, costCenters, onUpdate }) => {
+const Details: React.FC<DetailsProps> = ({ transactions = [], costCenters = [], onUpdate }) => {
   const [activeSubTab, setActiveSubTab] = useState<'PAGAR' | 'RECEBER'>('PAGAR');
   
   // Filter states
@@ -20,13 +20,16 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters, onUpdate }
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  const safeTransactions = transactions || [];
+  const safeCostCenters = costCenters || [];
+
   // Extrair contas únicas das transações para popular o filtro
   const availableAccounts = useMemo(() => {
-    const accounts = transactions.map(t => t.conta || 'GERAL');
+    const accounts = safeTransactions.map(t => t.conta || 'GERAL');
     return Array.from(new Set(accounts)).sort();
-  }, [transactions]);
+  }, [safeTransactions]);
 
-  const filtered = transactions.filter(t => {
+  const filtered = safeTransactions.filter(t => {
     if (t.type !== activeSubTab) return false;
     if (statusFilter !== 'Todos' && t.status !== statusFilter) return false;
     if (formaFilter !== 'Todos' && t.formaPagamento !== formaFilter) return false;
@@ -216,7 +219,7 @@ const Details: React.FC<DetailsProps> = ({ transactions, costCenters, onUpdate }
               <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Centro de Custo</label>
               <select value={ccFilter} onChange={e => setCcFilter(e.target.value)} className="w-full text-xs font-bold p-3 border border-slate-200 rounded-xl bg-white outline-none focus:ring-4 focus:ring-blue-900/5 transition-all">
                 <option>Todos</option>
-                {costCenters.filter(cc => cc.tipo === (activeSubTab === 'PAGAR' ? 'DESPESA' : 'RECEITA')).map(cc => (
+                {safeCostCenters.filter(cc => cc.tipo === (activeSubTab === 'PAGAR' ? 'DESPESA' : 'RECEITA')).map(cc => (
                   <option key={cc.id} value={cc.nome}>{cc.nome}</option>
                 ))}
               </select>
