@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { MultiplanLogo } from './MultiplanLogo';
 
 interface LoginProps {
   onLogin: (emailOrLogin: string, pass: string) => Promise<boolean>;
@@ -42,9 +43,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] font-sans p-4">
       <div className="bg-white p-10 rounded-lg shadow-2xl w-full max-w-[420px] transition-all duration-500 border-t-8 border-[#1e3a8a]">
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-black text-[#1e3a8a] uppercase tracking-tighter">MULTIPLAN</h1>
-          <div className="w-12 h-1 bg-[#1e3a8a] mx-auto rounded mt-1"></div>
+        <div className="flex flex-col items-center justify-center mb-8">
+          <MultiplanLogo variant="blue" height={44} showText={true} />
+          <div className="w-16 h-1 bg-[#1e3a8a] rounded-full mt-3"></div>
         </div>
         
         <div className="mb-8 text-center">
@@ -111,14 +112,14 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#1e3a8a] hover:bg-[#152a65] text-white font-black py-4 px-4 rounded-lg transition-all duration-300 uppercase text-xs tracking-[0.2em] shadow-xl shadow-blue-900/20 flex items-center justify-center gap-3 active:scale-95"
+            className="w-full bg-[#1e3a8a] hover:bg-[#152a65] text-white font-black py-4 px-4 rounded-lg transition-all duration-300 uppercase text-xs tracking-[0.2em] shadow-xl shadow-blue-900/20 flex items-center justify-center gap-3 active:scale-95 cursor-pointer"
           >
             {loading && <i className="fa-solid fa-circle-notch fa-spin"></i>}
-            {isRegistering ? 'Enviar Solicitação' : 'Entrar'}
+            {isRegistering ? 'Enviar Solicitação' : 'Entrar no Sistema'}
           </button>
         </form>
 
-        <div className="mt-12 pt-8 border-t border-slate-50 text-center">
+        <div className="mt-6 pt-4 border-t border-slate-50 text-center">
           <button 
             onClick={() => setIsRegistering(!isRegistering)}
             className="text-[10px] font-black text-[#1e3a8a] hover:text-[#152a65] transition-colors uppercase tracking-[0.1em] flex items-center justify-center gap-2 mx-auto"

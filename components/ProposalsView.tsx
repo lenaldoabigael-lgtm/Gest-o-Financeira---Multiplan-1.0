@@ -486,117 +486,132 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
   const pendentesEnvio = filteredProposals.filter(p => p.status === 'CADASTRADA').length;
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-5 animate-in fade-in duration-500">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-blue-900 uppercase tracking-tighter">Propostas</h1>
-          <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Gerencie e consulte os contratos de saúde</p>
+          <h1 className="text-2xl md:text-[26px] font-extrabold text-[#002b66] tracking-tight leading-tight">
+            Propostas de Saúde
+          </h1>
+          <p className="text-[13px] text-slate-500 font-normal mt-1">
+            Gerencie e consulte o histórico de propostas e contratos de saúde.
+          </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={handleDownloadTemplate}
-            className="bg-sky-50 hover:bg-sky-100 text-sky-700 px-6 py-3 rounded-xl font-black uppercase tracking-widest transition-all border border-sky-200 flex items-center gap-3 shadow-sm"
-            title="Baixar planilha modelo com campos corretos preenchidos com exemplos"
+            className="bg-white hover:bg-slate-50 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Baixar planilha modelo"
           >
-            <i className="fa-solid fa-download"></i> Baixar Modelo
+            <span className="material-symbols-outlined text-[17px] text-slate-600">download</span>
+            <span>Baixar Modelo</span>
           </button>
-          <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 text-slate-700 px-6 py-3 rounded-xl font-black uppercase tracking-widest transition-all flex items-center gap-3">
-            <i className="fa-solid fa-file-import"></i> Importar Planilha
+          <label className="bg-white hover:bg-slate-50 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer">
+            <span className="material-symbols-outlined text-[17px] text-slate-600">upload</span>
+            <span>Importar</span>
             <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportExcel} />
           </label>
           <button
             onClick={handleExportExcel}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-3"
+            className="bg-white hover:bg-slate-50 text-slate-700 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-200 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
           >
-            <i className="fa-solid fa-file-excel"></i> Exportar Excel
+            <span className="material-symbols-outlined text-[17px] text-slate-600">output</span>
+            <span>Exportar Excel</span>
           </button>
           <button
             onClick={onAddProposal}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20 flex items-center gap-3"
+            className="bg-[#001f54] hover:bg-[#001740] text-white px-4 py-2 rounded-lg text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-98"
           >
-            <i className="fa-solid fa-plus"></i> Nova Proposta
+            <span className="material-symbols-outlined text-[17px] leading-none">add</span>
+            <span>Nova Proposta</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">
-            <i className="fa-solid fa-users"></i>
+      {/* 3 Stat KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4.5">
+        <div className="bg-white px-5 py-4 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-4">
+          <div className="w-11 h-11 rounded-lg bg-[#ebf3ff] text-[#2563eb] flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-2xl font-normal">group</span>
           </div>
           <div>
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Vidas (Filtro)</div>
-            <div className="text-2xl font-black text-slate-800">{totalVidas}</div>
+            <div className="text-xs text-slate-500 font-normal">Total Vidas (Filtro)</div>
+            <div className="text-2xl font-bold text-slate-900 tracking-tight leading-tight mt-0.5">{totalVidas}</div>
           </div>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center text-xl">
-            <i className="fa-solid fa-dollar-sign"></i>
+
+        <div className="bg-white px-5 py-4 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-4">
+          <div className="w-11 h-11 rounded-lg bg-[#e8fbf3] text-[#10b981] flex items-center justify-center shrink-0">
+            <span className="text-xl font-bold text-[#10b981]">$</span>
           </div>
           <div>
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor Total (Filtro)</div>
-            <div className="text-2xl font-black text-slate-800">
+            <div className="text-xs text-slate-500 font-normal">Valor Total (Filtro)</div>
+            <div className="text-2xl font-bold text-slate-900 tracking-tight leading-tight mt-0.5">
               R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
           </div>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center text-xl">
-            <i className="fa-solid fa-clock-rotate-left"></i>
+
+        <div className="bg-white px-5 py-4 rounded-xl border border-slate-200/90 shadow-2xs flex items-center gap-4">
+          <div className="w-11 h-11 rounded-lg bg-[#fef7ea] text-[#f59e0b] flex items-center justify-center shrink-0">
+            <div className="w-5.5 h-5.5 rounded-full border-[1.5px] border-[#f59e0b] flex items-center justify-center text-[#f59e0b] text-xs font-black tracking-tighter leading-none pb-0.5">
+              ···
+            </div>
           </div>
           <div>
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aguardando Envio (Filtro)</div>
-            <div className="text-2xl font-black text-slate-800">{pendentesEnvio}</div>
+            <div className="text-xs text-slate-500 font-normal">Aguardando Envio (Filtro)</div>
+            <div className="text-2xl font-bold text-slate-900 tracking-tight leading-tight mt-0.5">{pendentesEnvio}</div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 relative">
-          <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+      {/* Filter Bar */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs flex flex-wrap items-center gap-2.5">
+        <div className="flex-1 min-w-[220px] relative">
+          <span className="material-symbols-outlined text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 text-lg pointer-events-none">search</span>
           <input
             type="text"
             placeholder="Buscar por Cliente, CPF/CNPJ ou Nº Contrato..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 bg-slate-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-blue-900/10 transition-all"
+            className="w-full pl-9 pr-3 py-2 bg-slate-50/50 hover:bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:text-slate-400"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={filterPeriodo}
             onChange={(e) => setFilterPeriodo(e.target.value)}
-            className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
+            className="bg-white border border-slate-200 rounded-lg text-xs py-2 px-3 text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
           >
-            <option value="Todos">Período: Todos</option>
+            <option value="Todos">Periodo: Todos</option>
             <option value="Últimos 7 dias">Últimos 7 dias</option>
             <option value="Este mês">Este mês</option>
           </select>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
+            className="bg-white border border-slate-200 rounded-lg text-xs py-2 px-3 text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
           >
             {statusOptions.map(s => <option key={s} value={s}>{s === 'Todos' ? 'Status: Todos' : s}</option>)}
           </select>
           <select
             value={filterOperadora}
             onChange={(e) => setFilterOperadora(e.target.value)}
-            className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
+            className="bg-white border border-slate-200 rounded-lg text-xs py-2 px-3 text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
           >
             {operadoras.map(op => <option key={op} value={op}>{op === 'Todas' ? 'Operadora: Todas' : op}</option>)}
           </select>
           <select
             value={filterTipoPlano}
             onChange={(e) => setFilterTipoPlano(e.target.value)}
-            className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
+            className="bg-white border border-slate-200 rounded-lg text-xs py-2 px-3 text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
           >
-            {tiposPlano.map(tp => <option key={tp} value={tp}>{tp === 'Todos' ? 'Tipo de Plano: Todos' : tp}</option>)}
+            {tiposPlano.map(tp => <option key={tp} value={tp}>{tp === 'Todos' ? 'Tipo: Todos' : tp}</option>)}
           </select>
           <select
             value={filterCorretor}
             onChange={(e) => setFilterCorretor(e.target.value)}
-            className="bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10"
+            className="bg-white border border-slate-200 rounded-lg text-xs py-2 px-3 text-slate-700 outline-none focus:border-blue-500 cursor-pointer max-w-[150px] truncate"
           >
             {corretores.map(c => <option key={c} value={c}>{c === 'Todos' ? 'Corretor: Todos' : c}</option>)}
           </select>
@@ -605,130 +620,145 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
             placeholder="Valor..."
             value={filterValor}
             onChange={(e) => setFilterValor(e.target.value)}
-            className="w-32 bg-slate-50 border-none rounded-xl text-sm py-3 px-4 focus:ring-2 focus:ring-blue-900/10 transition-all"
+            className="w-24 bg-white border border-slate-200 rounded-lg text-xs py-2 px-3 text-slate-700 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
           />
-          <button className="px-6 py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 rounded-xl text-xs font-black uppercase tracking-widest transition-all">
-            Buscar
+          <button className="px-5 py-2 bg-[#f0f7ff] hover:bg-[#e0efff] text-[#0284c7] rounded-lg text-xs font-black uppercase tracking-wider transition-colors border border-sky-100 cursor-pointer">
+            BUSCAR
           </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="p-4 w-10">
+              <tr className="bg-white border-b border-slate-100">
+                <th className="py-3 px-4 w-10">
                   <input 
                     type="checkbox" 
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                     onChange={handleSelectAll}
                     checked={filteredProposals.length > 0 && selectedIds.length === filteredProposals.length}
                   />
                 </th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('contrato')}>
-                  Contrato / Data {sortColumn === 'contrato' && (sortDirection === 'asc' ? '↑' : '↓')}
+                <th className="py-3 px-4 text-[11px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:text-blue-600 transition-colors" onClick={() => handleSort('contrato')}>
+                  CONTRATO / DATA {sortColumn === 'contrato' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('cliente')}>
-                  Cliente {sortColumn === 'cliente' && (sortDirection === 'asc' ? '↑' : '↓')}
+                <th className="py-3 px-4 text-[11px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:text-blue-600 transition-colors" onClick={() => handleSort('cliente')}>
+                  CLIENTE {sortColumn === 'cliente' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('corretor')}>
-                  Corretor {sortColumn === 'corretor' && (sortDirection === 'asc' ? '↑' : '↓')}
+                <th className="py-3 px-4 text-[11px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:text-blue-600 transition-colors" onClick={() => handleSort('corretor')}>
+                  CORRETOR {sortColumn === 'corretor' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('operadora')}>
-                  Operadora {sortColumn === 'operadora' && (sortDirection === 'asc' ? '↑' : '↓')}
+                <th className="py-3 px-4 text-[11px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:text-blue-600 transition-colors" onClick={() => handleSort('operadora')}>
+                  OPERADORA {sortColumn === 'operadora' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('valor')}>
-                  Valor / Vidas {sortColumn === 'valor' && (sortDirection === 'asc' ? '↑' : '↓')}
+                <th className="py-3 px-4 text-[11px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:text-blue-600 transition-colors" onClick={() => handleSort('valor')}>
+                  VALOR / VIDAS {sortColumn === 'valor' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-blue-600" onClick={() => handleSort('status')}>
-                  Status {sortColumn === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
+                <th className="py-3 px-4 text-[11px] font-black text-slate-500 uppercase tracking-wider cursor-pointer hover:text-blue-600 transition-colors" onClick={() => handleSort('status')}>
+                  STATUS {sortColumn === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
                 </th>
-                <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ações</th>
+                <th className="py-3 px-4 text-[11px] font-black text-slate-500 uppercase tracking-wider text-center">AÇÕES</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-slate-100">
               {paginatedProposals.map((p) => (
-                <tr key={p.id} className={`hover:bg-slate-50/50 transition-colors group ${selectedIds.includes(p.id) ? 'bg-blue-50/30' : ''}`}>
-                  <td className="p-4">
+                <tr key={p.id} className={`hover:bg-slate-50/70 transition-colors group ${selectedIds.includes(p.id) ? 'bg-blue-50/20' : ''}`}>
+                  <td className="py-3 px-4">
                     <input 
                       type="checkbox" 
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       checked={selectedIds.includes(p.id)}
                       onChange={() => handleSelectOne(p.id)}
                     />
                   </td>
-                  <td className="p-4">
-                    <div className="font-bold text-blue-600 flex items-center gap-2">
+                  <td className="py-3 px-4">
+                    <button 
+                      onClick={() => setViewingProposal(p)}
+                      className="font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1.5 text-xs transition-colors cursor-pointer text-left"
+                    >
                       {p.contrato}
                       {p.contrato.startsWith('IMP-') && (
-                        <i className="fa-solid fa-triangle-exclamation text-amber-500" title="Número de contrato provisório (gerado automaticamente)"></i>
+                        <span className="material-symbols-outlined text-amber-500 text-sm" title="Contrato provisório">warning</span>
                       )}
+                    </button>
+                    <div className="text-[11px] text-slate-400 font-medium">{p.data}</div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="font-bold text-slate-800 text-xs uppercase">{p.cliente}</div>
+                    <div className="text-[10px] text-slate-400 font-medium">CPF: {p.cpfCnpj}</div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="font-semibold text-slate-700 text-xs uppercase">{p.corretor}</div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="font-bold text-slate-800 text-xs uppercase">{p.operadora}</div>
+                    <div className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">
+                      {p.categoria} {p.detalhes?.proposta?.tipoPlano ? `- ${p.detalhes.proposta.tipoPlano}` : ''}
                     </div>
-                    <div className="text-[10px] text-slate-400 font-bold">{p.data}</div>
                   </td>
-                  <td className="p-4">
-                    <div className="font-bold text-slate-700 uppercase">{p.cliente}</div>
-                    <div className="text-[10px] text-slate-400 font-bold">CPF: {p.cpfCnpj}</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="font-bold text-slate-600">{p.corretor}</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="font-bold text-slate-700">{p.operadora}</div>
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">{p.categoria} {p.detalhes?.proposta?.tipoPlano ? `- ${p.detalhes.proposta.tipoPlano}` : ''}</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="font-bold text-slate-700">R$ {Number(p.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
-                    <div className={`text-[10px] font-bold ${!p.vidas || p.vidas === 0 ? 'text-red-500' : 'text-slate-400'}`}>
-                      {!p.vidas || p.vidas === 0 ? <i className="fa-solid fa-triangle-exclamation mr-1"></i> : null}
+                  <td className="py-3 px-4">
+                    <div className="font-bold text-slate-800 text-xs">
+                      R$ {Number(p.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className={`text-[10px] font-medium ${!p.vidas || p.vidas === 0 ? 'text-red-500 font-bold' : 'text-slate-400'}`}>
                       {p.vidas} vidas
                     </div>
                   </td>
-                  <td className="p-4">
-                    <div className="flex flex-col gap-1 items-start">
-                      <span className={`flex items-center gap-1.5 text-xs font-bold ${
-                        p.status === 'CADASTRADA' ? 'text-slate-600' :
-                        p.status === 'ENVIADA AO FINANCEIRO' ? 'text-blue-600' :
-                        p.status === 'PAGO' ? 'text-emerald-600' :
-                        'text-slate-600'
-                      }`}>
-                        {p.status === 'CADASTRADA' && '🕒 Cadastrada'}
-                        {p.status === 'ENVIADA AO FINANCEIRO' && '🚀 Enviada'}
-                        {p.status === 'PAGO' && '✅ Pago'}
-                        {p.status !== 'CADASTRADA' && p.status !== 'ENVIADA AO FINANCEIRO' && p.status !== 'PAGO' && p.status}
-                      </span>
+                  <td className="py-3 px-4">
+                    <div className="flex flex-col gap-1 items-start justify-center">
+                      {p.status === 'PAGO' || p.status === 'PAGA' ? (
+                        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#009688]">
+                          <span className="material-symbols-outlined text-base text-[#009688] leading-none">check_box</span>
+                          <span>Pago</span>
+                        </div>
+                      ) : p.status === 'ENVIADA AO FINANCEIRO' || p.status === 'ENVIADA' ? (
+                        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#2563eb]">
+                          <span className="text-xs leading-none">🚀</span>
+                          <span>Enviada</span>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                          <span className="material-symbols-outlined text-base text-amber-500 leading-none">schedule</span>
+                          <span>Cadastrada</span>
+                        </div>
+                      )}
+
                       {p.detalhes?.proposta?.pagamentoCartao && (
-                        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-orange-600">
-                          💳 Cartão Corretora
-                        </span>
+                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#e65100] uppercase tracking-tight">
+                          <span className="text-xs leading-none">💳</span>
+                          <span>CARTÃO CORRETORA</span>
+                        </div>
                       )}
                     </div>
                   </td>
-                  <td className="p-4 relative">
-                    <div className="flex items-center gap-2">
+                  <td className="py-3 px-4 relative text-center">
+                    <div className="inline-flex items-center justify-center">
                       {openDropdownId === p.id && (
                         <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
                       )}
                       
                       <button 
                         onClick={() => setOpenDropdownId(openDropdownId === p.id ? null : p.id)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all z-10"
-                        title="Opções"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors z-10 cursor-pointer"
+                        title="Ações"
                       >
-                        <i className="fa-solid fa-ellipsis-vertical text-xs"></i>
+                        <span className="material-symbols-outlined text-base">more_vert</span>
                       </button>
 
                       {openDropdownId === p.id && (
-                        <div className="absolute right-12 top-10 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="absolute right-8 top-8 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 text-left">
                           <button
                             onClick={() => {
                               setViewingProposal(p);
                               setOpenDropdownId(null);
                             }}
-                            className="w-full text-left px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-2"
+                            className="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                           >
-                            <i className="fa-solid fa-eye text-slate-400 w-4 text-center"></i> Visualizar
+                            <span className="material-symbols-outlined text-sm text-slate-400">visibility</span>
+                            <span>Visualizar</span>
                           </button>
                           
                           <button
@@ -736,12 +766,13 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                               onEditProposal(p);
                               setOpenDropdownId(null);
                             }}
-                            disabled={p.status === 'PAGO'}
-                            className={`w-full text-left px-4 py-2 text-xs font-bold flex items-center gap-2 ${
-                              p.status === 'PAGO' ? 'text-slate-300 cursor-not-allowed' : 'text-blue-600 hover:bg-slate-50'
+                            disabled={p.status === 'PAGO' || p.status === 'PAGA'}
+                            className={`w-full text-left px-3.5 py-2 text-xs font-semibold flex items-center gap-2 cursor-pointer ${
+                              p.status === 'PAGO' || p.status === 'PAGA' ? 'text-slate-300 cursor-not-allowed' : 'text-blue-600 hover:bg-slate-50'
                             }`}
                           >
-                            <i className="fa-solid fa-pen-to-square w-4 text-center"></i> Editar
+                            <span className="material-symbols-outlined text-sm">edit</span>
+                            <span>Editar</span>
                           </button>
 
                           {p.status === 'CADASTRADA' && (
@@ -753,13 +784,13 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                                     setConfirmingSendId(null);
                                     setOpenDropdownId(null);
                                   }}
-                                  className="flex-1 bg-emerald-600 text-white rounded text-[10px] font-bold py-1"
+                                  className="flex-1 bg-emerald-600 text-white rounded text-[10px] font-bold py-1 cursor-pointer"
                                 >
                                   Confirmar
                                 </button>
                                 <button
                                   onClick={() => setConfirmingSendId(null)}
-                                  className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300"
+                                  className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300 cursor-pointer"
                                 >
                                   X
                                 </button>
@@ -782,14 +813,15 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                                   }
                                   setConfirmingSendId(p.id);
                                 }}
-                                className="w-full text-left px-4 py-2 text-xs font-bold text-emerald-600 hover:bg-slate-50 flex items-center gap-2"
+                                className="w-full text-left px-3.5 py-2 text-xs font-semibold text-emerald-600 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                               >
-                                <i className="fa-solid fa-paper-plane w-4 text-center"></i> Enviar ao Financeiro
+                                <span className="material-symbols-outlined text-sm">send</span>
+                                <span>Enviar ao Financeiro</span>
                               </button>
                             )
                           )}
 
-                          {p.status !== 'PAGO' && p.status !== 'ENVIADA AO FINANCEIRO' && (
+                          {p.status !== 'PAGO' && p.status !== 'PAGA' && p.status !== 'ENVIADA AO FINANCEIRO' && (
                             confirmingDeleteId === p.id ? (
                               <div className="px-2 py-1 mx-2 flex gap-1 bg-red-50 rounded-lg">
                                 <button
@@ -798,13 +830,13 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                                     setConfirmingDeleteId(null);
                                     setOpenDropdownId(null);
                                   }}
-                                  className="flex-1 bg-red-600 text-white rounded text-[10px] font-bold py-1"
+                                  className="flex-1 bg-red-600 text-white rounded text-[10px] font-bold py-1 cursor-pointer"
                                 >
                                   Deletar
                                 </button>
                                 <button
                                   onClick={() => setConfirmingDeleteId(null)}
-                                  className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300"
+                                  className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300 cursor-pointer"
                                 >
                                   X
                                 </button>
@@ -815,9 +847,10 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                                   e.stopPropagation();
                                   setConfirmingDeleteId(p.id);
                                 }}
-                                className="w-full text-left px-4 py-2 text-xs font-bold text-red-600 hover:bg-slate-50 flex items-center gap-2"
+                                className="w-full text-left px-3.5 py-2 text-xs font-semibold text-red-600 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                               >
-                                <i className="fa-solid fa-trash w-4 text-center"></i> Excluir
+                                <span className="material-symbols-outlined text-sm">delete</span>
+                                <span>Excluir</span>
                               </button>
                             )
                           )}
@@ -830,7 +863,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
               {filteredProposals.length === 0 && (
                 <tr>
                   <td colSpan={8} className="p-12 text-center">
-                    <i className="fa-solid fa-folder-open text-4xl text-slate-200 mb-3"></i>
+                    <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">folder_open</span>
                     <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhuma proposta encontrada</p>
                   </td>
                 </tr>

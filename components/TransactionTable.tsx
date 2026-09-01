@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useRef } from 'react';
 import { Transaction, TransactionType, Status, CostCenter } from '../types';
 
@@ -13,26 +12,50 @@ interface TransactionTableProps {
   onDelete: (ids: string[]) => void;
 }
 
-type SortField = 'vencimento' | 'valor';
+type SortField = 'vencimento' | 'valor' | 'descricao' | 'centroCusto';
 type SortOrder = 'asc' | 'desc';
 
-const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions, costCenters, onAdd, onBulkAdd, onUpdate, onBulkUpdate, onDelete }) => {
+const ITEMS_PER_PAGE = 50;
+
+export const TransactionTable: React.FC<TransactionTableProps> = ({
+  type,
+  transactions,
+  costCenters,
+  onAdd,
+  onBulkAdd,
+  onUpdate,
+  onBulkUpdate,
+  onDelete
+}) => {
+  // Filters State
+  const [filterStatus, setFilterStatus] = useState<string>('TODOS');
+  const [filterPeriod, setFilterPeriod] = useState<string>('TODOS');
+  const [filterCentroCusto, setFilterCentroCusto] = useState<string>('TODOS');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importData, setImportData] = useState<Transaction[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
+  // Sorting
   const [sortField, setSortField] = useState<SortField>('vencimento');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
-  const [filterStatus, setFilterStatus] = useState<Status | 'TODOS'>('TODOS');
-  const [filterPeriod, setFilterPeriod] = useState<'TODOS' | 'MES_ATUAL' | 'ULTIMOS_30_DIAS'>('TODOS');
-  const [filterCentroCusto, setFilterCentroCusto] = useState<string>('TODOS');
-  const [filterConta, setFilterConta] = useState<string>('TODOS');
+  // Pagination (50 items per page)
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Modals State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImportExportMenuOpen, setIsImportExportMenuOpen] = useState(false);
+  const [importData, setImportData] = useState<Transaction[]>([]);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Main Form Data
   const [formData, setFormData] = useState({
     vencimento: new Date().toISOString().split('T')[0],
     pagamento: '',
@@ -49,161 +72,170 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrences, setRecurrences] = useState(2);
 
-  const availableCostCenters = costCenters.filter(cc => cc.tipo === (type === 'RECEBER' ? 'RECEITA' : 'DESPESA'));
-  const availableSubItems = availableCostCenters.find(cc => cc.nome === formData.centroCusto)?.subItens || [];
+  // Batch Form Rows (for "Cadastro em lote")
+  const [batchRows, setBatchRows] = useState<Array<{
+    id: string;
+    vencimento: string;
+    descricao: string;
+    valor: string;
+    formaPagamento: string;
+    centroCusto: string;
+    subItem: string;
+    conta: string;
+    status: Status;
+  }>>([
+    { id: '1', vencimento: new Date().toISOString().split('T')[0], descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: 'GERAL', status: 'PENDENTE' },
+    { id: '2', vencimento: new Date().toISOString().split('T')[0], descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: 'GERAL', status: 'PENDENTE' },
+    { id: '3', vencimento: new Date().toISOString().split('T')[0], descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: 'GERAL', status: 'PENDENTE' },
+  ]);
+
+  const availableCostCenters = useMemo(() => {
+    return costCenters.filter(cc => cc.tipo === (type === 'RECEBER' ? 'RECEITA' : 'DESPESA'));
+  }, [costCenters, type]);
+
+  const availableSubItems = useMemo(() => {
+    return availableCostCenters.find(cc => cc.nome === formData.centroCusto)?.subItens || [];
+  }, [availableCostCenters, formData.centroCusto]);
+
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+  // Filtered and Sorted list
+  const filteredTransactions = useMemo(() => {
+    const search = searchTerm.toLowerCase().trim();
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+    const thirtyDaysStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+    return transactions.filter(t => {
+      // Search
+      if (search) {
+        const matchesSearch =
+          t.descricao.toLowerCase().includes(search) ||
+          t.centroCusto.toLowerCase().includes(search) ||
+          (t.subItem || '').toLowerCase().includes(search) ||
+          (t.conta || '').toLowerCase().includes(search) ||
+          t.formaPagamento.toLowerCase().includes(search) ||
+          t.valor.toString().includes(search);
+        if (!matchesSearch) return false;
+      }
+
+      // Status filter
+      if (filterStatus !== 'TODOS') {
+        const isAtrasado = t.status === 'PENDENTE' && t.vencimento < todayStr;
+        if (filterStatus === 'ATRASADO') {
+          if (!isAtrasado) return false;
+        } else if (filterStatus === 'PENDENTE') {
+          if (t.status !== 'PENDENTE') return false;
+        } else if (filterStatus === 'PAGO' || filterStatus === 'RECEBIDO') {
+          if (t.status !== 'PAGO' && t.status !== 'RECEBIDO') return false;
+        }
+      }
+
+      // Period filter
+      if (filterPeriod !== 'TODOS') {
+        const [year, month] = t.vencimento.split('-').map(Number);
+        if (filterPeriod === 'MES_ATUAL') {
+          if (year !== currentYear || month !== currentMonth + 1) return false;
+        } else if (filterPeriod === 'ULTIMOS_30_DIAS') {
+          if (t.vencimento < thirtyDaysStr || t.vencimento > todayStr) return false;
+        } else if (filterPeriod === 'ATRASADOS') {
+          if (!(t.status === 'PENDENTE' && t.vencimento < todayStr)) return false;
+        }
+      }
+
+      // Centro de Custo filter
+      if (filterCentroCusto !== 'TODOS') {
+        if (t.centroCusto !== filterCentroCusto) return false;
+      }
+
+      return true;
+    });
+  }, [transactions, searchTerm, filterStatus, filterPeriod, filterCentroCusto, todayStr]);
+
+  const sortedTransactions = useMemo(() => {
+    return [...filteredTransactions].sort((a, b) => {
+      let comp = 0;
+      if (sortField === 'vencimento') {
+        comp = a.vencimento.localeCompare(b.vencimento);
+      } else if (sortField === 'valor') {
+        comp = a.valor - b.valor;
+      } else if (sortField === 'descricao') {
+        comp = a.descricao.localeCompare(b.descricao);
+      } else if (sortField === 'centroCusto') {
+        comp = a.centroCusto.localeCompare(b.centroCusto);
+      }
+      return sortOrder === 'asc' ? comp : -comp;
+    });
+  }, [filteredTransactions, sortField, sortOrder]);
+
+  // Total Pendente calculation
+  const totalPendente = useMemo(() => {
+    return filteredTransactions
+      .filter(t => t.status === 'PENDENTE')
+      .reduce((acc, t) => acc + t.valor, 0);
+  }, [filteredTransactions]);
+
+  // Pagination Math (50 rows per page)
+  const totalRecords = sortedTransactions.length;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / ITEMS_PER_PAGE));
+  const effectiveCurrentPage = Math.min(currentPage, totalPages);
+
+  const startIndex = (effectiveCurrentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalRecords);
+  const displayedTransactions = useMemo(() => {
+    return sortedTransactions.slice(startIndex, endIndex);
+  }, [sortedTransactions, startIndex, endIndex]);
+
+  // Reset pagination on filter change
+  const handleFilterChange = (setter: (val: any) => void, val: any) => {
+    setter(val);
+    setCurrentPage(1);
+  };
+
+  const handleClearFilters = () => {
+    setFilterStatus('TODOS');
+    setFilterPeriod('TODOS');
+    setFilterCentroCusto('TODOS');
+    setSearchTerm('');
+    setCurrentPage(1);
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
       setSortOrder('asc');
     }
   };
 
-  const sortedAndFiltered = useMemo(() => {
-    const search = searchTerm.toLowerCase();
-    
-    const now = new Date();
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(now.getDate() - 30);
-    
-    let result = transactions.filter(t => {
-      // Busca por texto
-      const matchesSearch = (
-        t.descricao.toLowerCase().includes(search) ||
-        t.centroCusto.toLowerCase().includes(search) ||
-        (t.conta || '').toLowerCase().includes(search)
-      );
+  // Checkbox helpers
+  const areAllCurrentPageSelected = useMemo(() => {
+    if (displayedTransactions.length === 0) return false;
+    return displayedTransactions.every(t => selectedIds.includes(t.id));
+  }, [displayedTransactions, selectedIds]);
 
-      // Filtro por Status
-      const matchesStatus = filterStatus === 'TODOS' || t.status === filterStatus;
-      
-      // Filtro por Centro de Custo
-      const matchesCentroCusto = filterCentroCusto === 'TODOS' || t.centroCusto === filterCentroCusto;
-      
-      // Filtro por Conta
-      const matchesConta = filterConta === 'TODOS' || (t.conta || 'GERAL') === filterConta;
-
-      // Filtro por Período
-      let matchesPeriod = true;
-      if (filterPeriod !== 'TODOS') {
-        const transDate = new Date(t.vencimento);
-        if (filterPeriod === 'MES_ATUAL') {
-          matchesPeriod = transDate.getMonth() === now.getMonth() && transDate.getFullYear() === now.getFullYear();
-        } else if (filterPeriod === 'ULTIMOS_30_DIAS') {
-          matchesPeriod = transDate >= thirtyDaysAgo && transDate <= now;
-        }
-      }
-
-      return matchesSearch && matchesStatus && matchesCentroCusto && matchesConta && matchesPeriod;
-    });
-
-    result.sort((a, b) => {
-      let comparison = 0;
-      if (sortField === 'vencimento') {
-        comparison = a.vencimento.localeCompare(b.vencimento);
-      } else if (sortField === 'valor') {
-        comparison = a.valor - b.valor;
-      }
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-
-    return result;
-  }, [transactions, searchTerm, sortField, sortOrder, filterStatus, filterPeriod, filterCentroCusto, filterConta]);
-
-  const summary = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    let totalPendente = 0;
-    let totalPagoMes = 0;
-    let totalAtrasado = 0;
-
-    transactions.forEach(t => {
-      if (t.status === 'PENDENTE') {
-        totalPendente += t.valor;
-        if (t.vencimento < today) {
-          totalAtrasado += t.valor;
-        }
-      } else {
-        const pagDate = t.pagamento ? new Date(t.pagamento) : new Date(t.vencimento);
-        if (pagDate.getMonth() === currentMonth && pagDate.getFullYear() === currentYear) {
-          totalPagoMes += t.valor;
-        }
-      }
-    });
-
-    return { totalPendente, totalPagoMes, totalAtrasado };
-  }, [transactions]);
-
-  const handleStatusChange = (newStatus: Status) => {
-    setFormData(prev => ({
-      ...prev,
-      status: newStatus,
-      pagamento: newStatus === 'PENDENTE' ? '' : (prev.pagamento || prev.vencimento)
-    }));
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!editingId && isRecurring && recurrences > 1) {
-      const transactionsToInsert: Transaction[] = [];
-      const [year, month, day] = formData.vencimento.split('-').map(Number);
-      
-      for (let i = 0; i < recurrences; i++) {
-        const date = new Date(year, month - 1 + i, day);
-        const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        
-        const transactionData: Transaction = {
-          id: crypto.randomUUID(),
-          type: type,
-          vencimento: dateString,
-          pagamento: i === 0 && formData.status !== 'PENDENTE' ? (formData.pagamento || dateString) : undefined,
-          descricao: `${formData.descricao} (${i + 1}/${recurrences})`,
-          valor: parseFloat(formData.valor),
-          formaPagamento: formData.formaPagamento,
-          status: i === 0 ? formData.status : 'PENDENTE',
-          centroCusto: formData.centroCusto,
-          subItem: formData.subItem,
-          conta: formData.conta,
-          cliente: formData.comprovanteUrl
-        };
-        transactionsToInsert.push(transactionData);
-      }
-      
-      if (onBulkAdd) {
-        await onBulkAdd(transactionsToInsert);
-      } else {
-        transactionsToInsert.forEach(t => onAdd(t));
-      }
+  const handleSelectAllCurrentPage = () => {
+    if (areAllCurrentPageSelected) {
+      const pageIds = new Set(displayedTransactions.map(t => t.id));
+      setSelectedIds(prev => prev.filter(id => !pageIds.has(id)));
     } else {
-      const transactionData: Transaction = {
-        id: editingId || crypto.randomUUID(),
-        type: type,
-        vencimento: formData.vencimento,
-        pagamento: formData.status !== 'PENDENTE' ? (formData.pagamento || formData.vencimento) : undefined,
-        descricao: formData.descricao,
-        valor: parseFloat(formData.valor),
-        formaPagamento: formData.formaPagamento,
-        status: formData.status,
-        centroCusto: formData.centroCusto,
-        subItem: formData.subItem,
-        conta: formData.conta,
-        cliente: formData.comprovanteUrl
-      };
-
-      if (editingId) onUpdate(transactionData);
-      else onAdd(transactionData);
+      const pageIds = displayedTransactions.map(t => t.id);
+      setSelectedIds(prev => Array.from(new Set([...prev, ...pageIds])));
     }
-
-    setIsModalOpen(false);
-    resetForm();
   };
 
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  // Form Reset
   const resetForm = () => {
     setFormData({
       vencimento: new Date().toISOString().split('T')[0],
@@ -222,47 +254,205 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
     setEditingId(null);
   };
 
-  const getVencimentoAlert = (vencimento: string, status: Status) => {
-    if (type !== 'PAGAR' || status !== 'PENDENTE') return null;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dueDate = new Date(vencimento);
-    dueDate.setHours(0, 0, 0, 0);
-    
-    const diffTime = dueDate.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) {
-      return {
-        type: 'overdue',
-        icon: 'fa-circle-exclamation',
-        color: 'text-red-500',
-        label: 'Vencida!'
-      };
-    } else if (diffDays <= 10) {
-      return {
-        type: 'soon',
-        icon: 'fa-triangle-exclamation',
-        color: 'text-orange-500',
-        label: `Vence em ${diffDays} dias`
-      };
-    }
-    return null;
+  // Open Edit
+  const handleOpenEdit = (t: Transaction) => {
+    setEditingId(t.id);
+    setFormData({
+      vencimento: t.vencimento,
+      pagamento: t.pagamento || '',
+      descricao: t.descricao,
+      valor: t.valor.toString(),
+      formaPagamento: t.formaPagamento || 'PIX',
+      centroCusto: t.centroCusto,
+      subItem: t.subItem || '',
+      status: t.status,
+      conta: t.conta || 'GERAL',
+      comprovanteUrl: t.cliente || ''
+    });
+    setIsRecurring(false);
+    setIsModalOpen(true);
   };
 
-  // Lógica de Importação CSV Aprimorada
+  // Quick Toggle Status (Pendente <-> Pago/Recebido)
+  const handleTogglePaid = (t: Transaction) => {
+    if (t.status === 'PENDENTE') {
+      onUpdate({
+        ...t,
+        status: type === 'PAGAR' ? 'PAGO' : 'RECEBIDO',
+        pagamento: todayStr
+      });
+    } else {
+      onUpdate({
+        ...t,
+        status: 'PENDENTE',
+        pagamento: undefined
+      });
+    }
+  };
+
+  // Single Save
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.descricao.trim() || !formData.valor) return;
+
+    const parsedValor = parseFloat(formData.valor.toString().replace(',', '.'));
+    if (isNaN(parsedValor)) {
+      alert('Por favor, informe um valor numérico válido.');
+      return;
+    }
+
+    if (!editingId && isRecurring && recurrences > 1) {
+      const transactionsToInsert: Transaction[] = [];
+      const [year, month, day] = formData.vencimento.split('-').map(Number);
+
+      for (let i = 0; i < recurrences; i++) {
+        const date = new Date(year, month - 1 + i, day);
+        const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+        transactionsToInsert.push({
+          id: crypto.randomUUID(),
+          type: type,
+          vencimento: dateString,
+          pagamento: i === 0 && formData.status !== 'PENDENTE' ? (formData.pagamento || dateString) : undefined,
+          descricao: `${formData.descricao.trim()} (${i + 1}/${recurrences})`,
+          valor: parsedValor,
+          formaPagamento: formData.formaPagamento,
+          status: i === 0 ? formData.status : 'PENDENTE',
+          centroCusto: formData.centroCusto || 'OUTROS',
+          subItem: formData.subItem || '',
+          conta: formData.conta || 'GERAL',
+          cliente: formData.comprovanteUrl || ''
+        });
+      }
+
+      if (onBulkAdd) {
+        await onBulkAdd(transactionsToInsert);
+      } else {
+        transactionsToInsert.forEach(t => onAdd(t));
+      }
+    } else {
+      const transactionData: Transaction = {
+        id: editingId || crypto.randomUUID(),
+        type: type,
+        vencimento: formData.vencimento,
+        pagamento: formData.status !== 'PENDENTE' ? (formData.pagamento || formData.vencimento) : undefined,
+        descricao: formData.descricao.trim(),
+        valor: parsedValor,
+        formaPagamento: formData.formaPagamento,
+        status: formData.status,
+        centroCusto: formData.centroCusto || 'OUTROS',
+        subItem: formData.subItem || '',
+        conta: formData.conta || 'GERAL',
+        cliente: formData.comprovanteUrl || ''
+      };
+
+      if (editingId) onUpdate(transactionData);
+      else onAdd(transactionData);
+    }
+
+    setIsModalOpen(false);
+    resetForm();
+  };
+
+  // Batch Add Save
+  const handleSaveBatch = async () => {
+    const validRows = batchRows.filter(r => r.descricao.trim() && parseFloat(r.valor.replace(',', '.')) > 0);
+    if (validRows.length === 0) {
+      alert('Preencha ao menos uma linha válida com Descrição e Valor.');
+      return;
+    }
+
+    const itemsToInsert: Transaction[] = validRows.map(r => ({
+      id: crypto.randomUUID(),
+      type: type,
+      vencimento: r.vencimento || todayStr,
+      pagamento: r.status !== 'PENDENTE' ? r.vencimento : undefined,
+      descricao: r.descricao.trim().toUpperCase(),
+      valor: parseFloat(r.valor.replace(',', '.')),
+      formaPagamento: r.formaPagamento || 'PIX',
+      status: r.status || 'PENDENTE',
+      centroCusto: r.centroCusto || 'OUTROS',
+      subItem: r.subItem || '',
+      conta: r.conta || 'GERAL'
+    }));
+
+    if (onBulkAdd) {
+      await onBulkAdd(itemsToInsert);
+    } else {
+      itemsToInsert.forEach(t => onAdd(t));
+    }
+
+    setIsBatchModalOpen(false);
+    // Reset batch rows
+    setBatchRows([
+      { id: '1', vencimento: todayStr, descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: 'GERAL', status: 'PENDENTE' },
+      { id: '2', vencimento: todayStr, descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: 'GERAL', status: 'PENDENTE' },
+      { id: '3', vencimento: todayStr, descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: 'GERAL', status: 'PENDENTE' },
+    ]);
+  };
+
+  // Bulk actions
+  const handleBulkMarkAsPaid = async () => {
+    if (!onBulkUpdate) return;
+    const itemsToUpdate = transactions
+      .filter(t => selectedIds.includes(t.id) && t.status === 'PENDENTE')
+      .map(t => ({
+        ...t,
+        status: (type === 'PAGAR' ? 'PAGO' : 'RECEBIDO') as Status,
+        pagamento: todayStr
+      }));
+
+    if (itemsToUpdate.length > 0) {
+      await onBulkUpdate(itemsToUpdate);
+      setSelectedIds([]);
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    if (confirm(`Deseja realmente excluir os ${selectedIds.length} registros selecionados?`)) {
+      onDelete(selectedIds);
+      setSelectedIds([]);
+    }
+  };
+
+  // Export CSV
+  const handleExportCSV = () => {
+    const headers = ['Vencimento', 'Pagamento', 'Descrição', 'Valor', 'Forma Pagamento', 'Status', 'Centro de Custo', 'Sub-item', 'Conta'];
+    const rows = sortedTransactions.map(t => [
+      t.vencimento,
+      t.pagamento || '',
+      `"${t.descricao.replace(/"/g, '""')}"`,
+      t.valor.toFixed(2),
+      t.formaPagamento,
+      t.status,
+      `"${t.centroCusto.replace(/"/g, '""')}"`,
+      `"${(t.subItem || '').replace(/"/g, '""')}"`,
+      t.conta || 'GERAL'
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${type === 'PAGAR' ? 'contas_a_pagar' : 'contas_a_receber'}_${todayStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setIsImportExportMenuOpen(false);
+  };
+
+  // CSV Import handler
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = event => {
       const text = event.target?.result as string;
       const lines = text.split(/\r?\n/);
       if (lines.length < 2) return;
 
-      // Detecta se o separador é ; ou , baseado na primeira linha
       const headerLine = lines[0];
       const countSemicolon = (headerLine.match(/;/g) || []).length;
       const countComma = (headerLine.match(/,/g) || []).length;
@@ -270,21 +460,20 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
 
       const headers = headerLine.toLowerCase().split(separator).map(h => h.trim());
       const parsed: Transaction[] = [];
-      
+
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
-        
+
         const cols = line.split(separator);
-        
         const getCol = (possibleHeaders: string[]) => {
-            const idx = headers.findIndex(h => possibleHeaders.some(p => h.includes(p)));
-            return idx !== -1 ? cols[idx]?.trim() : '';
+          const idx = headers.findIndex(h => possibleHeaders.some(p => h.includes(p)));
+          return idx !== -1 ? cols[idx]?.trim() : '';
         };
 
         const vencRaw = getCol(['venc', 'data']);
-        const desc = getCol(['desc', 'lança']);
-        const valorRaw = getCol(['valor', 'quant', 'preço']);
+        const desc = getCol(['desc', 'lança', 'hist']);
+        const valorRaw = getCol(['valor', 'quant', 'preço', 'total']);
         const statusRaw = getCol(['stat']);
         const forma = getCol(['forma', 'pag', 'mov']);
         const centro = getCol(['centro', 'categ', 'estru']);
@@ -293,40 +482,39 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
 
         let venc = vencRaw;
         if (vencRaw.includes('/')) {
-            const parts = vencRaw.split('/');
-            if (parts.length === 3) {
-                const [d, m, y] = parts;
-                venc = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-            }
+          const parts = vencRaw.split('/');
+          if (parts.length === 3) {
+            const [d, m, y] = parts;
+            venc = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+          }
         }
 
-        // Limpeza de valor (remove pontos de milhar e troca vírgula decimal por ponto)
         const valorClean = (valorRaw || '0').replace(/\./g, '').replace(',', '.');
         const valor = parseFloat(valorClean);
-        
-        // Mapeamento Robusto de Status
+
         const sUpper = (statusRaw || '').toUpperCase();
         let finalStatus: Status = 'PENDENTE';
         if (sUpper.includes('PAGO') || sUpper.includes('RECEB') || sUpper.includes('CONCLU')) {
-            finalStatus = type === 'PAGAR' ? 'PAGO' : 'RECEBIDO';
+          finalStatus = type === 'PAGAR' ? 'PAGO' : 'RECEBIDO';
         }
 
         parsed.push({
-            id: crypto.randomUUID(),
-            type,
-            vencimento: venc || new Date().toISOString().split('T')[0],
-            descricao: (desc || 'IMPORTADO CSV').toUpperCase(),
-            valor: isNaN(valor) ? 0 : valor,
-            status: finalStatus,
-            formaPagamento: (forma || 'PIX').toUpperCase(),
-            centroCusto: (centro || 'OUTROS').toUpperCase(),
-            subItem: (sub || '').toUpperCase(),
-            conta: (conta || 'GERAL').toUpperCase()
+          id: crypto.randomUUID(),
+          type,
+          vencimento: venc || todayStr,
+          descricao: (desc || 'IMPORTADO CSV').toUpperCase(),
+          valor: isNaN(valor) ? 0 : valor,
+          status: finalStatus,
+          formaPagamento: (forma || 'PIX').toUpperCase(),
+          centroCusto: (centro || 'OUTROS').toUpperCase(),
+          subItem: (sub || '').toUpperCase(),
+          conta: (conta || 'GERAL').toUpperCase()
         });
       }
-      
+
       setImportData(parsed);
       setIsImportModalOpen(true);
+      setIsImportExportMenuOpen(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsText(file);
@@ -334,439 +522,1047 @@ const TransactionTable: React.FC<TransactionTableProps> = ({ type, transactions,
 
   const confirmImport = async () => {
     if (onBulkAdd) {
-        await onBulkAdd(importData);
+      await onBulkAdd(importData);
     } else {
-        for (const item of importData) {
-            onAdd(item);
-        }
+      for (const item of importData) {
+        onAdd(item);
+      }
     }
     setIsImportModalOpen(false);
     setImportData([]);
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <i className="fa-solid fa-sort ml-1 opacity-20"></i>;
-    return sortOrder === 'asc' 
-      ? <i className="fa-solid fa-sort-up ml-1 text-blue-900"></i> 
-      : <i className="fa-solid fa-sort-down ml-1 text-blue-900"></i>;
+  // Helper date formatter (DD/MM/YYYY)
+  const formatDateBR = (isoDate: string) => {
+    if (!isoDate) return '-';
+    const parts = isoDate.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return isoDate;
   };
 
-  const handleBulkMarkAsPaid = async () => {
-    if (!onBulkUpdate) return;
-    
-    const today = new Date().toISOString().split('T')[0];
-    const itemsToUpdate = transactions
-      .filter(t => selectedIds.includes(t.id) && t.status === 'PENDENTE')
-      .map(t => ({
-        ...t,
-        status: type === 'PAGAR' ? 'PAGO' : 'RECEBIDO' as Status,
-        pagamento: today
-      }));
-      
-    if (itemsToUpdate.length > 0) {
-      await onBulkUpdate(itemsToUpdate);
-      setSelectedIds([]);
-    }
+  // Helper currency formatter
+  const formatCurrency = (val: number) => {
+    return val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
+
+  // Generate pagination range numbers
+  const paginationRange = useMemo(() => {
+    const range: (number | string)[] = [];
+    const maxVisible = 10;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) range.push(i);
+    } else {
+      // Show first pages, current window, and last
+      if (effectiveCurrentPage <= 4) {
+        for (let i = 1; i <= 6; i++) range.push(i);
+        range.push('...');
+        range.push(totalPages);
+      } else if (effectiveCurrentPage >= totalPages - 3) {
+        range.push(1);
+        range.push('...');
+        for (let i = totalPages - 5; i <= totalPages; i++) range.push(i);
+      } else {
+        range.push(1);
+        range.push('...');
+        for (let i = effectiveCurrentPage - 2; i <= effectiveCurrentPage + 2; i++) range.push(i);
+        range.push('...');
+        range.push(totalPages);
+      }
+    }
+    return range;
+  }, [totalPages, effectiveCurrentPage]);
 
   return (
-    <div className="space-y-6">
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-            {type === 'PAGAR' ? 'Total a Pagar (Pendente)' : 'Total a Receber (Pendente)'}
-          </p>
-          <p className="text-2xl font-black text-blue-900">
-            R$ {summary.totalPendente.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+    <div className="space-y-5 animate-in fade-in duration-200">
+      {/* Hidden File Input for CSV */}
+      <input
+        type="file"
+        accept=".csv"
+        ref={fileInputRef}
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {/* TOP HEADER - Matching the screenshot */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#001a54] tracking-tight">
+            {type === 'PAGAR' ? 'Contas a Pagar' : 'Contas a Receber'}
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 font-normal mt-0.5">
+            {type === 'PAGAR'
+              ? 'Gerencie os pagamentos pendentes e o histórico financeiro.'
+              : 'Gerencie os recebimentos pendentes e o histórico financeiro.'}
           </p>
         </div>
-        <div className="bg-white p-5 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-            {type === 'PAGAR' ? 'Total Pago (Mês)' : 'Total Recebido (Mês)'}
-          </p>
-          <p className="text-2xl font-black text-emerald-600">
-            R$ {summary.totalPagoMes.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="bg-white p-5 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-            Total Atrasado
-          </p>
-          <p className="text-2xl font-black text-red-500">
-            R$ {summary.totalAtrasado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
+
+        {/* Right Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Import / Export Menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setIsImportExportMenuOpen(!isImportExportMenuOpen)}
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-all active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[17px] text-slate-600">import_export</span>
+              <span>Importar/Exportar</span>
+              <span className="material-symbols-outlined text-[15px] text-slate-400">arrow_drop_down</span>
+            </button>
+
+            {isImportExportMenuOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 z-40 animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setIsImportExportMenuOpen(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-xs font-medium text-slate-700 hover:bg-[#ebf2fe] hover:text-[#001a54] flex items-center gap-2.5"
+                >
+                  <span className="material-symbols-outlined text-[17px] text-[#1d3b7a]">upload</span>
+                  <span>Importar CSV</span>
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="w-full px-4 py-2 text-left text-xs font-medium text-slate-700 hover:bg-[#ebf2fe] hover:text-[#001a54] flex items-center gap-2.5"
+                >
+                  <span className="material-symbols-outlined text-[17px] text-[#1d3b7a]">download</span>
+                  <span>Exportar CSV</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Cadastro em lote */}
+          <button
+            onClick={() => setIsBatchModalOpen(true)}
+            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-xs transition-all active:scale-95"
+          >
+            <span className="material-symbols-outlined text-[17px] text-slate-600">playlist_add</span>
+            <span>Cadastro em lote</span>
+          </button>
+
+          {/* + Cadastrar */}
+          <button
+            onClick={() => {
+              resetForm();
+              setIsModalOpen(true);
+            }}
+            className="bg-[#001a54] hover:bg-[#00133d] text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-all active:scale-95"
+          >
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            <span>Cadastrar</span>
+          </button>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 overflow-hidden border border-slate-100">
-        <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/50">
-        <h2 className="text-xl font-black text-blue-900 uppercase tracking-tighter">
-          {type === 'PAGAR' ? 'Contas a Pagar' : 'Contas a Receber'}
-        </h2>
-        <div className="flex flex-wrap items-center gap-2">
-           <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
-           <button onClick={() => fileInputRef.current?.click()} className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20">
-             <i className="fa-solid fa-file-import"></i> Importar CSV
-           </button>
-           <button onClick={() => { resetForm(); setIsModalOpen(true); }} className="bg-blue-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-800 transition-all shadow-lg shadow-blue-900/20">
-             <i className="fa-solid fa-plus"></i> Novo Registro
-           </button>
-           {selectedIds.length > 0 && onBulkUpdate && (
-             <button onClick={handleBulkMarkAsPaid} className="px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 hover:bg-emerald-600">
-               <i className="fa-solid fa-check-double"></i> {type === 'PAGAR' ? 'Pagar' : 'Receber'} ({selectedIds.length})
-             </button>
-           )}
-           <button onClick={() => onDelete(selectedIds)} disabled={selectedIds.length === 0} className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 transition-all ${selectedIds.length > 0 ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
-             <i className="fa-solid fa-trash-can"></i> {selectedIds.length > 0 ? `Excluir (${selectedIds.length})` : 'Excluir'}
-           </button>
-        </div>
-      </div>
-
-      <div className="p-4 bg-white border-b border-slate-50 space-y-4">
-        <div className="relative group">
-          <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-900 transition-colors"></i>
-          <input 
-            type="text" 
-            placeholder="Pesquisar por descrição, conta, categoria..." 
-            className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-blue-900/5 focus:border-blue-900 outline-none text-sm transition-all font-bold text-slate-700"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Status</label>
-            <select 
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs text-slate-700 font-bold focus:ring-2 focus:ring-blue-900/10"
+      {/* FILTER BAR & TOTAL ROW - Matching the screenshot */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Filters Group */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Status Dropdown */}
+          <div className="flex items-center gap-1.5">
+            <select
               value={filterStatus}
-              onChange={e => setFilterStatus(e.target.value as any)}
+              onChange={e => handleFilterChange(setFilterStatus, e.target.value)}
+              className="bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] transition-all cursor-pointer"
             >
-              <option value="TODOS">Todos os Status</option>
-              <option value="PENDENTE">Pendente</option>
-              {type === 'PAGAR' ? <option value="PAGO">Pago</option> : <option value="RECEBIDO">Recebido</option>}
+              <option value="TODOS">Status: Todos</option>
+              <option value="PENDENTE">Status: Pendente</option>
+              <option value={type === 'PAGAR' ? 'PAGO' : 'RECEBIDO'}>
+                Status: {type === 'PAGAR' ? 'Pago' : 'Recebido'}
+              </option>
+              <option value="ATRASADO">Status: Atrasado</option>
             </select>
           </div>
-          <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Período</label>
-            <select 
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs text-slate-700 font-bold focus:ring-2 focus:ring-blue-900/10"
+
+          {/* Vencimento / Periodo Dropdown */}
+          <div className="flex items-center gap-1.5">
+            <select
               value={filterPeriod}
-              onChange={e => setFilterPeriod(e.target.value as any)}
+              onChange={e => handleFilterChange(setFilterPeriod, e.target.value)}
+              className="bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] transition-all cursor-pointer"
             >
-              <option value="TODOS">Todo o Período</option>
-              <option value="MES_ATUAL">Mês Atual</option>
-              <option value="ULTIMOS_30_DIAS">Últimos 30 Dias</option>
+              <option value="TODOS">Vencimento: Todos</option>
+              <option value="MES_ATUAL">Vencimento: Mês Atual</option>
+              <option value="ULTIMOS_30_DIAS">Vencimento: Últimos 30 Dias</option>
+              <option value="ATRASADOS">Vencimento: Apenas Vencidos</option>
             </select>
           </div>
-          <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Centro de Custo</label>
-            <select 
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs text-slate-700 font-bold focus:ring-2 focus:ring-blue-900/10"
+
+          {/* Centro de Custo Dropdown */}
+          <div className="flex items-center gap-1.5">
+            <select
               value={filterCentroCusto}
-              onChange={e => setFilterCentroCusto(e.target.value)}
+              onChange={e => handleFilterChange(setFilterCentroCusto, e.target.value)}
+              className="bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] transition-all cursor-pointer max-w-[220px] truncate"
             >
-              <option value="TODOS">Todos os Centros</option>
-              {Array.from(new Set(transactions.map(t => t.centroCusto))).map(cc => (
-                <option key={cc} value={cc}>{cc}</option>
+              <option value="TODOS">Centro de Custo: Todos</option>
+              {availableCostCenters.map(cc => (
+                <option key={cc.id} value={cc.nome}>
+                  {cc.nome}
+                </option>
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Conta</label>
-            <select 
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none text-xs text-slate-700 font-bold focus:ring-2 focus:ring-blue-900/10"
-              value={filterConta}
-              onChange={e => setFilterConta(e.target.value)}
-            >
-              <option value="TODOS">Todas as Contas</option>
-              {Array.from(new Set(transactions.map(t => t.conta || 'GERAL'))).map(conta => (
-                <option key={conta} value={conta}>{conta}</option>
-              ))}
-            </select>
+
+          {/* Search box inline */}
+          <div className="relative">
+            <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">
+              search
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar..."
+              value={searchTerm}
+              onChange={e => handleFilterChange(setSearchTerm, e.target.value)}
+              className="pl-8 pr-3 py-1.5 text-xs bg-slate-50/70 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] transition-all w-36 sm:w-48 placeholder:text-slate-400"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => handleFilterChange(setSearchTerm, '')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+              >
+                &times;
+              </button>
+            )}
           </div>
+
+          {/* Limpar Filtros */}
+          {(filterStatus !== 'TODOS' || filterPeriod !== 'TODOS' || filterCentroCusto !== 'TODOS' || searchTerm) && (
+            <button
+              onClick={handleClearFilters}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline transition-all cursor-pointer"
+            >
+              Limpar Filtros
+            </button>
+          )}
+        </div>
+
+        {/* Right Metric: Total Pendente */}
+        <div className="text-right flex items-center md:justify-end gap-2">
+          <span className="text-xs text-slate-500 font-medium">Total Pendente:</span>
+          <span className="text-sm sm:text-base font-bold text-[#001a54] tracking-tight">
+            R$ {formatCurrency(totalPendente)}
+          </span>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-widest">
-              <th className="p-5 w-12 text-center">
-                <input type="checkbox" onChange={(e) => e.target.checked ? setSelectedIds(sortedAndFiltered.map(t => t.id)) : setSelectedIds([])} />
-              </th>
-              <th className="p-5 cursor-pointer hover:text-blue-900 transition-colors" onClick={() => handleSort('vencimento')}>
-                Vencimento <SortIcon field="vencimento" />
-              </th>
-              <th className="p-5">Descrição / Conta</th>
-              <th className="p-5 text-right cursor-pointer hover:text-blue-900 transition-colors" onClick={() => handleSort('valor')}>
-                Valor <SortIcon field="valor" />
-              </th>
-              <th className="p-5">Categoria</th>
-              <th className="p-5">Status / Pagamento</th>
-              <th className="p-5 text-center">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="text-sm divide-y divide-slate-100">
-            {sortedAndFiltered.map((t) => {
-              const alert = getVencimentoAlert(t.vencimento, t.status);
-              return (
-                <tr key={t.id} className={`${selectedIds.includes(t.id) ? 'bg-blue-50/50' : 'hover:bg-slate-50/30'} transition-colors group`}>
-                  <td className="p-5 text-center">
-                     <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={() => setSelectedIds(prev => prev.includes(t.id) ? prev.filter(i => i !== t.id) : [...prev, t.id])} />
-                  </td>
-                  <td className="p-5 font-bold text-slate-600">
-                    <div className="flex items-center gap-2">
-                      {alert && (
-                        <div className={`relative group/alert`} title={alert.label}>
-                          <i className={`fa-solid ${alert.icon} ${alert.color} text-base animate-pulse`}></i>
-                          <span className="absolute left-full ml-2 bg-slate-800 text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover/alert:opacity-100 transition-opacity whitespace-nowrap z-20">
-                            {alert.label}
-                          </span>
-                        </div>
-                      )}
-                      <span className={alert?.type === 'overdue' ? 'text-red-600' : ''}>
-                        {new Date(t.vencimento).toLocaleDateString('pt-BR')}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="p-5">
-                    <div className="font-black text-blue-900 uppercase tracking-tight leading-none mb-1 flex items-center gap-2">
-                      {t.descricao}
-                      {t.cliente && (
-                        <a href={t.cliente} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 transition-colors" title="Ver Comprovante/Boleto">
-                          <i className="fa-solid fa-link text-xs"></i>
-                        </a>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded font-black text-slate-500 uppercase">{t.conta || 'GERAL'}</span>
-                      <span className="text-[9px] text-slate-400 uppercase font-bold">{t.formaPagamento}</span>
-                    </div>
-                  </td>
-                  <td className={`p-5 text-right font-black text-lg ${type === 'PAGAR' ? 'text-red-500' : 'text-emerald-600'}`}>
-                     R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="p-5">
-                    <div className="text-[10px] uppercase font-black text-slate-400 leading-none">{t.centroCusto}</div>
-                    <div className="text-[9px] font-bold text-slate-300 uppercase">{t.subItem}</div>
-                  </td>
-                  <td className="p-5">
-                    <div className="flex flex-col gap-1">
-                      <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest inline-block w-fit ${
-                        String(t.status) === 'PENDENTE' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {t.status}
-                      </span>
-                      {t.pagamento && (
-                        <span className="text-[9px] text-slate-400 font-bold italic">
-                          Baixa: {new Date(t.pagamento).toLocaleDateString('pt-BR')}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-5 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => {
-                        if (t.status === 'PENDENTE') {
-                          onUpdate({
-                            ...t,
-                            status: type === 'PAGAR' ? 'PAGO' : 'RECEBIDO',
-                            pagamento: new Date().toISOString().split('T')[0]
-                          });
-                        } else {
-                          onUpdate({
-                            ...t,
-                            status: 'PENDENTE',
-                            pagamento: undefined
-                          });
-                        }
-                      }} className={`p-3 rounded-xl transition-all ${
-                        t.status === 'PENDENTE' 
-                          ? 'text-emerald-600 hover:bg-emerald-50' 
-                          : 'text-amber-600 hover:bg-amber-50'
-                      }`} title={t.status === 'PENDENTE' ? (type === 'PAGAR' ? 'Marcar como Pago' : 'Marcar como Recebido') : 'Desfazer Baixa'}>
-                        <i className={`fa-solid ${t.status === 'PENDENTE' ? 'fa-check-circle' : 'fa-arrow-rotate-left'}`}></i>
-                      </button>
-                      <button onClick={() => {
-                        setEditingId(t.id);
-                        setFormData({
-                          vencimento: t.vencimento, pagamento: t.pagamento || '', descricao: t.descricao,
-                          valor: t.valor.toString(), formaPagamento: t.formaPagamento, centroCusto: t.centroCusto,
-                          subItem: t.subItem, status: t.status, conta: t.conta || 'GERAL',
-                          comprovanteUrl: t.cliente || ''
-                        });
-                        setIsModalOpen(true);
-                      }} className="text-blue-900 hover:bg-blue-50 p-3 rounded-xl transition-all" title="Editar"><i className="fa-solid fa-pen-to-square"></i></button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {/* BULK ACTIONS BAR (When items are selected) */}
+      {selectedIds.length > 0 && (
+        <div className="bg-[#ebf2fe] border border-[#dce6fd] rounded-xl px-4 py-2.5 flex items-center justify-between animate-in fade-in duration-150">
+          <div className="flex items-center gap-2 text-xs text-[#001a54] font-semibold">
+            <span className="w-5 h-5 rounded-full bg-[#001a54] text-white flex items-center justify-center text-[10px] font-bold">
+              {selectedIds.length}
+            </span>
+            <span>item(ns) selecionado(s)</span>
+          </div>
 
-      {/* Modal de Confirmação de Importação */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 bg-blue-900/80 backdrop-blur-lg z-[110] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in fade-in duration-300">
-            <div className="bg-emerald-600 p-6 text-white text-center">
-                <i className="fa-solid fa-cloud-arrow-up text-4xl mb-4"></i>
-                <h3 className="text-2xl font-black uppercase tracking-tighter">Confirmar Importação</h3>
-                <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mt-1">Verifique os dados antes de processar</p>
-            </div>
-            <div className="p-8 space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-center">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Registros</p>
-                        <p className="text-2xl font-black text-blue-900">{importData.length}</p>
-                    </div>
-                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 text-center">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Valor Total</p>
-                        <p className={`text-2xl font-black ${type === 'PAGAR' ? 'text-red-500' : 'text-emerald-600'}`}>
-                            R$ {importData.reduce((acc, i) => acc + i.valor, 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="bg-amber-50 border-2 border-amber-100 p-4 rounded-xl flex gap-3">
-                    <i className="fa-solid fa-triangle-exclamation text-amber-500 text-xl"></i>
-                    <p className="text-[10px] font-bold text-amber-700 leading-relaxed uppercase">
-                        Certifique-se de que o CSV possui o separador correto (; ou ,) e as colunas de Vencimento, Valor, Conta e Status estão presentes.
-                    </p>
-                </div>
-
-                <div className="flex gap-4">
-                    <button onClick={() => setIsImportModalOpen(false)} className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-500 font-black uppercase text-xs tracking-widest hover:bg-slate-200 transition-all">Cancelar</button>
-                    <button onClick={confirmImport} className="flex-1 py-4 rounded-2xl bg-emerald-600 text-white font-black uppercase text-xs tracking-widest hover:bg-emerald-700 shadow-xl shadow-emerald-600/30 transition-all">Confirmar e Salvar</button>
-                </div>
-            </div>
+          <div className="flex items-center gap-2">
+            {onBulkUpdate && (
+              <button
+                onClick={handleBulkMarkAsPaid}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+              >
+                <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                <span>Marcar como {type === 'PAGAR' ? 'Pago' : 'Recebido'}</span>
+              </button>
+            )}
+            <button
+              onClick={handleBulkDelete}
+              className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+            >
+              <span className="material-symbols-outlined text-[16px]">delete</span>
+              <span>Excluir</span>
+            </button>
           </div>
         </div>
       )}
 
+      {/* MAIN DATA TABLE - Exactly matching the screenshot */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#f8faff] text-slate-500 text-xs font-semibold border-b border-slate-100 select-none">
+                <th className="py-3.5 px-4 w-12 text-center">
+                  <input
+                    type="checkbox"
+                    checked={areAllCurrentPageSelected}
+                    onChange={handleSelectAllCurrentPage}
+                    className="w-4 h-4 rounded border-slate-300 text-[#001a54] focus:ring-0 cursor-pointer"
+                  />
+                </th>
+
+                <th
+                  onClick={() => handleSort('vencimento')}
+                  className="py-3.5 px-4 cursor-pointer hover:text-[#001a54] transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Vencimento</span>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {sortField === 'vencimento' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                    </span>
+                  </div>
+                </th>
+
+                <th
+                  onClick={() => handleSort('descricao')}
+                  className="py-3.5 px-4 cursor-pointer hover:text-[#001a54] transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Descrição</span>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {sortField === 'descricao' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                    </span>
+                  </div>
+                </th>
+
+                <th
+                  onClick={() => handleSort('valor')}
+                  className="py-3.5 px-4 cursor-pointer hover:text-[#001a54] transition-colors text-right"
+                >
+                  <div className="flex items-center justify-end gap-1.5">
+                    <span>Valor</span>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {sortField === 'valor' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                    </span>
+                  </div>
+                </th>
+
+                <th className="py-3.5 px-4">Forma de Pagamento</th>
+                <th className="py-3.5 px-4">Status</th>
+
+                <th
+                  onClick={() => handleSort('centroCusto')}
+                  className="py-3.5 px-4 cursor-pointer hover:text-[#001a54] transition-colors"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Centro de Custo</span>
+                    <span className="material-symbols-outlined text-[14px]">
+                      {sortField === 'centroCusto' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'unfold_more'}
+                    </span>
+                  </div>
+                </th>
+
+                <th className="py-3.5 px-4 text-center">Ações</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {displayedTransactions.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="text-center py-16 text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <span className="material-symbols-outlined text-[36px] text-slate-300">
+                        receipt_long
+                      </span>
+                      <p className="text-sm font-medium text-slate-500">Nenhum lançamento encontrado</p>
+                      <p className="text-xs text-slate-400">Tente ajustar os filtros ou cadastre um novo registro.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                displayedTransactions.map(t => {
+                  const isSelected = selectedIds.includes(t.id);
+                  const isAtrasado = t.status === 'PENDENTE' && t.vencimento < todayStr;
+                  const isPaid = t.status === 'PAGO' || t.status === 'RECEBIDO';
+
+                  return (
+                    <tr
+                      key={t.id}
+                      className={`transition-colors group ${
+                        isSelected ? 'bg-[#f4f7fe]' : 'hover:bg-slate-50/70'
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <td className="py-3.5 px-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelect(t.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-[#001a54] focus:ring-0 cursor-pointer"
+                        />
+                      </td>
+
+                      {/* Vencimento */}
+                      <td className="py-3.5 px-4 font-medium whitespace-nowrap">
+                        <span className={isAtrasado ? 'text-[#b42318] font-bold' : 'text-slate-700'}>
+                          {formatDateBR(t.vencimento)}
+                        </span>
+                      </td>
+
+                      {/* Descrição */}
+                      <td className="py-3.5 px-4 font-bold text-slate-800 tracking-tight">
+                        <div className="flex items-center gap-2">
+                          <span className="uppercase">{t.descricao}</span>
+                          {t.cliente && (
+                            <a
+                              href={t.cliente}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-500 hover:text-blue-700"
+                              title="Ver anexo / comprovante"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">link</span>
+                            </a>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Valor */}
+                      <td className="py-3.5 px-4 text-right font-bold text-slate-900 whitespace-nowrap">
+                        {formatCurrency(t.valor)}
+                      </td>
+
+                      {/* Forma de Pagamento */}
+                      <td className="py-3.5 px-4 text-slate-500 font-medium uppercase whitespace-nowrap">
+                        {t.formaPagamento || 'PIX'}
+                      </td>
+
+                      {/* Status Badge */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {isPaid ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-[#d1fadf] text-[#027a48] tracking-wider uppercase">
+                            {t.status}
+                          </span>
+                        ) : isAtrasado ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-[#fee4e2] text-[#b42318] tracking-wider uppercase">
+                            ATRASADO
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-[#fef0c7] text-[#b54708] tracking-wider uppercase">
+                            PENDENTE
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Centro de Custo */}
+                      <td className="py-3.5 px-4 text-slate-600 font-semibold uppercase tracking-tight whitespace-nowrap">
+                        {t.centroCusto || 'SEM CENTRO DE CUSTO'}
+                      </td>
+
+                      {/* Ações: 3 round icon buttons matching print */}
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {/* Toggle Paid / Check */}
+                          <button
+                            onClick={() => handleTogglePaid(t)}
+                            title={t.status === 'PENDENTE' ? 'Marcar como Baixado' : 'Desfazer Baixa'}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                              isPaid
+                                ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                                : 'text-emerald-600 hover:bg-emerald-50'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[17px]">
+                              check_circle
+                            </span>
+                          </button>
+
+                          {/* Edit */}
+                          <button
+                            onClick={() => handleOpenEdit(t)}
+                            title="Editar"
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:text-[#001a54] hover:bg-slate-100 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-[17px]">edit</span>
+                          </button>
+
+                          {/* Delete */}
+                          <button
+                            onClick={() => {
+                              if (confirm(`Excluir o lançamento "${t.descricao}"?`)) {
+                                onDelete([t.id]);
+                              }
+                            }}
+                            title="Excluir"
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all"
+                          >
+                            <span className="material-symbols-outlined text-[17px]">delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* PAGINATION FOOTER - 50 items per page limit */}
+        <div className="px-5 py-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs select-none">
+          {/* Info text */}
+          <div className="text-slate-500 font-medium">
+            {totalRecords === 0
+              ? 'Mostrando 0 registros'
+              : `Mostrando ${startIndex + 1}-${endIndex} de ${totalRecords} registros`}
+          </div>
+
+          {/* Numbered Pagination Buttons */}
+          <div className="flex items-center gap-1 overflow-x-auto py-1">
+            {/* Previous Page Button */}
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={effectiveCurrentPage === 1}
+              className="w-7 h-7 flex items-center justify-center border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Página Anterior"
+            >
+              <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+            </button>
+
+            {/* Page numbers */}
+            {paginationRange.map((page, index) => {
+              if (page === '...') {
+                return (
+                  <span key={`ellipsis-${index}`} className="px-1 text-slate-400">
+                    ...
+                  </span>
+                );
+              }
+
+              const pageNum = Number(page);
+              const isActive = pageNum === effectiveCurrentPage;
+
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`w-7 h-7 flex items-center justify-center rounded-lg text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'border-2 border-[#001a54] text-[#001a54] bg-[#ebf2fe]/60 font-bold'
+                      : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+
+            {/* Next Page Button */}
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={effectiveCurrentPage === totalPages || totalPages === 0}
+              className="w-7 h-7 flex items-center justify-center border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Próxima Página"
+            >
+              <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL: NOVO / EDITAR LANÇAMENTO */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-blue-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-300 border border-white/20">
-            <div className="bg-blue-900 p-6 flex justify-between items-center text-white">
-              <div>
-                <h3 className="text-xl font-black uppercase tracking-tighter">
-                  {editingId ? 'Editar Lançamento' : 'Novo Lançamento'}
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in duration-150 border border-slate-100">
+            <div className="bg-[#001a54] p-5 flex justify-between items-center text-white">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[22px]">
+                  {editingId ? 'edit_note' : 'add_circle'}
+                </span>
+                <h3 className="text-base font-bold tracking-tight">
+                  {editingId ? 'Editar Lançamento' : `Novo Lançamento - ${type === 'PAGAR' ? 'Contas a Pagar' : 'Contas a Receber'}`}
                 </h3>
-                <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest">{type === 'PAGAR' ? 'Contas a Pagar' : 'Contas a Receber'}</p>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="bg-white/10 w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/20 transition-all font-bold text-xl">&times;</button>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
             </div>
-            
-            <form onSubmit={handleSave} className="p-6 space-y-5 overflow-y-auto max-h-[85vh]">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Data Vencimento</label>
-                  <input type="date" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 transition-all text-slate-700 font-medium" value={formData.vencimento} onChange={e => setFormData({...formData, vencimento: e.target.value})} required />
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Data de Vencimento *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                    value={formData.vencimento}
+                    onChange={e => setFormData({ ...formData, vencimento: e.target.value })}
+                  />
                 </div>
+
                 {formData.status !== 'PENDENTE' && (
-                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                    <label className="block text-[10px] font-black text-blue-900 uppercase tracking-widest mb-1.5">Data do Pagamento / Recebimento</label>
-                    <input type="date" className="w-full p-3 bg-emerald-50 border border-emerald-200 rounded-xl outline-none focus:ring-4 focus:ring-emerald-900/5 transition-all text-emerald-700 font-bold" value={formData.pagamento} onChange={e => setFormData({...formData, pagamento: e.target.value})} required />
+                  <div>
+                    <label className="block text-[11px] font-bold text-emerald-800 uppercase mb-1">
+                      Data do Pagamento/Baixa *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50/50 rounded-xl text-xs text-emerald-900 font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                      value={formData.pagamento || formData.vencimento}
+                      onChange={e => setFormData({ ...formData, pagamento: e.target.value })}
+                    />
                   </div>
                 )}
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Descrição do Lançamento</label>
-                <input type="text" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 uppercase font-medium text-slate-700" placeholder="Ex: PAGAMENTO FORNECEDOR X" value={formData.descricao} onChange={e => setFormData({...formData, descricao: e.target.value.toUpperCase()})} required />
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Descrição *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: ALUGUEL ESCRITÓRIO"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs uppercase focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                  value={formData.descricao}
+                  onChange={e => setFormData({ ...formData, descricao: e.target.value.toUpperCase() })}
+                />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Valor (R$)</label>
-                   <input type="number" step="0.01" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none font-black text-lg text-blue-900" placeholder="0,00" value={formData.valor} onChange={e => setFormData({...formData, valor: e.target.value})} required />
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Valor (R$) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-[#001a54] focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                    value={formData.valor}
+                    onChange={e => setFormData({ ...formData, valor: e.target.value })}
+                  />
                 </div>
-                <div>
-                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Status do Pagamento</label>
-                   <select className={`w-full p-3 border rounded-xl outline-none font-black text-xs transition-colors ${formData.status === 'PENDENTE' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`} value={formData.status} onChange={e => handleStatusChange(e.target.value as Status)}>
-                     <option value="PENDENTE">🟡 PENDENTE</option>
-                     {type === 'PAGAR' ? <option value="PAGO">🟢 PAGO</option> : <option value="RECEBIDO">🟢 RECEBIDO</option>}
-                   </select>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Conta / Banco</label>
-                  <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 transition-all font-bold text-slate-700" value={formData.conta} onChange={e => setFormData({...formData, conta: e.target.value})}>
-                    <option value="CAIXA">CAIXA</option>
-                    <option value="INTER">INTER</option>
-                    <option value="BRADESCO">INFINIT</option>
-                    <option value="GERAL">GERAL / DINHEIRO</option>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={formData.status}
+                    onChange={e => {
+                      const newStatus = e.target.value as Status;
+                      setFormData(prev => ({
+                        ...prev,
+                        status: newStatus,
+                        pagamento: newStatus === 'PENDENTE' ? '' : (prev.pagamento || prev.vencimento)
+                      }));
+                    }}
+                    className={`w-full px-3 py-2 border rounded-xl text-xs font-bold outline-none ${
+                      formData.status === 'PENDENTE'
+                        ? 'border-amber-300 bg-amber-50 text-amber-800'
+                        : 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                    }`}
+                  >
+                    <option value="PENDENTE">🟡 PENDENTE</option>
+                    <option value={type === 'PAGAR' ? 'PAGO' : 'RECEBIDO'}>
+                      🟢 {type === 'PAGAR' ? 'PAGO' : 'RECEBIDO'}
+                    </option>
                   </select>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Centro de Custo (Estrutura)</label>
-                   <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm text-slate-700 font-bold" value={formData.centroCusto} onChange={e => setFormData({...formData, centroCusto: e.target.value, subItem: ''})} required>
-                     <option value="">Selecione...</option>
-                     {availableCostCenters.map(cc => <option key={cc.id} value={cc.nome}>{cc.nome}</option>)}
-                   </select>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Centro de Custo *
+                  </label>
+                  <select
+                    required
+                    value={formData.centroCusto}
+                    onChange={e => setFormData({ ...formData, centroCusto: e.target.value, subItem: '' })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                  >
+                    <option value="">Selecione o centro de custo...</option>
+                    {availableCostCenters.map(cc => (
+                      <option key={cc.id} value={cc.nome}>
+                        {cc.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Sub-item
+                  </label>
+                  <select
+                    value={formData.subItem}
+                    onChange={e => setFormData({ ...formData, subItem: e.target.value })}
+                    disabled={!formData.centroCusto}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none disabled:bg-slate-100 disabled:text-slate-400"
+                  >
+                    <option value="">Selecione o sub-item (opcional)...</option>
+                    {availableSubItems.map((si, idx) => (
+                      <option key={idx} value={si}>
+                        {si}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Sub-item</label>
-                   <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none text-sm text-slate-700 font-bold disabled:opacity-50" value={formData.subItem} onChange={e => setFormData({...formData, subItem: e.target.value})} required disabled={!formData.centroCusto}>
-                     <option value="">Selecione...</option>
-                     {availableSubItems.map(si => <option key={si} value={si}>{si}</option>)}
-                   </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Forma de Movimentação</label>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Forma de Pagamento
+                  </label>
                   <div className="grid grid-cols-3 gap-1">
-                    {['PIX', 'BOLETO', 'DINHEIRO', 'CARTÃO', 'TED'].map(forma => (
-                      <button type="button" key={forma} onClick={() => setFormData({...formData, formaPagamento: forma})} className={`py-2 rounded-lg text-[9px] font-black transition-all border ${formData.formaPagamento === forma ? 'bg-blue-900 text-white border-blue-900 shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
-                        {forma}
+                    {['PIX', 'BOLETO', 'TED', 'CARTÃO', 'DINHEIRO', 'CHEQUE'].map(f => (
+                      <button
+                        type="button"
+                        key={f}
+                        onClick={() => setFormData({ ...formData, formaPagamento: f })}
+                        className={`py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
+                          formData.formaPagamento === f
+                            ? 'bg-[#001a54] text-white border-[#001a54]'
+                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        {f}
                       </button>
                     ))}
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Link do Comprovante / Boleto (Opcional)</label>
-                <div className="relative group">
-                  <i className="fa-solid fa-link absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-900 transition-colors"></i>
-                  <input type="url" className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-4 focus:ring-blue-900/5 font-medium text-slate-700 transition-all" placeholder="https://" value={formData.comprovanteUrl} onChange={e => setFormData({...formData, comprovanteUrl: e.target.value})} />
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                    Conta / Banco
+                  </label>
+                  <select
+                    value={formData.conta}
+                    onChange={e => setFormData({ ...formData, conta: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                  >
+                    <option value="GERAL">GERAL / CAIXA</option>
+                    <option value="INTER">BANCO INTER</option>
+                    <option value="BRADESCO">BRADESCO</option>
+                    <option value="CAIXA">CAIXA ECONÔMICA</option>
+                    <option value="INFINIT">INFINIT</option>
+                  </select>
                 </div>
               </div>
 
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                  Link do Comprovante / Anexo (Opcional)
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                  value={formData.comprovanteUrl}
+                  onChange={e => setFormData({ ...formData, comprovanteUrl: e.target.value })}
+                />
+              </div>
+
+              {/* Recurrence (only when creating new) */}
               {!editingId && (
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3">
-                  <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsRecurring(!isRecurring)}>
-                    <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} className="w-4 h-4 text-blue-900 rounded border-slate-300 focus:ring-blue-900" />
-                    <label className="text-xs font-bold text-slate-700 cursor-pointer">Lançamento Recorrente?</label>
-                  </div>
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 select-none">
+                    <input
+                      type="checkbox"
+                      checked={isRecurring}
+                      onChange={e => setIsRecurring(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-[#001a54] focus:ring-0 cursor-pointer"
+                    />
+                    <span>Lançamento Recorrente (Parcelamento Mensal)?</span>
+                  </label>
+
                   {isRecurring && (
-                    <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Qtd. Meses:</label>
-                      <input type="number" min="2" max="60" className="w-24 p-2 bg-white border border-slate-200 rounded-lg outline-none focus:ring-4 focus:ring-blue-900/5 font-bold text-slate-700 text-center" value={recurrences} onChange={e => setRecurrences(Math.max(2, parseInt(e.target.value) || 2))} />
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">({recurrences} parcelas mensais)</span>
+                    <div className="flex items-center gap-2 pt-1 animate-in fade-in">
+                      <span className="text-xs text-slate-500 font-medium">Quantidade de Meses:</span>
+                      <input
+                        type="number"
+                        min="2"
+                        max="60"
+                        value={recurrences}
+                        onChange={e => setRecurrences(Math.max(2, parseInt(e.target.value) || 2))}
+                        className="w-20 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-center text-[#001a54]"
+                      />
+                      <span className="text-[11px] text-slate-400">({recurrences} parcelas consecutivas)</span>
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 px-4 py-4 bg-slate-100 rounded-2xl font-black text-slate-500 hover:bg-slate-200 transition-all uppercase text-[10px] tracking-widest">Cancelar</button>
-                <button type="submit" className="flex-1 px-4 py-4 bg-blue-900 text-white rounded-2xl font-black hover:bg-blue-800 shadow-xl shadow-blue-900/30 transition-all uppercase text-[10px] tracking-widest flex items-center justify-center gap-2">
-                  <i className="fa-solid fa-check"></i> Finalizar Lançamento
+              <div className="flex gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-[#001a54] text-white rounded-xl text-xs font-bold hover:bg-[#00133d] shadow-sm transition-all"
+                >
+                  {editingId ? 'Salvar Alterações' : 'Cadastrar Lançamento'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-    </div>
+
+      {/* MODAL: CADASTRO EM LOTE */}
+      {isBatchModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in duration-150 border border-slate-100">
+            <div className="bg-[#001a54] p-5 flex justify-between items-center text-white">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[22px]">playlist_add</span>
+                <h3 className="text-base font-bold tracking-tight">
+                  Cadastro em Lote - {type === 'PAGAR' ? 'Contas a Pagar' : 'Contas a Receber'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsBatchModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              <p className="text-xs text-slate-500">
+                Preencha os campos abaixo para cadastrar múltiplos lançamentos simultaneamente:
+              </p>
+
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-[#f8faff] text-slate-500 font-semibold border-b border-slate-200">
+                    <tr>
+                      <th className="p-2.5 w-32">Vencimento</th>
+                      <th className="p-2.5">Descrição *</th>
+                      <th className="p-2.5 w-28">Valor (R$) *</th>
+                      <th className="p-2.5 w-32">Forma</th>
+                      <th className="p-2.5 w-44">Centro de Custo</th>
+                      <th className="p-2.5 w-28">Status</th>
+                      <th className="p-2.5 w-10 text-center"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {batchRows.map((row, idx) => (
+                      <tr key={row.id}>
+                        <td className="p-2">
+                          <input
+                            type="date"
+                            value={row.vencimento}
+                            onChange={e => {
+                              const updated = [...batchRows];
+                              updated[idx].vencimento = e.target.value;
+                              setBatchRows(updated);
+                            }}
+                            className="w-full p-1.5 border border-slate-200 rounded-lg text-xs"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="text"
+                            placeholder="Descrição"
+                            value={row.descricao}
+                            onChange={e => {
+                              const updated = [...batchRows];
+                              updated[idx].descricao = e.target.value.toUpperCase();
+                              setBatchRows(updated);
+                            }}
+                            className="w-full p-1.5 border border-slate-200 rounded-lg text-xs uppercase"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder="0,00"
+                            value={row.valor}
+                            onChange={e => {
+                              const updated = [...batchRows];
+                              updated[idx].valor = e.target.value;
+                              setBatchRows(updated);
+                            }}
+                            className="w-full p-1.5 border border-slate-200 rounded-lg text-xs font-bold text-[#001a54]"
+                          />
+                        </td>
+                        <td className="p-2">
+                          <select
+                            value={row.formaPagamento}
+                            onChange={e => {
+                              const updated = [...batchRows];
+                              updated[idx].formaPagamento = e.target.value;
+                              setBatchRows(updated);
+                            }}
+                            className="w-full p-1.5 border border-slate-200 rounded-lg text-xs"
+                          >
+                            {['PIX', 'BOLETO', 'TED', 'CARTÃO', 'DINHEIRO'].map(f => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <select
+                            value={row.centroCusto}
+                            onChange={e => {
+                              const updated = [...batchRows];
+                              updated[idx].centroCusto = e.target.value;
+                              setBatchRows(updated);
+                            }}
+                            className="w-full p-1.5 border border-slate-200 rounded-lg text-xs"
+                          >
+                            <option value="">Selecione...</option>
+                            {availableCostCenters.map(cc => (
+                              <option key={cc.id} value={cc.nome}>
+                                {cc.nome}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="p-2">
+                          <select
+                            value={row.status}
+                            onChange={e => {
+                              const updated = [...batchRows];
+                              updated[idx].status = e.target.value as Status;
+                              setBatchRows(updated);
+                            }}
+                            className="w-full p-1.5 border border-slate-200 rounded-lg text-xs font-bold"
+                          >
+                            <option value="PENDENTE">PENDENTE</option>
+                            <option value={type === 'PAGAR' ? 'PAGO' : 'RECEBIDO'}>
+                              {type === 'PAGAR' ? 'PAGO' : 'RECEBIDO'}
+                            </option>
+                          </select>
+                        </td>
+                        <td className="p-2 text-center">
+                          {batchRows.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBatchRows(batchRows.filter((_, i) => i !== idx));
+                              }}
+                              className="text-slate-400 hover:text-rose-600"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">close</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchRows([
+                      ...batchRows,
+                      {
+                        id: crypto.randomUUID(),
+                        vencimento: todayStr,
+                        descricao: '',
+                        valor: '',
+                        formaPagamento: 'PIX',
+                        centroCusto: '',
+                        subItem: '',
+                        conta: 'GERAL',
+                        status: 'PENDENTE'
+                      }
+                    ]);
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold text-[#001a54] hover:bg-[#ebf2fe] rounded-lg transition-colors flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[16px]">add</span>
+                  <span>+ Adicionar mais linhas</span>
+                </button>
+              </div>
+
+              <div className="flex gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsBatchModalOpen(false)}
+                  className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveBatch}
+                  className="flex-1 py-2.5 bg-[#001a54] text-white rounded-xl text-xs font-bold hover:bg-[#00133d] shadow-sm transition-all"
+                >
+                  Salvar Lote de Lançamentos
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CONFIRMAÇÃO DE IMPORTAÇÃO CSV */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-150 border border-slate-100">
+            <div className="bg-[#001a54] p-5 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[22px]">cloud_upload</span>
+                <h3 className="text-base font-bold tracking-tight">Confirmar Importação CSV</h3>
+              </div>
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Registros Identificados</p>
+                  <p className="text-2xl font-bold text-[#001a54]">{importData.length}</p>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-center">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Valor Total</p>
+                  <p className="text-2xl font-bold text-[#001a54]">
+                    R$ {formatCurrency(importData.reduce((acc, i) => acc + i.valor, 0))}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/70 text-xs text-amber-800 flex gap-2">
+                <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">info</span>
+                <span>
+                  Todos os lançamentos do arquivo serão adicionados com seus respectivos vencimentos, descrições e centros de custo mapeados.
+                </span>
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmImport}
+                  className="flex-1 py-2.5 bg-[#001a54] text-white rounded-xl text-xs font-bold hover:bg-[#00133d] shadow-sm transition-all"
+                >
+                  Confirmar e Importar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 {
-  "name": "Multiplan - Gestão Financeira Profissional 1.0",
-  "description": "Sistema completo de gestão de contas a pagar, receber, fluxo de caixa e dashboard com controle de acesso multinível.",
-  "requestFramePermissions": []
+  "name": "Multiplan - Gestão Financeira & Cotador de Planos",
+  "description": "Sistema completo de gestão comercial, motor de cotação de planos de saúde e odontológicos com importador automático de tabelas oficiais em PDF.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Proposal } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -13,10 +13,15 @@ const COLORS = ['#1e3a8a', '#f97316', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4'
 const MONTHS_LABELS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
 
 const Dashboard: React.FC<DashboardProps> = ({ proposals }) => {
+  const [isMounted, setIsMounted] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<number | 'TODOS'>('TODOS');
   const [selectedYear, setSelectedYear] = useState<string | 'TODOS'>(new Date().getFullYear().toString());
   const [rankingToggle, setRankingToggle] = useState<'VALOR' | 'VIDAS'>('VALOR');
   const [selectedCorretor, setSelectedCorretor] = useState<string | 'TODOS'>('TODOS');
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const corretoresDisponiveis = useMemo(() => {
     const set = new Set<string>();
@@ -252,20 +257,22 @@ const Dashboard: React.FC<DashboardProps> = ({ proposals }) => {
               </button>
             </div>
           </div>
-          <div className="h-[350px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={rankingCorretores} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
-                <XAxis type="number" axisLine={false} tickLine={false} tick={{fontSize: 10}} tickFormatter={rankingToggle === 'VALOR' ? (v) => `R$ ${v.toLocaleString('pt-BR')}` : undefined} />
-                <YAxis dataKey="corretor" type="category" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} width={100} />
-                <Tooltip 
-                  cursor={{fill: '#f8fafc'}} 
-                  contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} 
-                  formatter={rankingToggle === 'VALOR' ? (value: number) => formatBRL(value) : (value: number) => value}
-                />
-                <Bar dataKey={rankingToggle === 'VALOR' ? 'valor' : 'vidas'} fill="#3b82f6" radius={[0, 4, 4, 0]} name={rankingToggle === 'VALOR' ? 'Total Vendido' : 'Qtd Vidas'} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="h-[350px] w-full min-w-0">
+            {isMounted && (
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                <BarChart data={rankingCorretores} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                  <XAxis type="number" axisLine={false} tickLine={false} tick={{fontSize: 10}} tickFormatter={rankingToggle === 'VALOR' ? (v) => `R$ ${v.toLocaleString('pt-BR')}` : undefined} />
+                  <YAxis dataKey="corretor" type="category" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} width={100} />
+                  <Tooltip 
+                    cursor={{fill: '#f8fafc'}} 
+                    contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} 
+                    formatter={rankingToggle === 'VALOR' ? (value: number) => formatBRL(value) : (value: number) => value}
+                  />
+                  <Bar dataKey={rankingToggle === 'VALOR' ? 'valor' : 'vidas'} fill="#3b82f6" radius={[0, 4, 4, 0]} name={rankingToggle === 'VALOR' ? 'Total Vendido' : 'Qtd Vidas'} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -275,25 +282,27 @@ const Dashboard: React.FC<DashboardProps> = ({ proposals }) => {
             <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-4 flex items-center gap-2 text-sm">
               <i className="fa-solid fa-chart-pie text-orange-500"></i> Share por Operadora (R$)
             </h3>
-            <div className="h-[140px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={shareOperadora}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={30}
-                    outerRadius={60}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {shareOperadora.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => formatBRL(value)} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px'}} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="h-[140px] w-full min-w-0">
+              {isMounted && (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                  <PieChart>
+                    <Pie
+                      data={shareOperadora}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={60}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {shareOperadora.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="none" />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => formatBRL(value)} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px'}} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
@@ -301,25 +310,27 @@ const Dashboard: React.FC<DashboardProps> = ({ proposals }) => {
             <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-4 flex items-center gap-2 text-sm">
               <i className="fa-solid fa-chart-pie text-emerald-500"></i> Share por Categoria (R$)
             </h3>
-            <div className="h-[140px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={shareCategoria}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={30}
-                    outerRadius={60}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {shareCategoria.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[(index + 3) % COLORS.length]} stroke="none" />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => formatBRL(value)} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px'}} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="h-[140px] w-full min-w-0">
+              {isMounted && (
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                  <PieChart>
+                    <Pie
+                      data={shareCategoria}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={60}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {shareCategoria.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[(index + 3) % COLORS.length]} stroke="none" />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => formatBRL(value)} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px'}} />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
         </div>
@@ -331,16 +342,18 @@ const Dashboard: React.FC<DashboardProps> = ({ proposals }) => {
           <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-sm">
             <i className="fa-solid fa-arrow-trend-up text-indigo-500"></i> Evolução de Vendas (R$)
           </h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={evolucao}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9}} tickFormatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`} width={80} />
-                <Tooltip formatter={(value) => formatBRL(Number(value))} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
-                <Line type="monotone" dataKey="value" stroke="#4f46e5" strokeWidth={4} dot={{ r: 4, fill: '#4f46e5' }} name="Total Vendido" />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="h-80 w-full min-w-0">
+            {isMounted && (
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                <LineChart data={evolucao}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9}} tickFormatter={(v) => `R$ ${v.toLocaleString('pt-BR')}`} width={80} />
+                  <Tooltip formatter={(value) => formatBRL(Number(value))} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                  <Line type="monotone" dataKey="value" stroke="#4f46e5" strokeWidth={4} dot={{ r: 4, fill: '#4f46e5' }} name="Total Vendido" />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
         
@@ -348,16 +361,18 @@ const Dashboard: React.FC<DashboardProps> = ({ proposals }) => {
           <h3 className="text-blue-900 font-black uppercase tracking-tighter mb-6 flex items-center gap-2 text-sm">
             <i className="fa-solid fa-users text-emerald-500"></i> Evolução de Vidas
           </h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={evolucao}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9}} width={40} />
-                <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
-                <Line type="monotone" dataKey="vidas" stroke="#10b981" strokeWidth={4} dot={{ r: 4, fill: '#10b981' }} name="Vidas" />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="h-80 w-full min-w-0">
+            {isMounted && (
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                <LineChart data={evolucao}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fontWeight: 'bold'}} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9}} width={40} />
+                  <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}} />
+                  <Line type="monotone" dataKey="vidas" stroke="#10b981" strokeWidth={4} dot={{ r: 4, fill: '#10b981' }} name="Vidas" />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>

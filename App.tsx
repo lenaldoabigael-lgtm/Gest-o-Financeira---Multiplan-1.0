@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Tab, Transaction, CostCenter, Proposal, ProposalRequirement, PaymentLot } from './types';
+import { User, Tab, Transaction, CostCenter, Proposal, ProposalRequirement, PaymentLot, Cotacao } from './types';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -15,58 +15,52 @@ import ProposalModal from './components/ProposalModal';
 import FinanceView from './components/FinanceView';
 import ProposalStructureView from './components/ProposalStructureView';
 import ComissoesModule from './components/ComissoesModule';
+import PlanQuoteView from './components/PlanQuoteView';
+import { PortalCorretor } from './components/PortalCorretor';
 import { supabase } from './lib/supabase';
 
 const DEFAULT_USERS: User[] = [
   {
     login: 'admin',
     senha: 'Davi2017',
-    email: 'Lenaldo.abigael@hotmail.com',
+    email: 'lenaldo.abigael@hotmail.com',
+    cargo: 'Gerente Geral & Financeiro',
+    role: 'admin',
+    status: 'ATIVO',
+    ultimoAcesso: 'Hoje\n12:00',
     approved: true,
     permissions: {
       centroCusto: true, contasPagar: true, contasReceber: true,
       dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
-      gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
-    }
-  },
-  {
-    login: 'admin2',
-    senha: '123',
-    email: 'admin2@gmail.com',
-    approved: true,
-    permissions: {
-      centroCusto: false, contasPagar: false, contasReceber: false,
-      dashboard: true, fluxoCaixa: false, detalhes: false, planCredencias: false,
-      gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
-    }
-  },
-  {
-    login: 'Gestor',
-    senha: '123',
-    email: 'Gestor@gmail.com',
-    approved: true,
-    permissions: {
-      centroCusto: false, contasPagar: false, contasReceber: false,
-      dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-      gestaoDemandas: true, propostas: false, financeiro: true, estruturaProposta: false, comissoes: false
+      gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true,
+      criarPropostas: true, exportarDados: true, cotacao: true
     }
   },
   {
     login: 'Renan Rodrigues',
     senha: 'a1b2c3',
-    email: 'Renan.Rodrigues@multiplan.com',
-    approved: false,
+    email: 'renan.rodrigues@multiplan.com',
+    cargo: 'Analista Sênior',
+    role: 'admin',
+    status: 'ATIVO',
+    ultimoAcesso: 'Hoje\n14:32',
+    approved: true,
     permissions: {
       centroCusto: false, contasPagar: false, contasReceber: false,
       dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-      gestaoDemandas: true, propostas: true, financeiro: false, estruturaProposta: false, comissoes: false
+      gestaoDemandas: false, propostas: true, financeiro: false, estruturaProposta: false, comissoes: false,
+      criarPropostas: true, exportarDados: false, cotacao: false
     }
   },
   {
     login: 'Rodrigo.Mendes',
     senha: '123456',
-    email: 'Rodrigo.Mendes@Gmail.com',
-    approved: false,
+    email: 'rodrigo.mendes@gmail.com',
+    cargo: 'Analista Sênior',
+    role: 'admin',
+    status: 'ATIVO',
+    ultimoAcesso: 'Hoje\n14:32',
+    approved: true,
     permissions: {
       centroCusto: true, contasPagar: true, contasReceber: true,
       dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: false,
@@ -75,15 +69,83 @@ const DEFAULT_USERS: User[] = [
   }
 ];
 
+const TEST_LOGINS_TO_PURGE = ['corretor', 'carlos corretor', 'anny', 'michele', 'luiza'];
+
 const mergeWithDefaultUsers = (dbUsers: User[] = []): User[] => {
-  const merged = [...dbUsers];
-  for (const defUser of DEFAULT_USERS) {
-    const exists = merged.some(u => (u.login || '').trim().toLowerCase() === defUser.login.toLowerCase());
-    if (!exists) {
-      merged.push(defUser);
+  // 1. Read local storage cache if available
+  let localUsers: User[] = [];
+  try {
+    const raw = localStorage.getItem('multiplan_app_users');
+    if (raw) {
+      localUsers = JSON.parse(raw);
+    }
+  } catch (e) {
+    console.warn('Error reading local users cache:', e);
+  }
+
+  // 1.b Read deleted users list from localStorage to prevent resurrection
+  let deletedLogins: string[] = [];
+  try {
+    const rawDel = localStorage.getItem('multiplan_deleted_users');
+    if (rawDel) {
+      deletedLogins = JSON.parse(rawDel);
+    }
+  } catch (e) {
+    console.warn('Error reading deleted users cache:', e);
+  }
+
+  const isPurgedOrDeleted = (login: string) => {
+    const key = (login || '').trim().toLowerCase();
+    return TEST_LOGINS_TO_PURGE.includes(key) || deletedLogins.includes(key);
+  };
+
+  // 2. Filter out purged/deleted test accounts
+  const filteredDbUsers = dbUsers.filter(
+    u => !isPurgedOrDeleted(u.login)
+  );
+
+  const mapByLogin = new Map<string, User>();
+
+  // Base: Default users (unless deleted by admin)
+  for (const u of DEFAULT_USERS) {
+    if (!isPurgedOrDeleted(u.login)) {
+      mapByLogin.set(u.login.trim().toLowerCase(), { ...u });
     }
   }
-  return merged;
+
+  // Next layer: Database users
+  for (const u of filteredDbUsers) {
+    const key = (u.login || '').trim().toLowerCase();
+    if (key && !isPurgedOrDeleted(key)) {
+      const existing = mapByLogin.get(key) || ({} as User);
+      mapByLogin.set(key, {
+        ...existing,
+        ...u,
+        cargo: u.cargo || existing.cargo || (key === 'admin' ? 'Gerente Geral & Financeiro' : 'Analista Sênior'),
+        role: u.role || existing.role || (key === 'admin' ? 'admin' : (u.cargo?.toLowerCase().includes('corretor') ? 'corretor' : 'admin')),
+        status: u.status || existing.status || 'ATIVO',
+        permissions: u.permissions || existing.permissions
+      });
+    }
+  }
+
+  // Top layer: Local modifications (admin edits to cargo/role/permissions/status take precedence)
+  for (const u of localUsers) {
+    const key = (u.login || '').trim().toLowerCase();
+    if (key && !isPurgedOrDeleted(key)) {
+      const existing = mapByLogin.get(key) || ({} as User);
+      mapByLogin.set(key, {
+        ...existing,
+        ...u,
+        cargo: u.cargo || existing.cargo,
+        role: u.role || existing.role,
+        status: u.status || existing.status || 'ATIVO',
+        permissions: u.permissions || existing.permissions
+      });
+    }
+  }
+
+  return Array.from(mapByLogin.values());
 };
 
 const App: React.FC = () => {
@@ -97,9 +159,11 @@ const App: React.FC = () => {
   const [appUsers, setAppUsers] = useState<User[]>(DEFAULT_USERS);
   const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
   const [proposalRequirements, setProposalRequirements] = useState<ProposalRequirement[]>([]);
+  const [savedCotacoes, setSavedCotacoes] = useState<Cotacao[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorType, setErrorType] = useState<'SCHEMA_HIDDEN' | 'TABLES_MISSING' | null>(null);
   const [activeAccount, setActiveAccount] = useState<string>('TODAS');
+  const [forcedView, setForcedView] = useState<'auto' | 'desktop' | 'portal_corretor'>('auto');
 
   const getDefaultPermissionsForRole = (role?: string) => {
     if (role === 'admin') {
@@ -141,14 +205,41 @@ const App: React.FC = () => {
     setIsLoading(true);
     setErrorType(null);
     try {
-      const [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes, usersRes] = await Promise.all([
+      const [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes, usersRes, cotacoesRes] = await Promise.all([
         supabase.from('transactions').select('*').order('vencimento', { ascending: false }),
         supabase.from('cost_centers').select('*').order('nome'),
         supabase.from('proposals').select('*').order('data', { ascending: false }),
         supabase.from('proposal_requirements').select('*').order('nome'),
         supabase.from('payment_lots').select('*').order('dataAprovacao', { ascending: false }),
-        supabase.from('users').select('*')
+        supabase.from('users').select('*'),
+        supabase.from('cotacoes').select('*').order('created_at', { ascending: false }).then(r => r, () => ({ data: null, error: null }))
       ]);
+
+      if (cotacoesRes && cotacoesRes.data && cotacoesRes.data.length > 0) {
+        setSavedCotacoes(cotacoesRes.data.map((c: any) => ({
+          id: c.id,
+          clienteNome: c.cliente_nome || c.clienteNome || 'Cliente Cotação',
+          uf: c.uf || 'PE',
+          cidade: c.cidade || 'Recife',
+          created_at: c.created_at || new Date().toISOString(),
+          corretor: c.criado_por || c.corretor || 'Corretor',
+          operadoras: Array.isArray(c.operadoras) ? c.operadoras : [c.operadoras || 'HAPVIDA'],
+          tiposPlano: Array.isArray(c.tipos_plano) ? c.tipos_plano : ['ADESÃO'],
+          vidasPorFaixa: c.detalhes_json?.vidasPorFaixa || c.vidasPorFaixa || {},
+          totalVidas: Number(c.total_vidas || c.totalVidas || 1),
+          totalMensalEstimado: Number(c.valor_total || c.totalMensalEstimado || 0),
+          detalhes: c.detalhes_json || c.detalhes || {}
+        })));
+      } else {
+        const localSaved = localStorage.getItem('multiplan_saved_cotacoes');
+        if (localSaved) {
+          try {
+            setSavedCotacoes(JSON.parse(localSaved));
+          } catch (e) {
+            console.warn('Error parsing local cotacoes', e);
+          }
+        }
+      }
 
       if (usersRes.data) {
         setAppUsers(mergeWithDefaultUsers(usersRes.data as User[]));
@@ -157,13 +248,17 @@ const App: React.FC = () => {
       }
 
       if (transactionsRes.data) setTransactions(transactionsRes.data);
-      if (proposalsRes.data) {
+      if (proposalsRes.data && proposalsRes.data.length > 0) {
         setProposals(proposalsRes.data);
-      } else if (!proposalsRes.error) {
+      } else {
         const mockProposals: Proposal[] = [
-          { id: '1', contrato: '6GTLW', data: '2026-04-20', cliente: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 1566.62, vidas: 4, status: 'CADASTRADA', comissao: 783.31 },
-          { id: '2', contrato: 'GPLRG', data: '2026-04-20', cliente: 'T.F.S. SILVA FARMACIA', cpfCnpj: '12.345.678/0001-90', corretor: 'Michele', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 2379.28, vidas: 6, status: 'CADASTRADA', comissao: 1189.64 },
-          { id: '3', contrato: 'HXRYU', data: '2026-04-21', cliente: 'JOAO SILVA', cpfCnpj: '111.222.333-44', corretor: 'Luiza', operadora: 'Amil', categoria: 'Direto', valor: 326.37, vidas: 2, status: 'CADASTRADA', comissao: 163.18 },
+          { id: '1', contrato: '6GTLW', data: '2026-04-20', cliente: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', corretor: 'corretor', operadora: 'Amil', categoria: 'Saúde-PME', valor: 1566.62, vidas: 4, status: 'CADASTRADA', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'Amil', categoria: 'Saúde' } } },
+          { id: '2', contrato: 'GPLRG', data: '2026-04-20', cliente: 'T.F.S. SILVA FARMACIA LTDA', cpfCnpj: '12.345.678/0001-90', corretor: 'corretor', operadora: 'Bradesco Saúde', categoria: 'Saúde-PME', valor: 2379.28, vidas: 6, status: 'ENVIADA AO FINANCEIRO', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'Bradesco Saúde', categoria: 'Saúde' } } },
+          { id: '3', contrato: 'HXRYU', data: '2026-04-21', cliente: 'JOAO SILVA COSTA', cpfCnpj: '111.222.333-44', corretor: 'corretor', operadora: 'Unimed Nacional', categoria: 'Adesão', valor: 826.37, vidas: 2, status: 'PAGO', comissao: 0, detalhes: { proposta: { tipoPlano: 'Adesão', operadora: 'Unimed Nacional', categoria: 'Saúde' } } },
+          { id: '4', contrato: 'MPL99', data: '2026-04-22', cliente: 'CLINICA SAUDE INTEGRADA', cpfCnpj: '33.444.555/0001-22', corretor: 'Carlos Corretor', operadora: 'SulAmérica', categoria: 'Saúde-PME', valor: 3450.00, vidas: 8, status: 'CADASTRADA', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'SulAmérica', categoria: 'Saúde' } } },
+          { id: '5', contrato: 'AN772', data: '2026-04-18', cliente: 'RESTAURANTE BOA VISTA LTDA', cpfCnpj: '98.765.432/0001-11', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 1890.50, vidas: 5, status: 'PAGO', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'Hapvida', categoria: 'Saúde' } } },
+          { id: '6', contrato: 'MC551', data: '2026-04-19', cliente: 'CONSULTORIA FINANCEIRA ALFA', cpfCnpj: '55.666.777/0001-88', corretor: 'Michele', operadora: 'Porto Seguro', categoria: 'Saúde-PME', valor: 2100.00, vidas: 3, status: 'ENVIADA AO FINANCEIRO', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'Porto Seguro', categoria: 'Saúde' } } },
+          { id: '7', contrato: 'LZ334', data: '2026-04-21', cliente: 'MARCOS VINICIUS PEREIRA', cpfCnpj: '222.333.444-55', corretor: 'Luiza', operadora: 'Amil', categoria: 'Individual', valor: 450.00, vidas: 1, status: 'CADASTRADA', comissao: 0, detalhes: { proposta: { tipoPlano: 'Individual', operadora: 'Amil', categoria: 'Saúde' } } }
         ];
         setProposals(mockProposals);
       }
@@ -213,6 +308,13 @@ const App: React.FC = () => {
         });
 
         if (foundUser && foundUser.approved !== false && String(foundUser.approved) !== 'false') {
+          if (foundUser.status === 'INATIVO') {
+            localStorage.removeItem('sis_login');
+            localStorage.removeItem('sis_pass');
+            setIsLoading(false);
+            return;
+          }
+
           let userPerms = foundUser.permissions || {
             centroCusto: false, contasPagar: false, contasReceber: false,
             dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
@@ -292,6 +394,12 @@ const App: React.FC = () => {
       if (foundUser.approved === false || String(foundUser.approved) === 'false') {
         setIsLoading(false);
         alert('Sua solicitação de acesso está aguardando aprovação do administrador.');
+        return false;
+      }
+
+      if (foundUser.status === 'INATIVO') {
+        setIsLoading(false);
+        alert('Este usuário está inativo no sistema. Entre em contato com o administrador.');
         return false;
       }
 
@@ -458,6 +566,116 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
     );
   }
 
+  const isUserCorretor = useMemo(() => {
+    if (!user) return false;
+    if (user.role === 'admin' || user.login.toLowerCase() === 'admin') return false;
+    if (user.role === 'corretor') return true;
+    if ((user.cargo || '').toLowerCase().includes('corretor')) return true;
+    return false;
+  }, [user]);
+
+  // Regra de Separação por Função:
+  // Se for Corretor, tem acesso estritamente restrito ao Portal do Corretor (Mobile / Web de vendas)
+  // Administradores e Analistas/Gestores têm acesso ao painel desktop com permissão de pré-visualizar
+  const isShowingCorretorPortal = isUserCorretor || forcedView === 'portal_corretor';
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setActiveTab(null);
+    setForcedView('auto');
+    setTransactions([]);
+    setProposals([]);
+    setPaymentLots([]);
+    setCostCenters([]);
+    setProposalRequirements([]);
+    localStorage.removeItem('sis_activeTab');
+    localStorage.removeItem('sis_login');
+    localStorage.removeItem('sis_pass');
+  };
+
+  const handleSaveProposal = async (proposalData: Proposal) => {
+    const contratoNumber = proposalData.contrato.trim();
+    const isContratoDuplicado = proposals.some(
+      p => p.contrato.trim() === contratoNumber && p.id !== editingProposal?.id
+    );
+
+    if (isContratoDuplicado) {
+      alert(`Já existe uma proposta cadastrada com o contrato ${contratoNumber}. Não é permitido cadastrar propostas duplicadas.`);
+      return;
+    }
+
+    if (editingProposal) {
+      // Regra Crítica: Não permitir voltar status ou alterar se estiver PAGO
+      if (editingProposal.status === 'PAGO') {
+        alert('Propostas com status PAGO não podem ser alteradas.');
+        return;
+      }
+      if (editingProposal.status === 'ENVIADA AO FINANCEIRO' && proposalData.status === 'CADASTRADA') {
+        proposalData.status = 'ENVIADA AO FINANCEIRO';
+      }
+
+      const { error } = await supabase.from('proposals').update(proposalData).eq('id', editingProposal.id);
+      if (error) {
+        console.error('Erro ao atualizar proposta:', error);
+        setProposals(prev => prev.map(p => p.id === editingProposal.id ? proposalData : p));
+      } else {
+        fetchData();
+      }
+    } else {
+      if (proposalData.status !== 'ENVIADA AO FINANCEIRO') {
+        proposalData.status = 'CADASTRADA';
+      }
+      
+      const { error } = await supabase.from('proposals').insert([proposalData]);
+      if (error) {
+        console.error('Erro ao salvar proposta:', error);
+        setProposals(prev => [proposalData, ...prev]);
+      } else {
+        fetchData();
+      }
+    }
+  };
+
+  const handleSaveCotacao = async (newCotacao: Cotacao) => {
+    setSavedCotacoes(prev => {
+      const next = [newCotacao, ...prev];
+      localStorage.setItem('multiplan_saved_cotacoes', JSON.stringify(next));
+      return next;
+    });
+    try {
+      await supabase.from('cotacoes').insert([{
+        cliente_nome: newCotacao.clienteNome,
+        cidade: newCotacao.cidade,
+        uf: newCotacao.uf,
+        total_vidas: newCotacao.totalVidas,
+        valor_total: newCotacao.totalMensalEstimado,
+        operadoras: newCotacao.operadoras,
+        tipos_plano: newCotacao.tiposPlano,
+        criado_por: user?.login || 'Corretor',
+        detalhes_json: {
+          vidasPorFaixa: newCotacao.vidasPorFaixa,
+          ...newCotacao.detalhes
+        }
+      }]);
+    } catch (err) {
+      console.warn('Could not insert cotacao into supabase, saved locally', err);
+    }
+  };
+
+  const handleDeleteCotacao = async (id: string) => {
+    setSavedCotacoes(prev => {
+      const next = prev.filter(c => c.id !== id);
+      localStorage.setItem('multiplan_saved_cotacoes', JSON.stringify(next));
+      return next;
+    });
+    try {
+      await supabase.from('cotacoes').delete().eq('id', id);
+    } catch (err) {
+      console.warn('Could not delete cotacao from supabase', err);
+    }
+  };
+
   if (isLoading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-white text-blue-900 gap-4">
       <i className="fa-solid fa-circle-notch fa-spin text-4xl"></i>
@@ -467,6 +685,50 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
 
   if (!user) return <Login onLogin={handleLogin} onRegister={handleRegister} />;
 
+  // Render Portal do Corretor (Mobile/Web interface)
+  if (isShowingCorretorPortal) {
+    return (
+      <>
+        <PortalCorretor
+          user={user}
+          proposals={proposals}
+          requirements={proposalRequirements}
+          savedCotacoes={savedCotacoes}
+          onLogout={handleLogout}
+          onOpenNewProposal={() => {
+            setEditingProposal(null);
+            setIsProposalModalOpen(true);
+          }}
+          onSelectProposal={(p) => {
+            setEditingProposal(p);
+            setIsProposalModalOpen(true);
+          }}
+          onSaveCotacao={handleSaveCotacao}
+          onDeleteCotacao={handleDeleteCotacao}
+          onSwitchToDesktop={() => setForcedView('desktop')}
+          isAdmin={user.role === 'admin' || user.login === 'admin' || user.permissions.dashboard}
+        />
+        {isProposalModalOpen && (
+          <ProposalModal 
+            isOpen={isProposalModalOpen} 
+            onClose={() => {
+              setIsProposalModalOpen(false);
+              setEditingProposal(null);
+            }} 
+            requirements={proposalRequirements}
+            proposal={editingProposal}
+            user={user}
+            onSave={async (proposalData) => {
+              await handleSaveProposal(proposalData);
+              setIsProposalModalOpen(false);
+              setEditingProposal(null);
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
   return (
     <Layout 
       user={user} 
@@ -475,19 +737,8 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         setActiveTab(tab);
         if (tab) localStorage.setItem('sis_activeTab', tab);
       }} 
-      onLogout={async () => {
-        await supabase.auth.signOut();
-        setUser(null);
-        setActiveTab(null);
-        setTransactions([]);
-        setProposals([]);
-        setPaymentLots([]);
-        setCostCenters([]);
-        setProposalRequirements([]);
-        localStorage.removeItem('sis_activeTab');
-        localStorage.removeItem('sis_login');
-        localStorage.removeItem('sis_pass');
-      }}
+      onLogout={handleLogout}
+      onOpenCorretorPortal={() => setForcedView('portal_corretor')}
     >
 
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -532,7 +783,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         {/* Fix: Changed cc.sub_itens to cc.subItens to match the CostCenter type definition */}
         {activeTab === Tab.CENTRO_CUSTO && <CostCentersView costCenters={costCenters} onSave={async cc => { 
           const payload: any = { nome: cc.nome, tipo: cc.tipo, sub_itens: cc.subItens || [] };
-          if (cc.id) payload.id = cc.id;
+          if (cc.id && !cc.id.startsWith('default-')) payload.id = cc.id;
           const { error } = await supabase.from('cost_centers').upsert(payload); 
           if (error) {
             console.error('Erro ao salvar centro de custo:', error);
@@ -541,6 +792,10 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             fetchData(); 
           }
         }} onDelete={async id => { 
+          if (id.startsWith('default-')) {
+            fetchData();
+            return;
+          }
           const { error } = await supabase.from('cost_centers').delete().eq('id', id); 
           if (error) {
             console.error('Erro ao excluir centro de custo:', error);
@@ -780,22 +1035,33 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
           <ProposalStructureView 
             requirements={proposalRequirements}
             onSave={async (req) => {
-              const { error } = await supabase.from('proposal_requirements').insert([req]);
-              if (error) {
-                console.error('Erro ao salvar requisito:', error);
-                alert('Erro ao salvar requisito. Verifique o console.');
-              } else {
-                fetchData();
+              const tempId = `req-${Date.now()}`;
+              const newReq: ProposalRequirement = { id: tempId, ...req };
+              setProposalRequirements(prev => [...prev, newReq]);
+
+              try {
+                const { data, error } = await supabase.from('proposal_requirements').insert([req]).select();
+                if (error) {
+                  console.warn('DB insert error (mantendo no estado local):', error);
+                } else if (data && data[0]) {
+                  setProposalRequirements(prev => prev.map(r => r.id === tempId ? data[0] : r));
+                }
+              } catch (e) {
+                console.warn('DB connection notice:', e);
               }
+              fetchData();
             }}
             onDelete={async (id) => {
-              const { error } = await supabase.from('proposal_requirements').delete().eq('id', id);
-              if (error) {
-                console.error('Erro ao excluir requisito:', error);
-                alert('Erro ao excluir requisito. Verifique o console.');
-              } else {
-                fetchData();
+              setProposalRequirements(prev => prev.filter(r => r.id !== id));
+              try {
+                const { error } = await supabase.from('proposal_requirements').delete().eq('id', id);
+                if (error) {
+                  console.warn('DB delete notice:', error);
+                }
+              } catch (e) {
+                console.warn('DB delete error:', e);
               }
+              fetchData();
             }}
           />
         )}
@@ -804,7 +1070,37 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             users={appUsers} 
             onUpdateUsers={async nu => { 
               setAppUsers(nu);
-              const deletedUsers = appUsers.filter(u => !nu.some(item => item.login === u.login));
+              try {
+                localStorage.setItem('multiplan_app_users', JSON.stringify(nu));
+              } catch (err) {
+                console.warn('Error saving users to localStorage:', err);
+              }
+
+              // If current logged-in user's data was updated, sync active session user
+              if (user) {
+                const selfMatch = nu.find(u => (u.login || '').trim().toLowerCase() === (user.login || '').trim().toLowerCase());
+                if (selfMatch) {
+                  setUser(prev => prev ? ({ ...prev, ...selfMatch }) : prev);
+                }
+              }
+
+              const deletedUsers = appUsers.filter(u => !nu.some(item => (item.login || '').trim().toLowerCase() === (u.login || '').trim().toLowerCase()));
+              if (deletedUsers.length > 0) {
+                try {
+                  const rawDel = localStorage.getItem('multiplan_deleted_users');
+                  const delList: string[] = rawDel ? JSON.parse(rawDel) : [];
+                  for (const du of deletedUsers) {
+                    const k = (du.login || '').trim().toLowerCase();
+                    if (k && !delList.includes(k)) {
+                      delList.push(k);
+                    }
+                  }
+                  localStorage.setItem('multiplan_deleted_users', JSON.stringify(delList));
+                } catch (e) {
+                  console.warn('Error updating deleted users cache:', e);
+                }
+              }
+
               for (const du of deletedUsers) {
                 try {
                   await supabase.from('users').delete().eq('login', du.login);
@@ -818,6 +1114,9 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                     login: u.login,
                     senha: u.senha,
                     email: u.email,
+                    cargo: u.cargo,
+                    role: u.role,
+                    status: u.status,
                     approved: u.approved !== false,
                     permissions: u.permissions
                   }); 
@@ -826,6 +1125,50 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                 }
               } 
             }} 
+          />
+        )}
+        {activeTab === Tab.COTACAO && (
+          <PlanQuoteView 
+            requirements={proposalRequirements} 
+            user={user!}
+            savedCotacoes={savedCotacoes}
+            onSaveCotacao={async (newCotacao) => {
+              setSavedCotacoes(prev => {
+                const next = [newCotacao, ...prev];
+                localStorage.setItem('multiplan_saved_cotacoes', JSON.stringify(next));
+                return next;
+              });
+              try {
+                await supabase.from('cotacoes').insert([{
+                  cliente_nome: newCotacao.clienteNome,
+                  cidade: newCotacao.cidade,
+                  uf: newCotacao.uf,
+                  total_vidas: newCotacao.totalVidas,
+                  valor_total: newCotacao.totalMensalEstimado,
+                  operadoras: newCotacao.operadoras,
+                  tipos_plano: newCotacao.tiposPlano,
+                  criado_por: user?.login || 'Corretor',
+                  detalhes_json: {
+                    vidasPorFaixa: newCotacao.vidasPorFaixa,
+                    ...newCotacao.detalhes
+                  }
+                }]);
+              } catch (err) {
+                console.warn('Could not insert cotacao into supabase, saved locally', err);
+              }
+            }}
+            onDeleteCotacao={async (id) => {
+              setSavedCotacoes(prev => {
+                const next = prev.filter(c => c.id !== id);
+                localStorage.setItem('multiplan_saved_cotacoes', JSON.stringify(next));
+                return next;
+              });
+              try {
+                await supabase.from('cotacoes').delete().eq('id', id);
+              } catch (err) {
+                console.warn('Could not delete cotacao from supabase', err);
+              }
+            }}
           />
         )}
       </div>
@@ -840,47 +1183,9 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
         proposal={editingProposal}
         user={user!}
         onSave={async (proposalData) => {
-          const contratoNumber = proposalData.contrato.trim();
-          const isContratoDuplicado = proposals.some(
-            p => p.contrato.trim() === contratoNumber && p.id !== editingProposal?.id
-          );
-
-          if (isContratoDuplicado) {
-            alert(`Já existe uma proposta cadastrada com o contrato ${contratoNumber}. Não é permitido cadastrar propostas duplicadas.`);
-            return;
-          }
-
-          if (editingProposal) {
-            // Regra Crítica: Não permitir voltar status ou alterar se estiver PAGO
-            if (editingProposal.status === 'PAGO') {
-              alert('Propostas com status PAGO não podem ser alteradas.');
-              return;
-            }
-            if (editingProposal.status === 'ENVIADA AO FINANCEIRO' && proposalData.status === 'CADASTRADA') {
-              proposalData.status = 'ENVIADA AO FINANCEIRO';
-            }
-
-            const { error } = await supabase.from('proposals').update(proposalData).eq('id', editingProposal.id);
-            if (error) {
-              console.error('Erro ao atualizar proposta:', error);
-              alert('Erro ao atualizar proposta no Supabase: ' + (error.message || 'Verifique o console.'));
-            } else {
-              fetchData();
-            }
-          } else {
-            // Se não veio como "ENVIADA AO FINANCEIRO" (via cartão), força CADASTRADA
-            if (proposalData.status !== 'ENVIADA AO FINANCEIRO') {
-              proposalData.status = 'CADASTRADA';
-            }
-            
-            const { error } = await supabase.from('proposals').insert([proposalData]);
-            if (error) {
-              console.error('Erro ao salvar proposta:', error);
-              alert('Erro ao salvar proposta no Supabase: ' + (error.message || 'Verifique o console e o RLS da tabela proposals.'));
-            } else {
-              fetchData();
-            }
-          }
+          await handleSaveProposal(proposalData);
+          setIsProposalModalOpen(false);
+          setEditingProposal(null);
         }}
       />
     </Layout>
