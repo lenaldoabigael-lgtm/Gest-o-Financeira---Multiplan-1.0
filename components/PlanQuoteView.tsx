@@ -5,6 +5,7 @@ import { ImportarTabelaModal } from './ImportarTabelaModal';
 import { TabelasPrecoManager } from './TabelasPrecoManager';
 import { OperatorLogo } from './OperatorLogo';
 import { INITIAL_IMPORTED_TABLES } from '../lib/initialPlanTables';
+import { supabase } from '../lib/supabase';
 import { FileUp, Database, Sparkles, CheckCircle2 } from 'lucide-react';
 
 interface PlanQuoteViewProps {
@@ -99,19 +100,86 @@ export const PlanQuoteView: React.FC<PlanQuoteViewProps> = ({
   // Modal de Importação PDF
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  // Tabelas Importadas no Banco / LocalStorage
-  const [importedTables, setImportedTables] = useState<TabelaPrecoImportada[]>(() => {
-    const saved = localStorage.getItem('multiplan_imported_plan_tables');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.warn('Erro ao carregar tabelas do localstorage', e);
+  // Tabelas Importadas — vêm do Supabase agora (localStorage era só
+  // pra esse navegador; várias pessoas cotando precisam ver a mesma base)
+  const [importedTables, setImportedTables] = useState<TabelaPrecoImportada[]>([]);
+  const [tabelasCarregando, setTabelasCarregando] = useState(true);
+
+  const carregarTabelasPreco = async () => {
+    setTabelasCarregando(true);
+    const { data, error } = await supabase
+      .from('tabelas_preco_importadas')
+      .select(`
+        id, operadora, modalidade, cidade, uf, vigencia_inicio, vigencia_fim,
+        taxa_adesao, odonto_promo_valor, odonto_cheio_valor, arquivo_nome,
+        criado_em, criado_por, ativo,
+        tabela_preco_produtos (
+          id, nome_produto, segmentacao, acomodacao, coparticipacao,
+          registro_ans, cod_interno_com_odonto, cod_interno_sem_odonto,
+          tabela_preco_faixas ( id, faixa, faixa_ordem, valor_medica1, valor_medica2 )
+        )
+      `);
+
+    if (error || !data) {
+      console.warn('Não foi possível carregar tabelas de preço do Supabase, usando base local', error);
+      const saved = localStorage.getItem('multiplan_imported_plan_tables');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setImportedTables(parsed);
+            setTabelasCarregando(false);
+            return;
+          }
+        } catch (e) { /* segue pro fallback fixo abaixo */ }
       }
+      setImportedTables(INITIAL_IMPORTED_TABLES);
+      setTabelasCarregando(false);
+      return;
     }
-    return INITIAL_IMPORTED_TABLES;
-  });
+
+    const mapeadas: TabelaPrecoImportada[] = data.map((t: any) => ({
+      id: t.id,
+      operadora: t.operadora,
+      modalidade: t.modalidade,
+      cidade: t.cidade,
+      uf: t.uf,
+      vigenciaInicio: t.vigencia_inicio,
+      vigenciaFim: t.vigencia_fim,
+      taxaAdesao: Number(t.taxa_adesao),
+      odontoPromoValor: t.odonto_promo_valor != null ? Number(t.odonto_promo_valor) : undefined,
+      odontoCheioValor: t.odonto_cheio_valor != null ? Number(t.odonto_cheio_valor) : undefined,
+      arquivoNome: t.arquivo_nome,
+      criadoEm: t.criado_em,
+      criadoPor: t.criado_por,
+      ativo: t.ativo,
+      produtos: (t.tabela_preco_produtos || []).map((p: any) => ({
+        id: p.id,
+        nomeProduto: p.nome_produto,
+        segmentacao: p.segmentacao,
+        acomodacao: p.acomodacao,
+        coparticipacao: p.coparticipacao,
+        registroAns: p.registro_ans,
+        codInternoComOdonto: p.cod_interno_com_odonto,
+        codInternoSemOdonto: p.cod_interno_sem_odonto,
+        faixas: (p.tabela_preco_faixas || [])
+          .sort((a: any, b: any) => a.faixa_ordem - b.faixa_ordem)
+          .map((f: any) => ({
+            faixa: f.faixa,
+            faixaOrdem: f.faixa_ordem,
+            valorMedica1: Number(f.valor_medica1),
+            valorMedica2: Number(f.valor_medica2),
+          })),
+      })),
+    }));
+
+    setImportedTables(mapeadas.length > 0 ? mapeadas : INITIAL_IMPORTED_TABLES);
+    setTabelasCarregando(false);
+  };
+
+  useEffect(() => {
+    carregarTabelasPreco();
+  }, []);
 
   // Modalidade de Venda
   const [selectedModalidade, setSelectedModalidade] = useState<ModalidadeTabela>('INDIVIDUAL');
@@ -227,25 +295,88 @@ export const PlanQuoteView: React.FC<PlanQuoteViewProps> = ({
     }
   };
 
-  const handleImportSuccess = (novasTabelas: TabelaPrecoImportada[]) => {
-    setImportedTables(prev => {
-      // Mescla substituindo ou adicionando por cidade/modalidade/operadora
-      const filtered = prev.filter(t => 
-        !novasTabelas.some(nt => nt.cidade === t.cidade && nt.uf === t.uf && nt.modalidade === t.modalidade && nt.operadora === t.operadora)
-      );
-      const next = [...novasTabelas, ...filtered];
-      localStorage.setItem('multiplan_imported_plan_tables', JSON.stringify(next));
-      return next;
-    });
+  const handleImportSuccess = async (novasTabelas: TabelaPrecoImportada[]) => {
+    // Se já existe tabela pra essa cidade/modalidade/operadora, apaga a
+    // antiga antes (cascade leva produtos e faixas junto) — mesma regra
+    // de "substitui" que já existia no localStorage.
+    for (const nt of novasTabelas) {
+      const { data: existentes } = await supabase
+        .from('tabelas_preco_importadas')
+        .select('id')
+        .eq('cidade', nt.cidade).eq('uf', nt.uf)
+        .eq('modalidade', nt.modalidade).eq('operadora', nt.operadora);
+      if (existentes && existentes.length > 0) {
+        await supabase.from('tabelas_preco_importadas').delete()
+          .in('id', existentes.map((e: any) => e.id));
+      }
+
+      const { data: tabelaInserida, error: erroTabela } = await supabase
+        .from('tabelas_preco_importadas')
+        .insert({
+          operadora: nt.operadora, modalidade: nt.modalidade,
+          cidade: nt.cidade, uf: nt.uf,
+          vigencia_inicio: nt.vigenciaInicio, vigencia_fim: nt.vigenciaFim,
+          taxa_adesao: nt.taxaAdesao,
+          odonto_promo_valor: nt.odontoPromoValor ?? null,
+          odonto_cheio_valor: nt.odontoCheioValor ?? null,
+          arquivo_nome: nt.arquivoNome ?? null,
+          criado_por: user?.login ?? null,
+          ativo: true,
+        })
+        .select('id')
+        .single();
+
+      if (erroTabela || !tabelaInserida) {
+        console.error('Erro ao gravar tabela de preço:', erroTabela);
+        continue;
+      }
+
+      for (const produto of nt.produtos) {
+        const { data: produtoInserido, error: erroProduto } = await supabase
+          .from('tabela_preco_produtos')
+          .insert({
+            tabela_id: tabelaInserida.id,
+            nome_produto: produto.nomeProduto,
+            segmentacao: produto.segmentacao,
+            acomodacao: produto.acomodacao,
+            coparticipacao: produto.coparticipacao,
+            registro_ans: produto.registroAns ?? null,
+            cod_interno_com_odonto: produto.codInternoComOdonto ?? null,
+            cod_interno_sem_odonto: produto.codInternoSemOdonto ?? null,
+          })
+          .select('id')
+          .single();
+
+        if (erroProduto || !produtoInserido) {
+          console.error('Erro ao gravar produto da tabela:', erroProduto);
+          continue;
+        }
+
+        if (produto.faixas.length > 0) {
+          await supabase.from('tabela_preco_faixas').insert(
+            produto.faixas.map(f => ({
+              produto_id: produtoInserido.id,
+              faixa: f.faixa,
+              faixa_ordem: f.faixaOrdem,
+              valor_medica1: f.valorMedica1,
+              valor_medica2: f.valorMedica2,
+            }))
+          );
+        }
+      }
+    }
+
+    await carregarTabelasPreco();
     alert(`Sucesso! ${novasTabelas.length} tabela(s) importada(s) e integradas ao motor de cálculo.`);
   };
 
-  const handleDeleteImportedTable = (id: string) => {
-    setImportedTables(prev => {
-      const next = prev.filter(t => t.id !== id);
-      localStorage.setItem('multiplan_imported_plan_tables', JSON.stringify(next));
-      return next;
-    });
+  const handleDeleteImportedTable = async (id: string) => {
+    setImportedTables(prev => prev.filter(t => t.id !== id)); // otimista
+    const { error } = await supabase.from('tabelas_preco_importadas').delete().eq('id', id);
+    if (error) {
+      console.error('Erro ao apagar tabela de preço:', error);
+      await carregarTabelasPreco(); // desfaz a remoção otimista se falhou
+    }
   };
 
   // Função auxiliar para determinar o status de disponibilidade de tabela da operadora
