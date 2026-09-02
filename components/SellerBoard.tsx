@@ -592,9 +592,9 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
       {/* PROPOSAL DETAILS MODAL (POP-UP MATCHING SCREENSHOT) */}
       {selectedProposalDetails && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100 max-h-[92vh] flex flex-col">
             {/* Navy Header matching screenshot */}
-            <div className="bg-[#001a54] px-6 py-4 flex items-center justify-between text-white">
+            <div className="bg-[#001a54] px-6 py-4 flex items-center justify-between text-white shrink-0">
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
                   Detalhes da Proposta
@@ -605,14 +605,15 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
               </div>
               <button
                 onClick={() => setSelectedProposalDetails(null)}
-                className="text-white/80 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10 flex items-center justify-center"
+                className="text-white/80 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/10 flex items-center justify-center cursor-pointer"
+                title="Fechar"
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 space-y-4">
+            {/* Modal Body with scrollable content */}
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
               {/* Client & Price Top Box */}
               <div className="border border-slate-200/90 rounded-2xl p-4 flex items-center justify-between gap-4 bg-white shadow-2xs">
                 <div>
@@ -673,15 +674,162 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                 </div>
               </div>
 
-              {/* Footer Fechar Button */}
-              <div className="pt-2">
-                <button
-                  onClick={() => setSelectedProposalDetails(null)}
-                  className="px-5 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 bg-white transition-all shadow-2xs active:scale-95"
-                >
-                  Fechar
-                </button>
+              {/* OBSERVAÇÕES & HISTÓRICO */}
+              <div className="bg-[#f8fafd] border border-slate-100 rounded-xl p-4 space-y-2">
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  <span className="material-symbols-outlined text-sm text-[#001a54]">notes</span>
+                  <span>OBSERVAÇÕES & HISTÓRICO</span>
+                </div>
+
+                {/* Observações texto direto */}
+                {(selectedProposalDetails.observacoes || selectedProposalDetails.detalhes?.observacoes || selectedProposalDetails.detalhes?.proposta?.observacoes) ? (
+                  <div className="p-3 bg-white rounded-lg border border-slate-200/80 text-xs text-slate-700 font-medium whitespace-pre-wrap leading-relaxed shadow-2xs">
+                    {selectedProposalDetails.observacoes || selectedProposalDetails.detalhes?.observacoes || selectedProposalDetails.detalhes?.proposta?.observacoes}
+                  </div>
+                ) : null}
+
+                {/* Histórico estruturado */}
+                {Array.isArray(selectedProposalDetails.detalhes?.historico) && selectedProposalDetails.detalhes.historico.length > 0 ? (
+                  <div className="space-y-1.5 pt-1">
+                    {selectedProposalDetails.detalhes.historico.map((h: any, idx: number) => (
+                      <div key={h.id || idx} className="p-2.5 bg-white rounded-lg border border-slate-200/70 text-xs shadow-2xs">
+                        <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 mb-1">
+                          <span className="text-[#001a54]">{h.responsavel || 'Usuário'}</span>
+                          <span>{h.data || ''}</span>
+                        </div>
+                        <p className="text-slate-700 text-xs font-medium whitespace-pre-wrap">{h.observacao}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {/* Se não tiver nenhuma observação */}
+                {!selectedProposalDetails.observacoes &&
+                  !selectedProposalDetails.detalhes?.observacoes &&
+                  !selectedProposalDetails.detalhes?.proposta?.observacoes &&
+                  (!Array.isArray(selectedProposalDetails.detalhes?.historico) || selectedProposalDetails.detalhes.historico.length === 0) && (
+                    <p className="text-xs text-slate-400 italic py-1">
+                      Nenhuma observação registrada para esta proposta.
+                    </p>
+                  )}
               </div>
+
+              {/* ANEXOS & BAIXA DE ARQUIVOS */}
+              <div className="bg-[#f8fafd] border border-slate-100 rounded-xl p-4 space-y-2.5">
+                <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-[#001a54]">attach_file</span>
+                    <span>ANEXOS & DOCUMENTOS</span>
+                  </div>
+                  {Array.isArray(selectedProposalDetails.detalhes?.documentos) && selectedProposalDetails.detalhes.documentos.length > 0 && (
+                    <span className="text-[10px] font-bold text-[#001a54] bg-blue-100/70 px-2 py-0.5 rounded-full">
+                      {selectedProposalDetails.detalhes.documentos.length} anexo(s)
+                    </span>
+                  )}
+                </div>
+
+                {/* Lista de anexos */}
+                {(() => {
+                  const docs: Array<{ id: string; nome: string; data?: string; tamanho?: string; url?: string }> = [];
+                  if (Array.isArray(selectedProposalDetails.detalhes?.documentos)) {
+                    docs.push(...selectedProposalDetails.detalhes.documentos);
+                  }
+                  if (Array.isArray((selectedProposalDetails as any).documentos)) {
+                    (selectedProposalDetails as any).documentos.forEach((d: any) => {
+                      if (!docs.some(existing => existing.id === d.id || existing.nome === d.nome)) {
+                        docs.push(d);
+                      }
+                    });
+                  }
+                  if (selectedProposalDetails.detalhes?.comprovanteUrl || (selectedProposalDetails as any).comprovanteUrl) {
+                    const url = selectedProposalDetails.detalhes?.comprovanteUrl || (selectedProposalDetails as any).comprovanteUrl;
+                    if (!docs.some(d => d.url === url)) {
+                      docs.push({
+                        id: 'comp-principal',
+                        nome: 'Comprovante / Anexo Principal',
+                        data: selectedProposalDetails.data || 'Registrado',
+                        tamanho: 'Arquivo Anexo',
+                        url: url
+                      });
+                    }
+                  }
+
+                  if (docs.length === 0) {
+                    return (
+                      <div className="p-3 bg-white rounded-lg border border-slate-200/80 text-center shadow-2xs">
+                        <span className="material-symbols-outlined text-2xl text-slate-300 block mb-1">folder_off</span>
+                        <p className="text-xs text-slate-400 italic">
+                          Nenhum documento ou anexo anexado a este contrato.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      {docs.map((doc, idx) => (
+                        <div
+                          key={doc.id || idx}
+                          className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200/80 shadow-2xs hover:border-slate-300 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-base">
+                                {doc.nome?.toLowerCase().endsWith('.pdf') ? 'picture_as_pdf' : 'description'}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-800 truncate" title={doc.nome}>
+                                {doc.nome || `Anexo #${idx + 1}`}
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-medium">
+                                {doc.data || 'Registrado'} {doc.tamanho ? `• ${doc.tamanho}` : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Botão de Baixar Anexo */}
+                          {doc.url ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                try {
+                                  const link = document.createElement('a');
+                                  link.href = doc.url!;
+                                  link.download = doc.nome || `anexo_contrato_${selectedProposalDetails.contrato || 'doc'}`;
+                                  link.target = '_blank';
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                } catch (e) {
+                                  window.open(doc.url, '_blank');
+                                }
+                              }}
+                              className="px-3 py-1.5 bg-[#001a54] hover:bg-[#00133d] text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 shadow-xs cursor-pointer active:scale-95"
+                              title="Baixar este arquivo"
+                            >
+                              <span className="material-symbols-outlined text-sm">download</span>
+                              <span>Baixar Anexo</span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Sem link</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Footer Fechar Button */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end shrink-0">
+              <button
+                onClick={() => setSelectedProposalDetails(null)}
+                className="px-6 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 bg-white transition-all shadow-2xs active:scale-95 cursor-pointer"
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>

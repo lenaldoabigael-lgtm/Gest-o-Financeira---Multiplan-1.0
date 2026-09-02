@@ -211,6 +211,7 @@ export interface Proposal {
   status: 'CADASTRADA' | 'ENVIADA AO FINANCEIRO' | 'PAGO';
   comissao: number;
   detalhes?: any;
+  observacoes?: string;
   lote_id?: string;
   parcelas_status?: Record<number, 'PENDENTE' | 'PAGO'>;
   parcelas_repassadas?: Record<number, 'PENDENTE' | 'PAGO'>;
