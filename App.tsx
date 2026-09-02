@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, Tab, Transaction, CostCenter, Proposal, ProposalRequirement, PaymentLot, Cotacao } from './types';
 import Login from './components/Login';
@@ -221,13 +220,16 @@ const App: React.FC = () => {
     setIsLoading(true);
     setErrorType(null);
     try {
-      const [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes, usersRes, cotacoesRes] = await Promise.all([
+      const [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes, profilesRes, cotacoesRes] = await Promise.all([
         supabase.from('transactions').select('*').order('vencimento', { ascending: false }),
         supabase.from('cost_centers').select('*').order('nome'),
         supabase.from('proposals').select('*').order('data', { ascending: false }),
         supabase.from('proposal_requirements').select('*').order('nome'),
         supabase.from('payment_lots').select('*').order('dataAprovacao', { ascending: false }),
-        supabase.from('users').select('*'),
+        // Lista de contas agora vem de profiles (ligada ao Supabase Auth), não mais
+        // da tabela users antiga. Gestão de Credenciais ainda vai precisar de um
+        // ajuste próprio pra editar cargo/status a partir daqui — ver observação.
+        supabase.from('profiles').select('*'),
         supabase.from('cotacoes').select('*').order('created_at', { ascending: false }).then(r => r, () => ({ data: null, error: null }))
       ]);
 
@@ -257,8 +259,17 @@ const App: React.FC = () => {
         }
       }
 
-      if (usersRes.data) {
-        setAppUsers(mergeWithDefaultUsers(usersRes.data as User[]));
+      if (profilesRes.data) {
+        const usersFromProfiles: User[] = profilesRes.data.map((p: any) => ({
+          id: p.id,
+          login: p.login || p.email,
+          email: p.email,
+          role: p.role,
+          status: 'ATIVO',
+          approved: p.approved !== false,
+          permissions: p.permissions || getDefaultPermissionsForRole(p.role),
+        }));
+        setAppUsers(mergeWithDefaultUsers(usersFromProfiles));
       } else {
         setAppUsers(mergeWithDefaultUsers([]));
       }
@@ -303,80 +314,69 @@ const App: React.FC = () => {
     }
   };
 
+  const ativarPrimeiraAbaPermitida = (appUser: User) => {
+    const tabs = [
+      { id: Tab.DASHBOARD, permission: appUser.permissions.dashboard },
+      { id: Tab.CONTAS_PAGAR, permission: appUser.permissions.contasPagar },
+      { id: Tab.CONTAS_RECEBER, permission: appUser.permissions.contasReceber },
+      { id: Tab.FLUXO_CAIXA, permission: appUser.permissions.fluxoCaixa },
+      { id: Tab.CENTRO_CUSTO, permission: appUser.permissions.centroCusto },
+      { id: Tab.ESTRUTURA_PROPOSTA, permission: appUser.permissions.estruturaProposta },
+      { id: Tab.DETALHES, permission: appUser.permissions.detalhes },
+      { id: Tab.PROPOSTAS, permission: appUser.permissions.propostas },
+      { id: Tab.ACOMPANHAMENTO, permission: appUser.permissions.gestaoDemandas },
+      { id: Tab.FINANCEIRO, permission: appUser.permissions.financeiro },
+      { id: Tab.COMISSOES, permission: appUser.permissions.comissoes },
+      { id: Tab.PLAN_CREDENCIAS, permission: appUser.permissions.planCredencias },
+    ];
+    const savedTab = localStorage.getItem('sis_activeTab') as Tab | null;
+    if (savedTab && tabs.find(t => t.id === savedTab)?.permission) {
+      setActiveTab(savedTab);
+    } else {
+      setActiveTab(tabs.find(t => t.permission)?.id || null);
+    }
+  };
+
+  const montarUsuarioDoProfile = (profile: any): User => ({
+    id: profile.id,
+    login: profile.login || profile.email,
+    email: profile.email,
+    role: profile.role,
+    status: 'ATIVO',
+    approved: profile.approved !== false,
+    permissions: profile.role === 'admin'
+      ? { centroCusto: true, contasPagar: true, contasReceber: true, dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true, gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true }
+      : (profile.permissions || getDefaultPermissionsForRole(profile.role)),
+  });
+
   useEffect(() => {
     const restoreSession = async () => {
       setIsLoading(true);
-      const savedLogin = localStorage.getItem('sis_login');
-      const savedPass = localStorage.getItem('sis_pass');
+      const { data: { session } } = await supabase.auth.getSession();
 
-      const usersData = await fetchSupabaseUsersSafely();
-      const currentUsers = mergeWithDefaultUsers(usersData);
-      setAppUsers(currentUsers);
+      if (session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
 
-      if (savedLogin && savedPass) {
-        const cleanSavedLogin = savedLogin.trim().toLowerCase();
-        const cleanSavedPass = savedPass.trim();
-
-        const foundUser = currentUsers.find(u => {
-          const uLogin = (u.login || '').trim().toLowerCase();
-          const uEmail = (u.email || '').trim().toLowerCase();
-          const uPass = (u.senha || '').trim();
-          const matchesIdentifier = uLogin === cleanSavedLogin || uEmail === cleanSavedLogin;
-          if (!matchesIdentifier) return false;
-          return uPass === cleanSavedPass || (uLogin === 'admin' && cleanSavedPass.toLowerCase() === 'davi2017');
-        });
-
-        if (foundUser && foundUser.approved !== false && String(foundUser.approved) !== 'false') {
-          if (foundUser.status === 'INATIVO') {
-            localStorage.removeItem('sis_login');
-            localStorage.removeItem('sis_pass');
-            setIsLoading(false);
-            return;
-          }
-
-          let userPerms = foundUser.permissions || {
-            centroCusto: false, contasPagar: false, contasReceber: false,
-            dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-            gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
-          };
-          if (foundUser.login === 'admin') {
-            userPerms = {
-              centroCusto: true, contasPagar: true, contasReceber: true,
-              dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
-              gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
-            };
-          }
-          const appUser: User = { ...foundUser, permissions: userPerms };
+        if (profile && profile.approved !== false) {
+          const appUser = montarUsuarioDoProfile(profile);
           setUser(appUser);
           await fetchData();
-
-          const tabs = [
-            { id: Tab.DASHBOARD, permission: appUser.permissions.dashboard },
-            { id: Tab.CONTAS_PAGAR, permission: appUser.permissions.contasPagar },
-            { id: Tab.CONTAS_RECEBER, permission: appUser.permissions.contasReceber },
-            { id: Tab.FLUXO_CAIXA, permission: appUser.permissions.fluxoCaixa },
-            { id: Tab.CENTRO_CUSTO, permission: appUser.permissions.centroCusto },
-            { id: Tab.ESTRUTURA_PROPOSTA, permission: appUser.permissions.estruturaProposta },
-            { id: Tab.DETALHES, permission: appUser.permissions.detalhes },
-            { id: Tab.PROPOSTAS, permission: appUser.permissions.propostas },
-            { id: Tab.ACOMPANHAMENTO, permission: appUser.permissions.gestaoDemandas },
-            { id: Tab.FINANCEIRO, permission: appUser.permissions.financeiro },
-            { id: Tab.COMISSOES, permission: appUser.permissions.comissoes },
-            { id: Tab.PLAN_CREDENCIAS, permission: appUser.permissions.planCredencias },
-          ];
-
-          const savedTab = localStorage.getItem('sis_activeTab') as Tab | null;
-          if (savedTab && tabs.find(t => t.id === savedTab)?.permission) {
-            setActiveTab(savedTab);
-          } else {
-            setActiveTab(tabs.find(t => t.permission)?.id || null);
-          }
+          ativarPrimeiraAbaPermitida(appUser);
         }
       }
       setIsLoading(false);
     };
 
     restoreSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) setUser(null);
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
   const accounts = useMemo(() => {
@@ -392,86 +392,42 @@ const App: React.FC = () => {
   const handleLogin = async (emailOrLogin: string, pass: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      const cleanInput = (emailOrLogin || '').trim().toLowerCase();
-      const cleanPass = (pass || '').trim();
+      // Login pelo app sempre foi por e-mail; se alguém digitar só o
+      // "login" antigo (ex: "admin"), tenta achar o e-mail correspondente
+      // no que já carregamos de profiles antes de chamar o Auth.
+      let email = (emailOrLogin || '').trim();
+      if (!email.includes('@')) {
+        const porLogin = appUsers.find(u => (u.login || '').trim().toLowerCase() === email.toLowerCase());
+        if (porLogin?.email) email = porLogin.email;
+      }
 
-      const usersData = await fetchSupabaseUsersSafely();
-      const currentUsers = mergeWithDefaultUsers(usersData);
-      setAppUsers(currentUsers);
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
 
-      const foundUser = currentUsers.find(u => {
-        const uLogin = (u.login || '').trim().toLowerCase();
-        const uEmail = (u.email || '').trim().toLowerCase();
-        const uPass = (u.senha || '').trim();
-
-        const matchesIdentifier = uLogin === cleanInput || uEmail === cleanInput;
-        if (!matchesIdentifier) return false;
-
-        if (uPass === cleanPass) return true;
-        if (uLogin === 'admin' && cleanPass.toLowerCase() === 'davi2017') return true;
-        return false;
-      });
-
-      if (!foundUser) {
+      if (error || !data.user) {
         setIsLoading(false);
         return false;
       }
 
-      if (foundUser.approved === false || String(foundUser.approved) === 'false') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+      if (!profile) {
+        setIsLoading(false);
+        return false;
+      }
+      if (profile.approved === false) {
         setIsLoading(false);
         alert('Sua solicitação de acesso está aguardando aprovação do administrador.');
         return false;
       }
 
-      if (foundUser.status === 'INATIVO') {
-        setIsLoading(false);
-        alert('Este usuário está inativo no sistema. Entre em contato com o administrador.');
-        return false;
-      }
-
-      let userPerms = foundUser.permissions || {
-        centroCusto: false, contasPagar: false, contasReceber: false,
-        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-        gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
-      };
-
-      if (foundUser.login === 'admin') {
-        userPerms = {
-          centroCusto: true, contasPagar: true, contasReceber: true,
-          dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
-          gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
-        };
-      }
-
-      const appUser: User = { ...foundUser, permissions: userPerms };
+      const appUser = montarUsuarioDoProfile(profile);
       setUser(appUser);
-      localStorage.setItem('sis_login', appUser.login);
-      localStorage.setItem('sis_pass', appUser.senha || '');
-
       await fetchData();
-
-      const tabs = [
-        { id: Tab.DASHBOARD, permission: appUser.permissions.dashboard },
-        { id: Tab.CONTAS_PAGAR, permission: appUser.permissions.contasPagar },
-        { id: Tab.CONTAS_RECEBER, permission: appUser.permissions.contasReceber },
-        { id: Tab.FLUXO_CAIXA, permission: appUser.permissions.fluxoCaixa },
-        { id: Tab.CENTRO_CUSTO, permission: appUser.permissions.centroCusto },
-        { id: Tab.ESTRUTURA_PROPOSTA, permission: appUser.permissions.estruturaProposta },
-        { id: Tab.DETALHES, permission: appUser.permissions.detalhes },
-        { id: Tab.PROPOSTAS, permission: appUser.permissions.propostas },
-        { id: Tab.ACOMPANHAMENTO, permission: appUser.permissions.gestaoDemandas },
-        { id: Tab.FINANCEIRO, permission: appUser.permissions.financeiro },
-        { id: Tab.COMISSOES, permission: appUser.permissions.comissoes },
-        { id: Tab.PLAN_CREDENCIAS, permission: appUser.permissions.planCredencias },
-      ];
-
-      const savedTab = localStorage.getItem('sis_activeTab') as Tab | null;
-      if (savedTab && tabs.find(t => t.id === savedTab)?.permission) {
-        setActiveTab(savedTab);
-      } else {
-        setActiveTab(tabs.find(t => t.permission)?.id || null);
-      }
-
+      ativarPrimeiraAbaPermitida(appUser);
       setIsLoading(false);
       return true;
     } catch (err) {
@@ -482,38 +438,25 @@ const App: React.FC = () => {
   };
 
   const handleRegister = async (login: string, email: string, pass: string): Promise<boolean> => {
-    const cleanLogin = login.trim();
     const cleanEmail = email.trim();
-    
-    // Check if user already exists
-    const existing = appUsers.find(u => 
-      (u.login && u.login.trim().toLowerCase() === cleanLogin.toLowerCase()) ||
-      (cleanEmail && u.email && u.email.trim().toLowerCase() === cleanEmail.toLowerCase())
-    );
-    if (existing) {
-      alert('Este login ou e-mail já está cadastrado no sistema.');
+    if (!cleanEmail) {
+      alert('E-mail é obrigatório pra solicitar acesso.');
       return false;
     }
 
-    const newUser: User = {
-      login: cleanLogin,
-      senha: pass,
+    // O gatilho handle_new_user (schema.sql) cria o profile sozinho,
+    // já com approved=false — ninguém entra sem aprovação do admin.
+    const { error } = await supabase.auth.signUp({
       email: cleanEmail,
-      approved: false,
-      permissions: {
-        centroCusto: false, contasPagar: false, contasReceber: false,
-        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-        gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
-      }
-    };
+      password: pass,
+      options: { data: { login: login.trim(), approved: false } },
+    });
 
-    try {
-      await supabase.from('users').insert([newUser]);
-    } catch (e) {
-      console.warn('DB insert notice:', e);
+    if (error) {
+      alert(error.message || 'Não foi possível concluir o cadastro.');
+      return false;
     }
 
-    setAppUsers(prev => [...prev, newUser]);
     alert('Sua solicitação foi enviada com sucesso! Aguarde a aprovação do administrador.');
     return true;
   };
@@ -616,8 +559,6 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
     setCostCenters([]);
     setProposalRequirements([]);
     localStorage.removeItem('sis_activeTab');
-    localStorage.removeItem('sis_login');
-    localStorage.removeItem('sis_pass');
   };
 
   const handleSaveProposal = async (proposalData: Proposal) => {
@@ -1130,6 +1071,9 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               for (const du of deletedUsers) {
                 try {
                   await supabase.from('users').delete().eq('login', du.login);
+                  if (du.email) {
+                    await supabase.from('profiles').delete().eq('email', du.email);
+                  }
                 } catch (e) {
                   console.warn('Error deleting user:', e);
                 }
@@ -1145,7 +1089,22 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                     status: u.status,
                     approved: u.approved !== false,
                     permissions: u.permissions
-                  }); 
+                  });
+
+                  if (u.id || u.email) {
+                    const profilePayload: any = {
+                      login: u.login,
+                      role: u.role,
+                      approved: u.approved !== false,
+                      permissions: u.permissions,
+                    };
+                    if (u.email) profilePayload.email = u.email;
+                    if (u.id) {
+                      await supabase.from('profiles').update(profilePayload).eq('id', u.id);
+                    } else if (u.email) {
+                      await supabase.from('profiles').update(profilePayload).eq('email', u.email);
+                    }
+                  }
                 } catch (e) {
                   console.warn('Error upserting user:', e);
                 }
