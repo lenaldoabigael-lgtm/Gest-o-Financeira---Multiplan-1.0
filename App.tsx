@@ -185,34 +185,39 @@ const App: React.FC = () => {
       return {
         centroCusto: true, contasPagar: true, contasReceber: true,
         dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
-        gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true
+        gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true,
+        cotacao: true, exportarDados: true, criarPropostas: true, gestaoUsuarios: true
       };
     }
     if (role === 'cadastro_propostas') {
       return {
         centroCusto: false, contasPagar: false, contasReceber: false,
         dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-        gestaoDemandas: true, propostas: true, financeiro: false, estruturaProposta: false, comissoes: false
+        gestaoDemandas: true, propostas: true, financeiro: false, estruturaProposta: false, comissoes: false,
+        cotacao: true, exportarDados: false, criarPropostas: true, gestaoUsuarios: false
       };
     }
     if (role === 'pagamento_comissoes') {
       return {
-        centroCusto: false, contasPagar: false, contasReceber: false,
-        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-        gestaoDemandas: false, propostas: true, financeiro: true, estruturaProposta: false, comissoes: true
+        centroCusto: false, contasPagar: true, contasReceber: true,
+        dashboard: false, fluxoCaixa: true, detalhes: true, planCredencias: false,
+        gestaoDemandas: false, propostas: true, financeiro: true, estruturaProposta: false, comissoes: true,
+        cotacao: false, exportarDados: true, criarPropostas: false, gestaoUsuarios: false
       };
     }
     if (role === 'corretor') {
       return {
         centroCusto: false, contasPagar: false, contasReceber: false,
         dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-        gestaoDemandas: false, propostas: true, financeiro: false, estruturaProposta: false, comissoes: true
+        gestaoDemandas: false, propostas: true, financeiro: false, estruturaProposta: false, comissoes: true,
+        cotacao: true, exportarDados: false, criarPropostas: true, gestaoUsuarios: false
       };
     }
     return {
       centroCusto: false, contasPagar: false, contasReceber: false,
       dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-      gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false
+      gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false,
+      cotacao: false, exportarDados: false, criarPropostas: false, gestaoUsuarios: false
     };
   };
 
@@ -317,16 +322,17 @@ const App: React.FC = () => {
   const ativarPrimeiraAbaPermitida = (appUser: User) => {
     const tabs = [
       { id: Tab.DASHBOARD, permission: appUser.permissions.dashboard },
+      { id: Tab.PROPOSTAS, permission: appUser.permissions.propostas },
+      { id: Tab.COTACAO, permission: appUser.permissions.cotacao !== false },
+      { id: Tab.ESTRUTURA_PROPOSTA, permission: appUser.permissions.estruturaProposta },
+      { id: Tab.ACOMPANHAMENTO, permission: appUser.permissions.gestaoDemandas },
+      { id: Tab.COMISSOES, permission: appUser.permissions.comissoes },
       { id: Tab.CONTAS_PAGAR, permission: appUser.permissions.contasPagar },
       { id: Tab.CONTAS_RECEBER, permission: appUser.permissions.contasReceber },
       { id: Tab.FLUXO_CAIXA, permission: appUser.permissions.fluxoCaixa },
-      { id: Tab.CENTRO_CUSTO, permission: appUser.permissions.centroCusto },
-      { id: Tab.ESTRUTURA_PROPOSTA, permission: appUser.permissions.estruturaProposta },
-      { id: Tab.DETALHES, permission: appUser.permissions.detalhes },
-      { id: Tab.PROPOSTAS, permission: appUser.permissions.propostas },
-      { id: Tab.ACOMPANHAMENTO, permission: appUser.permissions.gestaoDemandas },
       { id: Tab.FINANCEIRO, permission: appUser.permissions.financeiro },
-      { id: Tab.COMISSOES, permission: appUser.permissions.comissoes },
+      { id: Tab.CENTRO_CUSTO, permission: appUser.permissions.centroCusto },
+      { id: Tab.DETALHES, permission: appUser.permissions.detalhes },
       { id: Tab.PLAN_CREDENCIAS, permission: appUser.permissions.planCredencias },
     ];
     const savedTab = localStorage.getItem('sis_activeTab') as Tab | null;

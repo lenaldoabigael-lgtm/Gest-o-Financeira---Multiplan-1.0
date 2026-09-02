@@ -701,7 +701,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                   </div>
 
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 pt-1">
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.dashboard}
@@ -711,7 +711,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                       <span>Visualizar Dashboard</span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.exportarDados}
@@ -723,7 +723,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                   </div>
                 </div>
 
-                {/* 2. PROPOSTAS & CONTRATOS */}
+                {/* 2. PROPOSTAS & CONTRATOS (COMERCIAL) */}
                 <div className="space-y-2.5 pt-2 border-t border-gray-100">
                   <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">
                     <span className="material-symbols-outlined text-sm text-[#001a54]">description</span>
@@ -731,7 +731,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                   </div>
 
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 pt-1">
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.propostas}
@@ -741,7 +741,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                       <span>Visualizar Propostas</span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.criarPropostas}
@@ -751,7 +751,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                       <span>Criar / Editar Propostas</span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.cotacao}
@@ -761,7 +761,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                       <span>Cotação de Planos</span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.estruturaProposta}
@@ -769,6 +769,26 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                         className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
                       />
                       <span>Estrutura de Proposta</span>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={!!editingPermissions.gestaoDemandas}
+                        onChange={() => handleToggleEditingPermission('gestaoDemandas')}
+                        className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
+                      />
+                      <span>Acompanhamento</span>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={!!editingPermissions.comissoes}
+                        onChange={() => handleToggleEditingPermission('comissoes')}
+                        className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
+                      />
+                      <span>Gestão de Comissões</span>
                     </label>
                   </div>
                 </div>
@@ -781,27 +801,17 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                   </div>
 
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 pt-1">
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
-                        checked={!!editingPermissions.gestaoDemandas}
-                        onChange={() => handleToggleEditingPermission('gestaoDemandas')}
+                        checked={!!editingPermissions.financeiro}
+                        onChange={() => handleToggleEditingPermission('financeiro')}
                         className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
                       />
-                      <span>Aprovar / Gerar Lotes</span>
+                      <span>Lotes de Pagamento</span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={!!editingPermissions.comissoes}
-                        onChange={() => handleToggleEditingPermission('comissoes')}
-                        className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
-                      />
-                      <span>Gestão de Comissões</span>
-                    </label>
-
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.contasPagar}
@@ -811,7 +821,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                       <span>Contas a Pagar</span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.contasReceber}
@@ -821,7 +831,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                       <span>Contas a Receber</span>
                     </label>
 
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.fluxoCaixa}
@@ -830,34 +840,44 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                       />
                       <span>Fluxo de Caixa</span>
                     </label>
+                  </div>
+                </div>
 
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                {/* 4. GESTÃO & CONFIGURAÇÕES */}
+                <div className="space-y-2.5 pt-2 border-t border-gray-100">
+                  <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">
+                    <span className="material-symbols-outlined text-sm text-[#001a54]">settings</span>
+                    <span>GESTÃO & CONFIGURAÇÕES</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 pt-1 items-center">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.centroCusto}
                         onChange={() => handleToggleEditingPermission('centroCusto')}
                         className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
                       />
-                      <span>Plano de Contas</span>
+                      <span>Centro de Custo</span>
                     </label>
-                  </div>
-                </div>
 
-                {/* 4. CONFIGURAÇÕES DO SISTEMA */}
-                <div className="space-y-2.5 pt-2 border-t border-gray-100">
-                  <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-gray-500 uppercase tracking-wider">
-                    <span className="material-symbols-outlined text-sm text-[#001a54]">settings</span>
-                    <span>CONFIGURAÇÕES DO SISTEMA</span>
-                  </div>
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={!!editingPermissions.detalhes}
+                        onChange={() => handleToggleEditingPermission('detalhes')}
+                        className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
+                      />
+                      <span>Relatórios</span>
+                    </label>
 
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 pt-1 items-center">
-                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
                       <input
                         type="checkbox"
                         checked={!!editingPermissions.planCredencias}
                         disabled={selectedUser.login.toLowerCase() === 'admin'}
                         onChange={() => handleToggleEditingPermission('planCredencias')}
-                        className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
+                        className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300 disabled:opacity-50"
                       />
                       <span>Gerir Usuários / Credenciais</span>
                     </label>
