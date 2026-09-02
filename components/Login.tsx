@@ -166,15 +166,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
                <>NÃO TEM ACESSO? <span className="text-orange-600 underline">SOLICITAR CADASTRO</span></>
             )}
           </button>
-
-          {!isRegistering && (
-            <div className="w-full p-2.5 bg-blue-50/60 rounded-xl border border-blue-100/80 text-[11px] text-blue-900/80 flex items-center justify-between">
-              <span className="font-medium">Acesso Master Padrão:</span>
-              <span className="font-mono font-bold text-[#001a54] bg-white px-2 py-0.5 rounded border border-blue-200">
-                admin / Davi2017
-              </span>
-            </div>
-          )}
         </div>
       </div>
     </div>
