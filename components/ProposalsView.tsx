@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Proposal, ProposalRequirement } from '../types';
 import * as XLSX from 'xlsx';
+import { RevisaoImportacaoModal } from './RevisaoImportacaoModal';
 
 interface ProposalsViewProps {
   proposals: Proposal[];
@@ -362,7 +363,9 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
           const operadoraNome = row['Operadora']?.toString() || 'Operadora Geral';
           const categoriaNome = row['Categoria']?.toString() || 'Geral';
           const valorNum = cleanMoney(row['Valor Contrato'] || row['Valor']);
-          const vidasNum = parseInt(row['Vidas']?.toString() || '0', 10) || 1;
+          // Não força mais 0 -> 1 em silêncio; deixa passar e a tela de
+          // revisão sinaliza, porque 0 pode ser um erro real de preenchimento
+          const vidasNum = parseInt(row['Vidas']?.toString() || '0', 10) || 0;
           const dataVenda = parseExcelDate(row['Dt Venda'] || row['Data']);
           const valorTaxaNum = cleanMoney(row['Valor Taxa']);
 
@@ -426,7 +429,12 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
             categoria: categoriaNome,
             valor: valorNum,
             vidas: vidasNum,
-            status: row['Status']?.toString() || 'CADASTRADA',
+            // Toda importação entra como CADASTRADA, sempre — o que a planilha
+            // trouxer em "Status" é ignorado de propósito. Deixar a vendedora
+            // marcar "Pago" na planilha e isso pular direto o fluxo normal
+            // (Cadastrada -> Enviada ao Financeiro -> Paga) puxaria o registro
+            // sem passar pelas ações que cada etapa dispara no financeiro.
+            status: 'CADASTRADA',
             comissao: comissaoNum,
             detalhes: {
               cliente: {
@@ -923,112 +931,16 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
       </div>
 
       {importPreviewData && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-xl shadow-inner">
-                  <i className="fa-solid fa-file-import"></i>
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-slate-800 uppercase tracking-tighter">Revisão de Importação</h2>
-                  <p className="text-sm font-bold text-slate-500">Foram encontradas {importPreviewData.length} propostas na planilha.</p>
-                </div>
-              </div>
-              
-              {importPreviewData.filter(p => p.contrato.startsWith('IMP-')).length > 0 && (
-                <div className="ml-auto mr-4 flex items-center gap-3 bg-amber-50 text-amber-700 px-4 py-2 rounded-xl border border-amber-200">
-                  <i className="fa-solid fa-triangle-exclamation text-amber-500 text-lg"></i>
-                  <div className="text-xs font-bold">
-                    <span className="block">{importPreviewData.filter(p => p.contrato.startsWith('IMP-')).length} proposta(s) sem contrato!</span>
-                    <span className="text-[10px] opacity-80">IDs provisórios (IMP-...) foram gerados.</span>
-                  </div>
-                </div>
-              )}
-              <button 
-                onClick={() => setImportPreviewData(null)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-all"
-              >
-                <i className="fa-solid fa-xmark text-xl"></i>
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1 bg-slate-50/30">
-              <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50/50 border-b border-slate-100">
-                        <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</th>
-                        <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Contrato</th>
-                        <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Operadora</th>
-                        <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {importPreviewData.slice(0, 50).map((p, index) => (
-                        <tr key={index} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="p-4">
-                            <div className="font-bold text-slate-700 uppercase">{p.cliente}</div>
-                            <div className="text-[10px] text-slate-400 font-bold">CPF: {p.cpfCnpj}</div>
-                          </td>
-                          <td className="p-4">
-                            <div className="font-bold text-blue-600 flex items-center gap-2">
-                              {p.contrato}
-                              {p.contrato.startsWith('IMP-') && (
-                                <i className="fa-solid fa-triangle-exclamation text-amber-500" title="Número de contrato provisório (gerado automaticamente)"></i>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <div className="font-bold text-slate-700">{p.detalhes?.proposta?.operadora || p.operadora || 'N/A'}</div>
-                          </td>
-                          <td className="p-4">
-                            <div className="font-bold text-emerald-600">
-                              R$ {Number(p.valor || p.detalhes?.financeiro?.valorContrato || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {importPreviewData.length > 50 && (
-                  <div className="p-4 text-center bg-slate-50 border-t border-slate-100 text-xs font-bold text-slate-500 uppercase tracking-widest">
-                    Mostrando as primeiras 50 de {importPreviewData.length} propostas...
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="p-6 border-t border-slate-100 flex gap-4 bg-white">
-              <button
-                type="button"
-                onClick={() => setImportPreviewData(null)}
-                className="flex-1 px-4 py-4 bg-slate-100 rounded-2xl font-black text-slate-500 hover:bg-slate-200 transition-all uppercase text-xs tracking-widest"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const hasMissingContract = importPreviewData.some(p => !p.contrato || p.contrato.trim() === '' || p.contrato.startsWith('IMP-'));
-                  if (hasMissingContract) {
-                    setAlertMessage('Não é possível confirmar a importação: existem propostas sem número de contrato. Por favor, edite a planilha e informe a numeração correta.');
-                    return;
-                  }
-                  if (onImportProposals) {
-                    onImportProposals(importPreviewData);
-                  }
-                  setImportPreviewData(null);
-                }}
-                className="flex-1 px-4 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 shadow-xl shadow-blue-600/30 transition-all uppercase text-xs tracking-widest flex items-center justify-center gap-2"
-              >
-                <i className="fa-solid fa-check"></i> Confirmar Importação
-              </button>
-            </div>
-          </div>
-        </div>
+        <RevisaoImportacaoModal
+          data={importPreviewData}
+          requirements={requirements}
+          existingProposals={proposals}
+          onCancel={() => setImportPreviewData(null)}
+          onConfirm={(rows) => {
+            if (onImportProposals) onImportProposals(rows);
+            setImportPreviewData(null);
+          }}
+        />
       )}
 
       {viewingProposal && (
