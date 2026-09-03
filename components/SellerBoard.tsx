@@ -87,9 +87,24 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
   const [selectedOperadora, setSelectedOperadora] = useState('TODAS');
   const [selectedCorretor, setSelectedCorretor] = useState('TODOS');
   const [filterAtrasadasOnly, setFilterAtrasadasOnly] = useState(false);
+  const [filterCartaoOnly, setFilterCartaoOnly] = useState(false);
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [selectedProposalDetails, setSelectedProposalDetails] = useState<Proposal | null>(null);
   const [alertMessage, setAlertMessage] = useState('');
+
+  // Check if a proposal was paid by card
+  const checkIsPagoCartao = (p: any): boolean => {
+    if (!p) return false;
+    return Boolean(
+      p.detalhes?.proposta?.pagamentoCartao === true ||
+      p.detalhes?.pagamentoCartao === true ||
+      p.pagamentoCartao === true ||
+      (p.categoria && p.categoria.toLowerCase().includes('cartão')) ||
+      (p.categoria && p.categoria.toLowerCase().includes('cartao')) ||
+      p.categoria === 'Cartão Corretora' ||
+      (p.detalhes?.proposta?.tipoPagamento && p.detalhes.proposta.tipoPagamento.toLowerCase().includes('cart'))
+    );
+  };
 
   // Extract unique operadoras and corretores for filters
   const availableOperadoras = useMemo(() => {
@@ -183,6 +198,10 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
         if (!sla.isAtrasado) return false;
       }
 
+      if (filterCartaoOnly) {
+        if (!checkIsPagoCartao(p)) return false;
+      }
+
       return matchesSearch && matchesOperadora && matchesCorretor;
     });
   }, [
@@ -191,6 +210,7 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
     selectedOperadora,
     selectedCorretor,
     filterAtrasadasOnly,
+    filterCartaoOnly,
     requirements
   ]);
 
@@ -218,7 +238,8 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
   const activeFiltersCount =
     (selectedOperadora !== 'TODAS' ? 1 : 0) +
     (selectedCorretor !== 'TODOS' ? 1 : 0) +
-    (filterAtrasadasOnly ? 1 : 0);
+    (filterAtrasadasOnly ? 1 : 0) +
+    (filterCartaoOnly ? 1 : 0);
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
@@ -312,10 +333,7 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                       ? `PROP-${p.cpfCnpj}`
                       : `PROP-${p.id.slice(0, 8).toUpperCase()}`;
 
-                    const isCartaoCorretora =
-                      (p.categoria && p.categoria.toLowerCase().includes('cartão')) ||
-                      (p.categoria && p.categoria.toLowerCase().includes('cartao')) ||
-                      p.categoria === 'Cartão Corretora';
+                    const isCartao = checkIsPagoCartao(p);
 
                     return (
                       <div
@@ -346,12 +364,12 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                         {/* Badges / Tags Row */}
                         <div className="flex flex-wrap items-center gap-1.5 mb-3">
                           {/* Cartão Corretora badge */}
-                          {isCartaoCorretora && (
-                            <span className="bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[12px]">
+                          {isCartao && (
+                            <span className="bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                              <span className="material-symbols-outlined text-[12px] text-amber-700">
                                 credit_card
                               </span>
-                              <span>Cartão Corretora</span>
+                              <span>Pago no Cartão</span>
                             </span>
                           )}
 
@@ -552,7 +570,7 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                 </select>
               </div>
 
-              <div className="pt-2">
+              <div className="pt-2 space-y-2.5">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
                   <input
                     type="checkbox"
@@ -561,6 +579,19 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                     className="w-4 h-4 rounded text-[#e85d04] focus:ring-[#e85d04]"
                   />
                   <span>Mostrar apenas propostas em atraso (SLA Estourado)</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={filterCartaoOnly}
+                    onChange={e => setFilterCartaoOnly(e.target.checked)}
+                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500"
+                  />
+                  <span className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-sm text-amber-700">credit_card</span>
+                    <span>Mostrar apenas pagas no cartão (Cartão Corretora)</span>
+                  </span>
                 </label>
               </div>
             </div>
@@ -571,6 +602,7 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                   setSelectedOperadora('TODAS');
                   setSelectedCorretor('TODOS');
                   setFilterAtrasadasOnly(false);
+                  setFilterCartaoOnly(false);
                   setSearchTerm('');
                   setIsFilterModalOpen(false);
                 }}
@@ -623,6 +655,12 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                   <p className="text-xs text-slate-500 font-medium mt-0.5">
                     CPF/CNPJ: {selectedProposalDetails.cpfCnpj || 'Não informado'}
                   </p>
+                  {checkIsPagoCartao(selectedProposalDetails) && (
+                    <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-bold">
+                      <span className="material-symbols-outlined text-[13px] text-amber-700">credit_card</span>
+                      <span>PAGO NO CARTÃO (CARTÃO CORRETORA)</span>
+                    </div>
+                  )}
                 </div>
                 <div className="text-right shrink-0">
                   <span className="text-base sm:text-lg font-bold text-[#001a54] font-mono">
@@ -631,7 +669,7 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                 </div>
               </div>
 
-              {/* 2x2 Details Grid */}
+              {/* Details Grid */}
               <div className="grid grid-cols-2 gap-3.5">
                 {/* Operadora */}
                 <div className="bg-[#f8fafd] border border-slate-100 rounded-xl p-3.5">
@@ -671,6 +709,35 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                   <span className="text-xs font-bold text-slate-800">
                     {selectedProposalDetails.vidas || 1}
                   </span>
+                </div>
+
+                {/* Forma de Pagamento */}
+                <div className="bg-[#f8fafd] border border-slate-100 rounded-xl p-3.5 col-span-2 flex items-center justify-between">
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      FORMA DE PAGAMENTO
+                    </span>
+                    {checkIsPagoCartao(selectedProposalDetails) ? (
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                        <span className="material-symbols-outlined text-base text-amber-700">credit_card</span>
+                        <span>Cartão de Crédito (Cartão Corretora)</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                        <span className="material-symbols-outlined text-base text-slate-500">payments</span>
+                        <span>Boleto Bancário / Padrão</span>
+                      </div>
+                    )}
+                  </div>
+                  {checkIsPagoCartao(selectedProposalDetails) ? (
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-100/70 border border-amber-200 px-2 py-0.5 rounded-md">
+                      100% Repasse no Fechamento
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                      Fluxo Regular
+                    </span>
+                  )}
                 </div>
               </div>
 
