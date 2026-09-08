@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Proposal, ProposalRequirement } from '../types';
 import * as XLSX from 'xlsx';
 import { RevisaoImportacaoModal } from './RevisaoImportacaoModal';
+import { validateProposalForAdvance, validateCpfCnpj } from '../lib/validators';
 
 interface ProposalsViewProps {
   proposals: Proposal[];
@@ -356,20 +357,71 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
         };
 
         const importedProposals = validRows.map(row => {
-          const clienteNome = row['Nome']?.toString() || row['Cliente']?.toString() || 'Cliente Não Informado';
-          const clienteCpfCnpj = row['CPF / CNPJ']?.toString() || row['CPF/CNPJ']?.toString() || row['CPF']?.toString() || row['CNPJ']?.toString() || '000.000.000-00';
-          const contratoNum = row['Nº Contrato']?.toString() || row['Contrato']?.toString() || ('IMP-' + Math.random().toString(36).substr(2, 9).toUpperCase());
-          const corretorNome = row['Corretor']?.toString() || 'Corretor Geral';
-          const operadoraNome = row['Operadora']?.toString() || 'Operadora Geral';
-          const categoriaNome = row['Categoria']?.toString() || 'Geral';
-          const valorNum = cleanMoney(row['Valor Contrato'] || row['Valor']);
-          // Não força mais 0 -> 1 em silêncio; deixa passar e a tela de
-          // revisão sinaliza, porque 0 pode ser um erro real de preenchimento
-          const vidasNum = parseInt(row['Vidas']?.toString() || '0', 10) || 0;
-          const dataVenda = parseExcelDate(row['Dt Venda'] || row['Data']);
-          const valorTaxaNum = cleanMoney(row['Valor Taxa']);
+          const clienteNome = (
+            row['Nome'] ||
+            row['Nome do Cliente'] ||
+            row['Nome Cliente'] ||
+            row['Cliente'] ||
+            row['Titular'] ||
+            row['Nome do Titular'] ||
+            'Cliente Não Informado'
+          ).toString().trim();
 
-          const tipoPlanoExtracted = row['Tipo de Plano']?.toString() || row['Tipo']?.toString() || '';
+          const clienteCpfCnpj = (
+            row['CPF / CNPJ'] ||
+            row['CPF/CNPJ'] ||
+            row['CPF'] ||
+            row['CNPJ'] ||
+            row['Documento'] ||
+            row['CPF do Titular'] ||
+            row['CPF Titular'] ||
+            '000.000.000-00'
+          ).toString().trim();
+
+          const contratoNum = (
+            row['Nº Contrato'] ||
+            row['Nº do Contrato'] ||
+            row['No Contrato'] ||
+            row['Numero Contrato'] ||
+            row['Número Contrato'] ||
+            row['Número do Contrato'] ||
+            row['Contrato'] ||
+            row['Proposta'] ||
+            row['Nº Proposta'] ||
+            row['Numero Proposta'] ||
+            row['Número da Proposta'] ||
+            ''
+          ).toString().trim() || ('IMP-' + Math.random().toString(36).substr(2, 9).toUpperCase());
+
+          const corretorNome = (
+            row['Corretor'] ||
+            row['Corretora'] ||
+            row['Vendedor'] ||
+            row['Vendedora'] ||
+            row['Consultor'] ||
+            row['Consultora'] ||
+            row['Nome do Corretor'] ||
+            row['Nome Corretor'] ||
+            row['Nome da Vendedora'] ||
+            row['Nome Vendedora'] ||
+            row['Produtor'] ||
+            row['Produtora'] ||
+            ''
+          ).toString().trim() || 'Corretor Geral';
+
+          const operadoraNome = (row['Operadora'] || row['Convênio'] || row['Convenio'] || 'Operadora Geral').toString().trim();
+          const categoriaNome = (row['Categoria'] || row['Ramo'] || 'Geral').toString().trim();
+          
+          const rawValor = row['Valor Contrato'] || row['Valor do Contrato'] || row['Valor Mensalidade'] || row['Mensalidade'] || row['Valor Total'] || row['Valor'] || row['Premio'] || row['Prêmio'];
+          const valorNum = cleanMoney(rawValor);
+
+          const rawVidas = row['Vidas'] || row['Qtde Vidas'] || row['Qtd Vidas'] || row['Quantidade Vidas'] || row['Quantidade de Vidas'] || row['Nº Vidas'] || row['Beneficiários'] || row['Qtde'];
+          const vidasNum = parseInt(rawVidas?.toString() || '0', 10) || 0;
+          
+          const dataVenda = parseExcelDate(row['Dt Venda'] || row['Data'] || row['Data Venda'] || row['Data da Venda']);
+          const valorTaxaNum = cleanMoney(row['Valor Taxa'] || row['Taxa Adesão'] || row['Taxa']);
+
+          const tipoPlanoExtracted = (row['Tipo de Plano'] || row['Tipo'] || row['Segmentação'] || '').toString().trim();
 
           let finalTaxaNum = valorTaxaNum;
           if (finalTaxaNum === 0 && (row['Valor Taxa'] === undefined || row['Valor Taxa'] === '')) {
@@ -807,16 +859,9 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (!p.vidas || p.vidas === 0) {
-                                    setAlertMessage('Não é possível enviar propostas com 0 vidas para o financeiro. Edite a proposta e insira a quantidade de vidas corretamente.');
-                                    return;
-                                  }
-                                  if ((!p.valor || p.valor === 0) && !p.detalhes?.proposta?.pagamentoCartao) {
-                                    setAlertMessage('Não é possível enviar propostas com valor R$ 0,00 para o financeiro (exceto Cartão Corretora). Edite a proposta e insira o valor do contrato.');
-                                    return;
-                                  }
-                                  if (!p.contrato || p.contrato.trim() === '' || p.contrato.startsWith('IMP-')) {
-                                    setAlertMessage('Não é possível enviar propostas sem número de contrato para o financeiro. Edite a proposta e informe o contrato.');
+                                  const val = validateProposalForAdvance(p);
+                                  if (!val.isValid) {
+                                    setAlertMessage(`Não é possível enviar a proposta para o financeiro devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nEdite a proposta e corrija os dados antes de prosseguir.`);
                                     return;
                                   }
                                   setConfirmingSendId(p.id);

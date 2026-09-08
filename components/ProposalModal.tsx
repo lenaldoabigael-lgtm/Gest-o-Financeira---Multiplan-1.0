@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Proposal, ProposalRequirement, User } from '../types';
+import { validateCpfCnpj } from '../lib/validators';
 
 interface ProposalModalProps {
   isOpen: boolean;
@@ -26,54 +27,6 @@ const formatCpfCnpj = (value: string) => {
       .replace(/(\d{4})(\d{1,2})/, '$1-$2')
       .replace(/(-\d{2})\d+?$/, '$1');
   }
-};
-
-const validateCpfCnpj = (value: string) => {
-  const digits = value.replace(/\D/g, '');
-  if (!digits) return false;
-
-  if (digits.length === 11) {
-    if (/^(\d)\1+$/.test(digits)) return false;
-    let sum = 0;
-    let remainder;
-    for (let i = 1; i <= 9; i++) sum += parseInt(digits.substring(i - 1, i)) * (11 - i);
-    remainder = (sum * 10) % 11;
-    if (remainder === 10 || remainder === 11) remainder = 0;
-    if (remainder !== parseInt(digits.substring(9, 10))) return false;
-    
-    sum = 0;
-    for (let i = 1; i <= 10; i++) sum += parseInt(digits.substring(i - 1, i)) * (12 - i);
-    remainder = (sum * 10) % 11;
-    if (remainder === 10 || remainder === 11) remainder = 0;
-    if (remainder !== parseInt(digits.substring(10, 11))) return false;
-    return true;
-  } else if (digits.length === 14) {
-    if (/^(\d)\1+$/.test(digits)) return false;
-    let size = digits.length - 2;
-    let numbers = digits.substring(0, size);
-    const digitsCNPJ = digits.substring(size);
-    let sum = 0;
-    let pos = size - 7;
-    for (let i = size; i >= 1; i--) {
-      sum += parseInt(numbers.charAt(size - i)) * pos--;
-      if (pos < 2) pos = 9;
-    }
-    let result = sum % 11 < 2 ? 0 : 11 - sum % 11;
-    if (result !== parseInt(digitsCNPJ.charAt(0))) return false;
-    
-    size = size + 1;
-    numbers = digits.substring(0, size);
-    sum = 0;
-    pos = size - 7;
-    for (let i = size; i >= 1; i--) {
-      sum += parseInt(numbers.charAt(size - i)) * pos--;
-      if (pos < 2) pos = 9;
-    }
-    let result2 = sum % 11 < 2 ? 0 : 11 - sum % 11;
-    if (result2 !== parseInt(digitsCNPJ.charAt(1))) return false;
-    return true;
-  }
-  return false;
 };
 
 const formatDate = (value: string) => {
@@ -321,24 +274,30 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       return;
     }
     
-    const vidas = Number(formData.financeiro.vidas) || 0;
-    const nextStatus = (proposal?.status && proposal.status !== 'CADASTRADA') 
-      ? proposal.status 
-      : (formData.proposta.pagamentoCartao ? 'ENVIADA AO FINANCEIRO' : 'CADASTRADA');
-      
-    if ((nextStatus === 'ENVIADA AO FINANCEIRO' || formData.proposta.pagamentoCartao) && vidas === 0) {
-      setAlertMessage('Não é possível salvar propostas de Cartão Corretora ou avançar para o financeiro com 0 vidas. Por favor, insira a quantidade de vidas correta.');
+    // 1. Validação de Corretor / Vendedora (Obrigatório)
+    const corretorSelecionado = (formData.proposta.corretor || '').trim();
+    if (!corretorSelecionado || corretorSelecionado === 'Selecione...' || corretorSelecionado === 'Sem Corretor') {
+      setAlertMessage('É obrigatório selecionar um Corretor / Vendedora responsável para salvar a proposta.');
       return;
     }
 
+    // 2. Validação de Vidas (Maior que zero)
+    const vidas = Number(formData.financeiro.vidas) || 0;
+    if (vidas <= 0) {
+      setAlertMessage('A quantidade de vidas é obrigatória e deve ser maior que 0.');
+      return;
+    }
+
+    // 3. Validação de Valor do Contrato (Maior que zero, exceto se Cartão Corretora)
     const valorContrato = Number(formData.financeiro.valorContrato) || 0;
-    if (nextStatus === 'ENVIADA AO FINANCEIRO' && valorContrato === 0 && !formData.proposta.pagamentoCartao) {
-      setAlertMessage('Não é possível avançar para o financeiro com valor de R$ 0,00 (exceto Cartão Corretora). Por favor, insira o valor do contrato.');
+    if (valorContrato <= 0 && !formData.proposta.pagamentoCartao) {
+      setAlertMessage('O valor do contrato deve ser maior que R$ 0,00 (exceto em propostas de Cartão Corretora).');
       return;
     }
     
-    if (!validateCpfCnpj(formData.cliente.cpfCnpj)) {
-      setAlertMessage('O CPF ou CNPJ do Cliente é inválido. Por favor, verifique os dígitos e tente novamente.');
+    // 4. Validação de CPF / CNPJ do Cliente
+    if (!formData.cliente.cpfCnpj || !validateCpfCnpj(formData.cliente.cpfCnpj)) {
+      setAlertMessage('O CPF ou CNPJ do Cliente é inválido ou não foi preenchido corretamente. Por favor, verifique os dígitos.');
       return;
     }
     
@@ -348,20 +307,26 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       return;
     }
 
-    if (!formData.proposta.contrato || formData.proposta.contrato.trim() === '' || formData.proposta.contrato.startsWith('IMP-') || formData.proposta.contrato === 'NOVO') {
-      setAlertMessage('Não é possível salvar a proposta sem um número de contrato definitivo. Por favor, insira o número do contrato.');
+    // 5. Validação do Número do Contrato
+    const contratoDefinitivo = (formData.proposta.contrato || '').trim();
+    if (!contratoDefinitivo || contratoDefinitivo.startsWith('IMP-') || contratoDefinitivo.toUpperCase() === 'NOVO' || contratoDefinitivo === '0') {
+      setAlertMessage('Não é possível salvar a proposta sem um número de contrato definitivo válido. Contratos provisórios (IMP-...) não são aceitos.');
       return;
     }
 
+    const nextStatus = (proposal?.status && proposal.status !== 'CADASTRADA') 
+      ? proposal.status 
+      : (formData.proposta.pagamentoCartao ? 'ENVIADA AO FINANCEIRO' : 'CADASTRADA');
+
     onSave({
-      contrato: formData.proposta.contrato || 'NOVO',
+      contrato: contratoDefinitivo,
       data: formData.proposta.dataVenda || new Date().toISOString().split('T')[0],
       cliente: formData.cliente.nome,
       cpfCnpj: formData.cliente.cpfCnpj,
-      corretor: formData.proposta.corretor,
+      corretor: corretorSelecionado,
       operadora: formData.proposta.operadora,
       categoria: formData.proposta.categoria,
-      valor: Number(formData.financeiro.valorContrato) || 0,
+      valor: valorContrato,
       vidas: vidas,
       status: nextStatus,
       comissao: formData.proposta.pagamentoCartao ? 0 : (Number(formData.financeiro.parcelas[0]?.comissao) || 0),

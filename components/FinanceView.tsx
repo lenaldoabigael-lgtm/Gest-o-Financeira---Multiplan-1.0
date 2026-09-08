@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { PaymentLot, Proposal, ProposalRequirement } from '../types';
 import { LOGO_BASE64 } from '../src/logo';
+import { validateProposalForAdvance } from '../lib/validators';
 
 interface FinanceViewProps {
   lots: PaymentLot[];
@@ -252,24 +253,20 @@ const FinanceView: React.FC<FinanceViewProps> = ({ lots, proposals, requirements
                       </div>
                       <button 
                         onClick={() => {
-                          const hasZeroVidas = props.some(p => !p.vidas || p.vidas === 0);
-                          if (hasZeroVidas) {
-                            setAlertMessage('Não é possível gerar lote: existem propostas com 0 vidas. Por favor, edite-as e informe a quantidade correta.');
+                          if (!corretor || corretor.trim() === '' || corretor === 'Sem Corretor' || corretor === 'Corretor Geral') {
+                            setAlertMessage('Não é possível gerar lote para propostas sem corretor/vendedora definido. Edite as propostas e informe o corretor.');
                             return;
                           }
-                          const hasZeroValor = props.some(p => (!p.valor || p.valor === 0) && !p.detalhes?.proposta?.pagamentoCartao);
-                          if (hasZeroValor) {
-                            setAlertMessage('Não é possível gerar lote: existem propostas com valor R$ 0,00 (exceto Cartão Corretora). Por favor, edite-as e informe o valor correto.');
-                            return;
-                          }
-                          const hasMissingContract = props.some(p => !p.contrato || p.contrato.trim() === '' || p.contrato.startsWith('IMP-'));
-                          if (hasMissingContract) {
-                            setAlertMessage('Não é possível gerar lote: existem propostas sem número de contrato. Por favor, edite-as e informe o contrato corretamente.');
-                            return;
+                          for (const p of props) {
+                            const val = validateProposalForAdvance(p);
+                            if (!val.isValid) {
+                              setAlertMessage(`Não é possível gerar lote. A proposta contrato "${p.contrato || 'Sem Contrato'}" possui pendências:\n• ${val.errors.join('\n• ')}\n\nPor favor, corrija a proposta antes de gerar o lote.`);
+                              return;
+                            }
                           }
                           onGenerateLot(corretor, props.map(p => p.id));
                         }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] uppercase tracking-widest py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2"
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-black text-[11px] uppercase tracking-widest py-3 px-6 rounded-xl transition-all shadow-lg flex items-center gap-2 cursor-pointer"
                       >
                         <i className="fa-solid fa-layer-group"></i> Gerar Lote
                       </button>

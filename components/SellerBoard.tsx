@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Proposal, ProposalRequirement } from '../types';
+import { validateProposalForAdvance, validateCpfCnpj } from '../lib/validators';
 
 interface SellerBoardProps {
   proposals: Proposal[];
@@ -334,6 +335,11 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                       : `PROP-${p.id.slice(0, 8).toUpperCase()}`;
 
                     const isCartao = checkIsPagoCartao(p);
+                    const planType = 
+                      p.detalhes?.proposta?.tipoPlano?.trim() || 
+                      (p.categoria && p.categoria !== 'Geral' ? p.categoria.trim() : '') ||
+                      (p.detalhes?.proposta?.categoria && p.detalhes.proposta.categoria !== 'Geral' ? p.detalhes.proposta.categoria.trim() : '') ||
+                      '';
 
                     return (
                       <div
@@ -345,15 +351,22 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                             : 'border-slate-200/90 hover:border-slate-300'
                         }`}
                       >
-                        {/* Top Card: Code on left, Operadora badge on right */}
+                        {/* Top Card: Code on left, Operadora and Tipo do Plano on right */}
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <span className="text-[11px] font-bold text-slate-500 font-mono tracking-tight truncate">
                             {propCode}
                           </span>
 
-                          <span className="bg-white border border-slate-200 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0">
-                            {p.operadora || 'OPERADORA'}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            <span className="bg-white border border-slate-200 text-slate-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0">
+                              {p.operadora || 'OPERADORA'}
+                            </span>
+                            {planType && (
+                              <span className="bg-blue-50 border border-blue-200/80 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shrink-0">
+                                {planType}
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {/* Client Name */}
@@ -373,15 +386,49 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                             </span>
                           )}
 
+                          {/* Tipo do Plano Tag */}
+                          {planType && (
+                            <span className="bg-sky-50/80 border border-sky-200/70 text-sky-800 text-[10px] font-semibold px-2 py-0.5 rounded-md uppercase">
+                              {planType}
+                            </span>
+                          )}
+
                           {/* Vidas badge */}
-                          <span className="bg-slate-100 text-slate-700 text-[10px] font-semibold px-2 py-0.5 rounded-md">
-                            {p.vidas || 1} {p.vidas === 1 ? 'vida' : 'vidas'}
-                          </span>
+                          {(!p.vidas || p.vidas === 0) ? (
+                            <span className="bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-md">
+                              0 vidas (inválido)
+                            </span>
+                          ) : (
+                            <span className="bg-slate-100 text-slate-700 text-[10px] font-semibold px-2 py-0.5 rounded-md">
+                              {p.vidas} {p.vidas === 1 ? 'vida' : 'vidas'}
+                            </span>
+                          )}
 
                           {/* Corretor badge */}
-                          {p.corretor && (
+                          {p.corretor && p.corretor.trim() !== '' && p.corretor !== 'Sem Corretor' && p.corretor !== 'Corretor Geral' ? (
                             <span className="bg-slate-100 text-slate-700 text-[10px] font-semibold px-2 py-0.5 rounded-md uppercase">
                               {p.corretor}
+                            </span>
+                          ) : (
+                            <span className="bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px] text-rose-500">person_off</span>
+                              <span>Sem Corretor</span>
+                            </span>
+                          )}
+
+                          {/* CPF / CNPJ Inválido badge */}
+                          {!validateCpfCnpj(p.cpfCnpj) && (
+                            <span className="bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-0.5">
+                              <span className="material-symbols-outlined text-[12px] text-rose-500">badge</span>
+                              <span>CPF Inválido</span>
+                            </span>
+                          )}
+
+                          {/* Contrato Provisório badge */}
+                          {(!p.contrato || p.contrato.startsWith('IMP-') || p.contrato === 'NOVO') && (
+                            <span className="bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-0.5">
+                              <span className="material-symbols-outlined text-[12px] text-amber-600">warning</span>
+                              <span>Sem Contrato</span>
                             </span>
                           )}
                         </div>
@@ -450,15 +497,16 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (!p.vidas || p.vidas === 0) {
+                                const val = validateProposalForAdvance(p);
+                                if (!val.isValid) {
                                   setAlertMessage(
-                                    'Não é possível enviar propostas com 0 vidas para o financeiro. Edite a proposta primeiro.'
+                                    `Não é possível enviar a proposta para o financeiro devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nPor favor, edite a proposta e corrija os dados antes de avançar.`
                                   );
                                   return;
                                 }
                                 onStatusChange(p.id, 'ENVIADA AO FINANCEIRO');
                               }}
-                              className="w-full bg-[#e85d04] hover:bg-[#cf5304] text-white text-[10px] font-bold py-1.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95"
+                              className="w-full bg-[#e85d04] hover:bg-[#cf5304] text-white text-[10px] font-bold py-1.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
                             >
                               <span>Enviar p/ Financeiro</span>
                               <span className="material-symbols-outlined text-[14px]">
@@ -471,9 +519,16 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                const val = validateProposalForAdvance(p);
+                                if (!val.isValid) {
+                                  setAlertMessage(
+                                    `Não é possível confirmar o pagamento da proposta devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nPor favor, edite a proposta e corrija os dados antes de prosseguir.`
+                                  );
+                                  return;
+                                }
                                 onStatusChange(p.id, 'PAGO');
                               }}
-                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95"
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
                             >
                               <span className="material-symbols-outlined text-[14px]">
                                 check_circle
@@ -488,7 +543,7 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                                 e.stopPropagation();
                                 onStatusChange(p.id, 'ENVIADA AO FINANCEIRO');
                               }}
-                              className="text-slate-400 hover:text-slate-600 text-[10px] font-semibold py-1 px-2 rounded flex items-center gap-1 transition-colors"
+                              className="text-slate-400 hover:text-slate-600 text-[10px] font-semibold py-1 px-2 rounded flex items-center gap-1 transition-colors cursor-pointer"
                               title="Reabrir / Mudar Status"
                             >
                               <span className="material-symbols-outlined text-[13px]">
@@ -681,13 +736,23 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                   </span>
                 </div>
 
+                {/* Tipo de Plano */}
+                <div className="bg-[#f8fafd] border border-slate-100 rounded-xl p-3.5">
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    TIPO DE PLANO
+                  </span>
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">
+                    {selectedProposalDetails.detalhes?.proposta?.tipoPlano || selectedProposalDetails.categoria || selectedProposalDetails.detalhes?.proposta?.categoria || 'INDIVIDUAL'}
+                  </span>
+                </div>
+
                 {/* Categoria */}
                 <div className="bg-[#f8fafd] border border-slate-100 rounded-xl p-3.5">
                   <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                     CATEGORIA
                   </span>
                   <span className="text-xs font-bold text-slate-800 uppercase tracking-tight">
-                    {selectedProposalDetails.categoria || selectedProposalDetails.detalhes?.proposta?.categoria || 'ODONTO'}
+                    {selectedProposalDetails.categoria || selectedProposalDetails.detalhes?.proposta?.categoria || 'SAÚDE'}
                   </span>
                 </div>
 

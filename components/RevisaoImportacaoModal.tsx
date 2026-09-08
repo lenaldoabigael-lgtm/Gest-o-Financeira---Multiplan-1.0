@@ -149,18 +149,36 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
     const lista: string[] = [];
     if (semContrato(r)) lista.push('sem contrato');
     else if (contratoDuplicado(r, index)) lista.push('contrato duplicado');
+
+    if (!r.corretor || r.corretor.trim() === '' || r.corretor === 'Corretor Geral' || r.corretor === 'Sem Corretor') {
+      lista.push('sem corretor');
+    }
+
+    if (!r._cpfValido) {
+      lista.push('CPF/CNPJ inválido');
+    }
+
+    const valorNum = Number(r.valor);
+    if ((isNaN(valorNum) || valorNum <= 0) && !r.detalhes?.proposta?.pagamentoCartao) {
+      lista.push('valor zerado');
+    }
+
+    const vidasNum = Number(r.vidas);
+    if (isNaN(vidasNum) || vidasNum <= 0) {
+      lista.push('vidas zerado');
+    }
+
     return lista;
   };
 
   // Pendências que só AVISA
   const pendenciasAviso = (r: any) => {
     const lista: string[] = [];
-    if (!r._cpfValido) lista.push('CPF/CNPJ inválido');
-    if (!r.corretor || r.corretor === 'Corretor Geral') lista.push('sem vendedora');
-    else if (!existeNaLista(r.corretor, corretores)) lista.push('vendedora não cadastrada');
+    if (r.corretor && r.corretor !== 'Corretor Geral' && !existeNaLista(r.corretor, corretores)) {
+      lista.push('vendedora não cadastrada');
+    }
     if (!existeNaLista(r.operadora, operadoras)) lista.push('operadora não cadastrada');
     if (valorSuspeito(Number(r.valor))) lista.push('valor suspeito');
-    if (!r.vidas || Number(r.vidas) <= 0) lista.push('vidas zerado');
     if (Number(r.comissao) > Number(r.valor)) lista.push('comissão maior que o valor');
     const dataProblema = dataSuspeita(r.data);
     if (dataProblema) lista.push(dataProblema);
