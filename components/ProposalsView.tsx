@@ -4,6 +4,7 @@ import { Proposal, ProposalRequirement } from '../types';
 import * as XLSX from 'xlsx';
 import { RevisaoImportacaoModal } from './RevisaoImportacaoModal';
 import { validateProposalForAdvance, validateCpfCnpj } from '../lib/validators';
+import { parseBrlMoney, formatBrlCurrency, formatBrl } from '../lib/currency';
 
 interface ProposalsViewProps {
   proposals: Proposal[];
@@ -318,42 +319,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
         }
 
         const cleanMoney = (val: any): number => {
-          if (val === undefined || val === null) return 0;
-          if (typeof val === 'number') return val;
-          const str = val.toString().trim();
-          if (!str || str === '-') return 0;
-          
-          let cleanStr = str.replace(/R\$\s?/gi, '').replace(/\s/g, '').replace(/\u00A0/g, '');
-          
-          const commas = (cleanStr.match(/,/g) || []).length;
-          const dots = (cleanStr.match(/\./g) || []).length;
-          
-          if (commas === 1 && dots === 1) {
-            if (cleanStr.indexOf('.') < cleanStr.indexOf(',')) {
-               return parseFloat(cleanStr.replace(/\./g, '').replace(',', '.'));
-            } else {
-               return parseFloat(cleanStr.replace(/,/g, ''));
-            }
-          }
-          
-          if (commas === 1 && dots === 0) {
-            const parts = cleanStr.split(',');
-            if (parts[1].length <= 2) {
-               return parseFloat(cleanStr.replace(',', '.'));
-            } else {
-               return parseFloat(cleanStr.replace(',', ''));
-            }
-          }
-          
-          if (dots === 1 && commas === 0) {
-            const parts = cleanStr.split('.');
-            if (parts[1].length === 3) {
-               return parseFloat(cleanStr.replace('.', ''));
-            }
-          }
-          
-          const parsed = parseFloat(cleanStr);
-          return isNaN(parsed) ? 0 : parsed;
+          return parseBrlMoney(val);
         };
 
         const importedProposals = validRows.map(row => {

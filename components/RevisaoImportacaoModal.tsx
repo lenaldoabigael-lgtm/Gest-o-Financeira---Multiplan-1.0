@@ -9,6 +9,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Proposal, ProposalRequirement } from '../types';
+import { parseBrlMoney, formatBrl } from '../lib/currency';
 
 interface RevisaoImportacaoModalProps {
   data: any[];
@@ -314,9 +315,15 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
                               className={`w-full px-2 py-1.5 rounded-lg border text-sm font-bold ${(!r.corretor || r.corretor === 'Corretor Geral' || !existeNaLista(r.corretor, corretores)) ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-transparent hover:border-slate-200 text-slate-700'}`} />
                           </td>
                           <td className="p-2">
-                            <input type="number" step="0.01" value={r.valor ?? 0}
-                              onChange={e => atualizarLinha(index, 'valor', parseFloat(e.target.value))}
-                              className={`w-24 px-2 py-1.5 rounded-lg border text-sm font-bold ${valorSuspeito(Number(r.valor)) ? 'border-red-300 bg-red-50 text-red-700' : 'border-transparent hover:border-slate-200 text-emerald-600'}`} />
+                            <input 
+                              type="text" 
+                              value={r.valor !== undefined && r.valor !== null ? (typeof r.valor === 'number' ? formatBrl(r.valor) : r.valor) : ''}
+                              onChange={e => {
+                                const parsed = parseBrlMoney(e.target.value);
+                                atualizarLinha(index, 'valor', parsed);
+                              }}
+                              className={`w-28 px-2 py-1.5 rounded-lg border text-sm font-bold ${valorSuspeito(Number(r.valor)) ? 'border-red-300 bg-red-50 text-red-700' : 'border-transparent hover:border-slate-200 text-emerald-600'}`} 
+                            />
                           </td>
                           <td className="p-2">
                             {bloqueios.length > 0 ? (

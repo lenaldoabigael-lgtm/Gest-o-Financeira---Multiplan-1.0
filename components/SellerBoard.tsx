@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Proposal, ProposalRequirement } from '../types';
 import { validateProposalForAdvance, validateCpfCnpj } from '../lib/validators';
+import { formatBrlCurrency } from '../lib/currency';
 
 interface SellerBoardProps {
   proposals: Proposal[];
@@ -467,10 +468,7 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                               {p.status === 'PAGO' ? 'VALOR' : 'VALOR REPASSE'}
                             </span>
                             <span className="font-bold text-xs text-slate-900 font-mono">
-                              R${' '}
-                              {Number(p.valor || p.comissao || 0).toLocaleString('pt-BR', {
-                                minimumFractionDigits: 2
-                              })}
+                              {formatBrlCurrency(p.valor || p.comissao || 0)}
                             </span>
                           </div>
 
@@ -719,7 +717,7 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                 </div>
                 <div className="text-right shrink-0">
                   <span className="text-base sm:text-lg font-bold text-[#001a54] font-mono">
-                    R$ {Number(selectedProposalDetails.valor || selectedProposalDetails.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {formatBrlCurrency(selectedProposalDetails.valor || selectedProposalDetails.comissao || 0)}
                   </span>
                 </div>
               </div>

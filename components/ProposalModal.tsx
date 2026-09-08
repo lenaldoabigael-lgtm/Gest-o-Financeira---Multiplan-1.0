@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { Proposal, ProposalRequirement, User } from '../types';
 import { validateCpfCnpj } from '../lib/validators';
+import { CurrencyInput } from './CurrencyInput';
+import { formatBrlCurrency, formatBrl, parseBrlMoney } from '../lib/currency';
 
 interface ProposalModalProps {
   isOpen: boolean;
@@ -924,14 +926,14 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Valor Total</span>
                     <span className="text-sm font-black text-slate-800">
                       {formData.financeiro.valorContrato > 0 
-                        ? `R$ ${Number(formData.financeiro.valorContrato).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` 
-                        : '--'}
+                        ? formatBrlCurrency(formData.financeiro.valorContrato) 
+                        : 'R$ 0,00'}
                     </span>
                   </div>
                   <div className="p-2.5 bg-slate-50/80 rounded-lg border border-slate-200/70">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Comissão</span>
                     <span className="text-sm font-black text-slate-800">
-                      R$ {Number(formData.financeiro.parcelas[0]?.comissao || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {formatBrlCurrency(formData.financeiro.parcelas[0]?.comissao || 0)}
                     </span>
                   </div>
                   <div className="p-2.5 bg-slate-50/80 rounded-lg border border-slate-200/70">
@@ -943,12 +945,10 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                 {/* 3 Inputs row */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-600 mb-1 block">Valor do Contrato (R$)</label>
-                    <input
-                      type="number"
-                      value={formData.financeiro.valorContrato || ''}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
+                    <label className="text-[10px] font-bold text-slate-600 mb-1 block">Valor do Contrato</label>
+                    <CurrencyInput
+                      value={formData.financeiro.valorContrato}
+                      onChange={(val) => {
                         setFormData(prev => ({ 
                           ...prev, 
                           financeiro: { 
@@ -958,14 +958,14 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                           } 
                         }));
                       }}
-                      className="w-full px-3 py-2 bg-slate-100/70 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition-all"
-                      placeholder="0"
+                      placeholder="0,00"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 mb-1 block">Qtd Vidas</label>
                     <input
                       type="number"
+                      min="1"
                       value={formData.financeiro.vidas || ''}
                       onChange={(e) => {
                         const novasVidas = parseInt(e.target.value) || 0;
@@ -982,19 +982,22 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                           };
                         });
                       }}
-                      className="w-full px-3 py-2 bg-slate-100/70 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition-all"
+                      className="w-full px-3 py-2 bg-white hover:border-slate-300 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-blue-500 transition-all"
                       placeholder="0"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 mb-1 block">Valor Taxa</label>
-                    <input
-                      type="number"
-                      value={formData.financeiro.valorTaxa}
-                      readOnly
-                      className="w-full px-3 py-2 bg-slate-100/70 border border-slate-200 rounded-lg text-xs font-bold text-slate-500 outline-none cursor-not-allowed"
-                      placeholder="0"
-                    />
+                    <div className="relative flex items-center rounded-lg border border-slate-200 bg-slate-100/70">
+                      <span className="pl-3 pr-1 text-xs font-black text-slate-400 select-none">R$</span>
+                      <input
+                        type="text"
+                        value={formatBrl(formData.financeiro.valorTaxa)}
+                        readOnly
+                        className="w-full py-2 pr-3 bg-transparent text-xs font-bold text-slate-600 outline-none cursor-not-allowed"
+                        placeholder="0,00"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1014,9 +1017,9 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                       {formData.financeiro.parcelas.map(p => (
                         <tr key={p.id} className="text-xs text-slate-700 font-medium">
                           <td className="py-2 px-2">{p.numero}</td>
-                          <td className="py-2 px-2 font-bold">R$ {Number(p.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                          <td className="py-2 px-2 font-bold">{formatBrlCurrency(p.valor)}</td>
                           <td className={`py-2 px-2 font-bold ${p.comissao < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                            R$ {Number(p.comissao).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            {formatBrlCurrency(p.comissao)}
                           </td>
                           <td className="py-2 px-2">{p.vencimento}</td>
                         </tr>
