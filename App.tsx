@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Tab, Transaction, CostCenter, Proposal, ProposalRequirement, PaymentLot, Cotacao } from './types';
+import { User, UserPermissions, Tab, Transaction, CostCenter, Proposal, ProposalRequirement, PaymentLot, Cotacao } from './types';
 import Login from './components/Login';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -86,6 +86,104 @@ const fetchSupabaseUsersSafely = async (): Promise<User[]> => {
   return [];
 };
 
+const getDefaultPermissionsForRole = (role?: string): UserPermissions => {
+  if (role === 'admin') {
+    return {
+      centroCusto: true, contasPagar: true, contasReceber: true,
+      dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
+      gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true,
+      cotacao: true, exportarDados: true, criarPropostas: true, gestaoUsuarios: true
+    };
+  }
+  if (role === 'cadastro_propostas') {
+    return {
+      centroCusto: false, contasPagar: false, contasReceber: false,
+      dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+      gestaoDemandas: true, propostas: true, financeiro: false, estruturaProposta: false, comissoes: false,
+      cotacao: true, exportarDados: false, criarPropostas: true, gestaoUsuarios: false
+    };
+  }
+  if (role === 'pagamento_comissoes') {
+    return {
+      centroCusto: false, contasPagar: true, contasReceber: true,
+      dashboard: false, fluxoCaixa: true, detalhes: true, planCredencias: false,
+      gestaoDemandas: false, propostas: true, financeiro: true, estruturaProposta: false, comissoes: true,
+      cotacao: false, exportarDados: true, criarPropostas: false, gestaoUsuarios: false
+    };
+  }
+  if (role === 'corretor') {
+    return {
+      centroCusto: false, contasPagar: false, contasReceber: false,
+      dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+      gestaoDemandas: false, propostas: true, financeiro: false, estruturaProposta: false, comissoes: true,
+      cotacao: true, exportarDados: false, criarPropostas: true, gestaoUsuarios: false
+    };
+  }
+  return {
+    centroCusto: false, contasPagar: false, contasReceber: false,
+    dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+    gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false,
+    cotacao: false, exportarDados: false, criarPropostas: false, gestaoUsuarios: false
+  };
+};
+
+const normalizeKey = (str?: string): string => {
+  if (!str) return '';
+  return str.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+};
+
+const mergeUserRecords = (base: User, incoming: User): User => {
+  const isIncomingMasterAdmin = (incoming.login || '').trim().toLowerCase() === 'admin';
+  const isBaseMasterAdmin = (base.login || '').trim().toLowerCase() === 'admin';
+  const isMasterAdmin = isIncomingMasterAdmin || isBaseMasterAdmin;
+
+  // Preserve 'admin' login for master user, otherwise pick formatted name (with spaces/casing)
+  let preferredLogin = incoming.login || base.login;
+  if (isMasterAdmin) {
+    preferredLogin = 'admin';
+  } else if (base.login && base.login.includes(' ') && !incoming.login?.includes(' ')) {
+    preferredLogin = base.login;
+  } else if (incoming.login && incoming.login.includes(' ') && !base.login?.includes(' ')) {
+    preferredLogin = incoming.login;
+  }
+
+  // Preserve Corretor cargo or most specific cargo
+  let preferredCargo = incoming.cargo || base.cargo;
+  if (isMasterAdmin) {
+    preferredCargo = 'Gerente Geral & Financeiro';
+  } else if (!preferredCargo) {
+    preferredCargo = 'Analista Sênior';
+  }
+
+  const isCorretor = preferredCargo.toLowerCase().includes('corretor') || 
+                    (base.role === 'corretor') || 
+                    (incoming.role === 'corretor');
+
+  const preferredRole = isMasterAdmin ? 'admin' : (isCorretor ? 'corretor' : (incoming.role || base.role || 'admin'));
+  const defaultPerms = getDefaultPermissionsForRole(preferredRole);
+
+  const mergedPermissions: UserPermissions = {
+    ...defaultPerms,
+    ...(base.permissions || {}),
+    ...(incoming.permissions || {})
+  };
+
+  return {
+    ...base,
+    ...incoming,
+    id: incoming.id || base.id,
+    login: preferredLogin,
+    email: incoming.email || base.email,
+    senha: incoming.senha || base.senha,
+    cargo: preferredCargo,
+    role: preferredRole as any,
+    status: incoming.status || base.status || 'ATIVO',
+    ultimoAcesso: incoming.ultimoAcesso || base.ultimoAcesso || 'Hoje\n12:00',
+    approved: incoming.approved !== undefined ? incoming.approved : (base.approved !== undefined ? base.approved : true),
+    permissions: mergedPermissions
+  };
+};
+
 const mergeWithDefaultUsers = (dbUsers: User[] = []): User[] => {
   // 1. Read local storage cache if available
   let localUsers: User[] = [];
@@ -109,58 +207,78 @@ const mergeWithDefaultUsers = (dbUsers: User[] = []): User[] => {
     console.warn('Error reading deleted users cache:', e);
   }
 
-  const isPurgedOrDeleted = (login: string) => {
-    const key = (login || '').trim().toLowerCase();
-    return TEST_LOGINS_TO_PURGE.includes(key) || deletedLogins.includes(key);
+  const isPurgedOrDeleted = (login?: string, email?: string) => {
+    const keyLogin = (login || '').trim().toLowerCase();
+    const keyEmail = (email || '').trim().toLowerCase();
+    return TEST_LOGINS_TO_PURGE.includes(keyLogin) || 
+           deletedLogins.includes(keyLogin) ||
+           (keyEmail && deletedLogins.includes(keyEmail));
   };
 
-  // 2. Filter out purged/deleted test accounts
-  const filteredDbUsers = dbUsers.filter(
-    u => !isPurgedOrDeleted(u.login)
-  );
+  const mergedList: User[] = [];
 
-  const mapByLogin = new Map<string, User>();
+  const addOrMergeUser = (candidate: User) => {
+    if (!candidate || (!candidate.login && !candidate.email)) return;
+    if (isPurgedOrDeleted(candidate.login, candidate.email)) return;
 
-  // Base: Default users (unless deleted by admin)
+    const candEmail = (candidate.email || '').trim().toLowerCase();
+    const candNormLogin = normalizeKey(candidate.login);
+    const isCandAdmin = (candidate.login || '').trim().toLowerCase() === 'admin';
+
+    // Find existing match by ID, exact email, normalized login or admin email alias
+    const existingIndex = mergedList.findIndex(u => {
+      if (candidate.id && u.id && candidate.id === u.id) return true;
+      
+      const uEmail = (u.email || '').trim().toLowerCase();
+      if (candEmail && uEmail && candEmail === uEmail) return true;
+      
+      const uNormLogin = normalizeKey(u.login);
+      if (candNormLogin && uNormLogin && candNormLogin === uNormLogin) return true;
+
+      // Special check for master admin aliases
+      const isUAdmin = (u.login || '').trim().toLowerCase() === 'admin';
+      if (isCandAdmin && uEmail === 'lenaldo.abigael@hotmail.com') return true;
+      if (isUAdmin && candEmail === 'lenaldo.abigael@hotmail.com') return true;
+
+      return false;
+    });
+
+    if (existingIndex >= 0) {
+      mergedList[existingIndex] = mergeUserRecords(mergedList[existingIndex], candidate);
+    } else {
+      mergedList.push({
+        ...candidate,
+        status: candidate.status || 'ATIVO',
+        cargo: candidate.cargo || ((candidate.login || '').toLowerCase() === 'admin' ? 'Gerente Geral & Financeiro' : 'Analista Sênior'),
+        role: candidate.role || ((candidate.login || '').toLowerCase() === 'admin' ? 'admin' : (candidate.cargo?.toLowerCase().includes('corretor') ? 'corretor' : 'admin')),
+        permissions: candidate.permissions || getDefaultPermissionsForRole(candidate.role)
+      });
+    }
+  };
+
+  // Layer 1: Default baseline users
   for (const u of DEFAULT_USERS) {
-    if (!isPurgedOrDeleted(u.login)) {
-      mapByLogin.set(u.login.trim().toLowerCase(), { ...u });
-    }
+    addOrMergeUser(u);
   }
 
-  // Next layer: Database users
-  for (const u of filteredDbUsers) {
-    const key = (u.login || '').trim().toLowerCase();
-    if (key && !isPurgedOrDeleted(key)) {
-      const existing = mapByLogin.get(key) || ({} as User);
-      mapByLogin.set(key, {
-        ...existing,
-        ...u,
-        cargo: u.cargo || existing.cargo || (key === 'admin' ? 'Gerente Geral & Financeiro' : 'Analista Sênior'),
-        role: u.role || existing.role || (key === 'admin' ? 'admin' : (u.cargo?.toLowerCase().includes('corretor') ? 'corretor' : 'admin')),
-        status: u.status || existing.status || 'ATIVO',
-        permissions: u.permissions || existing.permissions
-      });
-    }
+  // Layer 2: Database / Supabase profiles
+  for (const u of dbUsers) {
+    addOrMergeUser(u);
   }
 
-  // Top layer: Local modifications (admin edits to cargo/role/permissions/status take precedence)
+  // Layer 3: Local modifications (admin edits)
   for (const u of localUsers) {
-    const key = (u.login || '').trim().toLowerCase();
-    if (key && !isPurgedOrDeleted(key)) {
-      const existing = mapByLogin.get(key) || ({} as User);
-      mapByLogin.set(key, {
-        ...existing,
-        ...u,
-        cargo: u.cargo || existing.cargo,
-        role: u.role || existing.role,
-        status: u.status || existing.status || 'ATIVO',
-        permissions: u.permissions || existing.permissions
-      });
-    }
+    addOrMergeUser(u);
   }
 
-  return Array.from(mapByLogin.values());
+  // Write back deduplicated list to localStorage to self-heal cached duplicates
+  try {
+    localStorage.setItem('multiplan_app_users', JSON.stringify(mergedList));
+  } catch (e) {
+    console.warn('Error updating deduplicated multiplan_app_users cache', e);
+  }
+
+  return mergedList;
 };
 
 const App: React.FC = () => {
@@ -179,47 +297,6 @@ const App: React.FC = () => {
   const [errorType, setErrorType] = useState<'SCHEMA_HIDDEN' | 'TABLES_MISSING' | null>(null);
   const [activeAccount, setActiveAccount] = useState<string>('TODAS');
   const [forcedView, setForcedView] = useState<'auto' | 'desktop' | 'portal_corretor'>('auto');
-
-  const getDefaultPermissionsForRole = (role?: string) => {
-    if (role === 'admin') {
-      return {
-        centroCusto: true, contasPagar: true, contasReceber: true,
-        dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
-        gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true,
-        cotacao: true, exportarDados: true, criarPropostas: true, gestaoUsuarios: true
-      };
-    }
-    if (role === 'cadastro_propostas') {
-      return {
-        centroCusto: false, contasPagar: false, contasReceber: false,
-        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-        gestaoDemandas: true, propostas: true, financeiro: false, estruturaProposta: false, comissoes: false,
-        cotacao: true, exportarDados: false, criarPropostas: true, gestaoUsuarios: false
-      };
-    }
-    if (role === 'pagamento_comissoes') {
-      return {
-        centroCusto: false, contasPagar: true, contasReceber: true,
-        dashboard: false, fluxoCaixa: true, detalhes: true, planCredencias: false,
-        gestaoDemandas: false, propostas: true, financeiro: true, estruturaProposta: false, comissoes: true,
-        cotacao: false, exportarDados: true, criarPropostas: false, gestaoUsuarios: false
-      };
-    }
-    if (role === 'corretor') {
-      return {
-        centroCusto: false, contasPagar: false, contasReceber: false,
-        dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-        gestaoDemandas: false, propostas: true, financeiro: false, estruturaProposta: false, comissoes: true,
-        cotacao: true, exportarDados: false, criarPropostas: true, gestaoUsuarios: false
-      };
-    }
-    return {
-      centroCusto: false, contasPagar: false, contasReceber: false,
-      dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
-      gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false,
-      cotacao: false, exportarDados: false, criarPropostas: false, gestaoUsuarios: false
-    };
-  };
 
   const fetchData = async () => {
     setIsLoading(true);

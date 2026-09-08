@@ -255,14 +255,27 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
   // Save edited user from modal
   const handleSaveEditUserModal = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanEmail = (editUserData.email || '').trim().toLowerCase();
+    const cleanLogin = (editUserData.login || '').trim().toLowerCase();
+
+    // Check if another user already uses this email or login
+    const isDuplicateEmail = users.some(u => 
+      (u.login || '').trim().toLowerCase() !== cleanLogin &&
+      (u.email || '').trim().toLowerCase() === cleanEmail
+    );
+    if (isDuplicateEmail) {
+      alert(`Já existe outro usuário cadastrado com o e-mail "${editUserData.email}".`);
+      return;
+    }
+
     const isCorretor = editUserData.cargo.toLowerCase().includes('corretor');
     const newRole = isCorretor ? 'corretor' : (editUserData.cargo.toLowerCase().includes('admin') || editUserData.login.toLowerCase() === 'admin' ? 'admin' : (editUserData.role || 'admin'));
 
     const updatedUsers = users.map(u => {
-      if ((u.login || '').trim().toLowerCase() === editUserData.login.trim().toLowerCase()) {
+      if ((u.login || '').trim().toLowerCase() === cleanLogin) {
         return {
           ...u,
-          email: editUserData.email,
+          email: editUserData.email.trim(),
           senha: editUserData.senha || u.senha,
           cargo: editUserData.cargo,
           role: newRole as any,
@@ -274,7 +287,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
     });
 
     onUpdateUsers(updatedUsers);
-    if ((selectedUser?.login || '').trim().toLowerCase() === editUserData.login.trim().toLowerCase()) {
+    if ((selectedUser?.login || '').trim().toLowerCase() === cleanLogin) {
       setSelectedUserCargo(editUserData.cargo);
       if (isCorretor) {
         setEditingPermissions({ ...CORRETOR_PERMISSIONS });
@@ -290,6 +303,20 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
     e.preventDefault();
     if (!newLogin || !newSenha || !newEmail) {
       alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    const cleanLogin = newLogin.trim().toLowerCase();
+    const cleanEmail = newEmail.trim().toLowerCase();
+
+    // Validate duplicates
+    const isExistingUser = users.some(u => 
+      (u.login || '').trim().toLowerCase() === cleanLogin ||
+      ((u.email || '').trim().toLowerCase() === cleanEmail && cleanEmail.length > 0)
+    );
+
+    if (isExistingUser) {
+      alert(`Já existe um usuário com o login "${newLogin}" ou e-mail "${newEmail}". Escolha outro login ou e-mail.`);
       return;
     }
 
