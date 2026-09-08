@@ -224,36 +224,60 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
   React.useEffect(() => {
     if (isOpen) {
       if (proposal) {
-        if (proposal.detalhes) {
-          setFormData(proposal.detalhes);
-        } else {
-          setFormData({
-            ...initialData,
-            cliente: {
-              ...initialData.cliente,
-              nome: proposal.cliente,
-              cpfCnpj: proposal.cpfCnpj
-            },
-            proposta: {
-              contrato: proposal.contrato,
-              dataVenda: proposal.data,
-              corretor: proposal.corretor,
-              categoria: proposal.categoria,
-              operadora: proposal.operadora,
-              tipoPlano: proposal.detalhes?.proposta?.tipoPlano || '',
-              unidade: proposal.detalhes?.proposta?.unidade || '',
-              pagamentoCartao: proposal.detalhes?.proposta?.pagamentoCartao || false
-            },
-            financeiro: {
-              ...initialData.financeiro,
-              valorContrato: proposal.valor,
-              vidas: proposal.vidas,
-              parcelas: [
-                { id: '1', numero: '1ª Parcela', valor: proposal.valor, comissao: proposal.comissao, vencimento: proposal.data }
-              ]
-            }
-          });
-        }
+        const d = proposal.detalhes || {};
+        const safeCliente = {
+          nome: d.cliente?.nome || proposal.cliente || '',
+          cpfCnpj: d.cliente?.cpfCnpj || proposal.cpfCnpj || '',
+          dataNascimento: d.cliente?.dataNascimento || '',
+          email: d.cliente?.email || '',
+          telefone: d.cliente?.telefone || ''
+        };
+
+        const safeEndereco = {
+          cep: d.endereco?.cep || '',
+          logradouro: d.endereco?.logradouro || '',
+          numero: d.endereco?.numero || '',
+          complemento: d.endereco?.complemento || '',
+          bairro: d.endereco?.bairro || '',
+          cidade: d.endereco?.cidade || '',
+          estado: d.endereco?.estado || ''
+        };
+
+        const safeProposta = {
+          contrato: d.proposta?.contrato || proposal.contrato || '',
+          dataVenda: d.proposta?.dataVenda || proposal.data || new Date().toISOString().split('T')[0],
+          corretor: d.proposta?.corretor || proposal.corretor || user.name || '',
+          categoria: d.proposta?.categoria || proposal.categoria || '',
+          operadora: d.proposta?.operadora || proposal.operadora || '',
+          tipoPlano: d.proposta?.tipoPlano || d.tipoPlano || '',
+          unidade: d.proposta?.unidade || d.unidade || '',
+          pagamentoCartao: d.proposta?.pagamentoCartao || d.pagamentoCartao || false
+        };
+
+        const safeBeneficiarios = Array.isArray(d.beneficiarios) ? d.beneficiarios : [];
+
+        const safeFinanceiro = {
+          valorContrato: d.financeiro?.valorContrato !== undefined ? d.financeiro.valorContrato : (proposal.valor || 0),
+          vidas: d.financeiro?.vidas !== undefined ? d.financeiro.vidas : (proposal.vidas || 1),
+          taxaAdesao: d.financeiro?.taxaAdesao || 0,
+          impostos: d.financeiro?.impostos || 0,
+          parcelas: Array.isArray(d.financeiro?.parcelas) && d.financeiro.parcelas.length > 0 
+            ? d.financeiro.parcelas 
+            : [{ id: '1', numero: '1ª Parcela', valor: proposal.valor || 0, comissao: proposal.comissao || 0, vencimento: proposal.data || '' }]
+        };
+
+        const safeDocumentos = Array.isArray(d.documentos) ? d.documentos : [];
+        const safeHistorico = Array.isArray(d.historico) ? d.historico : [];
+
+        setFormData({
+          cliente: safeCliente,
+          endereco: safeEndereco,
+          proposta: safeProposta,
+          beneficiarios: safeBeneficiarios,
+          financeiro: safeFinanceiro,
+          documentos: safeDocumentos,
+          historico: safeHistorico
+        });
       } else {
         setFormData(initialData);
       }
@@ -262,10 +286,18 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
 
   if (!isOpen) return null;
 
+  const isUserAdminOrGestor = Boolean(
+    user.role === 'admin' || 
+    (user.login || '').trim().toLowerCase() === 'admin' || 
+    user.permissions?.propostas || 
+    user.permissions?.criarPropostas
+  );
+
   const isReadOnlyLocked = Boolean(
     proposal && 
     (proposal.status === 'PAGO' || proposal.status === 'PAGA' || proposal.status === 'ENVIADA AO FINANCEIRO' || proposal.status === 'ENVIADA') &&
-    (user.role === 'corretor' || (user.login || '').trim().toLowerCase() === 'corretor' || !user.permissions?.cadastros)
+    !isUserAdminOrGestor &&
+    (user.role === 'corretor' || (user.login || '').trim().toLowerCase() === 'corretor')
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -276,6 +308,13 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       return;
     }
     
+    // 0. Validação do Nome do Cliente
+    const nomeCliente = (formData.cliente?.nome || '').trim();
+    if (!nomeCliente) {
+      setAlertMessage('O nome ou razão social do cliente é obrigatório.');
+      return;
+    }
+
     // 1. Validação de Corretor / Vendedora (Obrigatório)
     const corretorSelecionado = (formData.proposta.corretor || '').trim();
     if (!corretorSelecionado || corretorSelecionado === 'Selecione...' || corretorSelecionado === 'Sem Corretor') {
@@ -428,10 +467,14 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                   <label className="text-[10px] font-bold text-slate-600 mb-1 block">Razão Social / Nome Completo</label>
                   <input
                     type="text"
+                    disabled={isReadOnlyLocked}
                     placeholder="Razão Social / Nome Completo"
-                    value={formData.cliente.nome}
-                    onChange={(e) => setFormData(prev => ({ ...prev, cliente: { ...prev.cliente, nome: e.target.value } }))}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
+                    value={formData.cliente?.nome || ''}
+                    onChange={(e) => setFormData(prev => ({ 
+                      ...prev, 
+                      cliente: { ...prev.cliente, nome: e.target.value } 
+                    }))}
+                    className="w-full px-3 py-2 bg-white disabled:bg-slate-100 disabled:text-slate-500 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -439,20 +482,28 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                     <label className="text-[10px] font-bold text-slate-600 mb-1 block">CPF / CNPJ</label>
                     <input
                       type="text"
+                      disabled={isReadOnlyLocked}
                       placeholder="CPF / CNPJ"
-                      value={formData.cliente.cpfCnpj}
-                      onChange={(e) => setFormData(prev => ({ ...prev, cliente: { ...prev.cliente, cpfCnpj: formatCpfCnpj(e.target.value) } }))}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
+                      value={formData.cliente?.cpfCnpj || ''}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        cliente: { ...prev.cliente, cpfCnpj: formatCpfCnpj(e.target.value) } 
+                      }))}
+                      className="w-full px-3 py-2 bg-white disabled:bg-slate-100 disabled:text-slate-500 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 mb-1 block">Data de Nascimento</label>
                     <input
                       type="text"
+                      disabled={isReadOnlyLocked}
                       placeholder="Data de Nascimento"
-                      value={formData.cliente.dataNascimento}
-                      onChange={(e) => setFormData(prev => ({ ...prev, cliente: { ...prev.cliente, dataNascimento: formatDate(e.target.value) } }))}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
+                      value={formData.cliente?.dataNascimento || ''}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        cliente: { ...prev.cliente, dataNascimento: formatDate(e.target.value) } 
+                      }))}
+                      className="w-full px-3 py-2 bg-white disabled:bg-slate-100 disabled:text-slate-500 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
                 </div>
@@ -461,20 +512,28 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                     <label className="text-[10px] font-bold text-slate-600 mb-1 block">E-mail de Contato</label>
                     <input
                       type="email"
+                      disabled={isReadOnlyLocked}
                       placeholder="E-mail de Contato"
-                      value={formData.cliente.email}
-                      onChange={(e) => setFormData(prev => ({ ...prev, cliente: { ...prev.cliente, email: e.target.value } }))}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
+                      value={formData.cliente?.email || ''}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        cliente: { ...prev.cliente, email: e.target.value } 
+                      }))}
+                      className="w-full px-3 py-2 bg-white disabled:bg-slate-100 disabled:text-slate-500 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 mb-1 block">Telefone Principal</label>
                     <input
                       type="text"
+                      disabled={isReadOnlyLocked}
                       placeholder="Telefone Principal"
-                      value={formData.cliente.telefone}
-                      onChange={(e) => setFormData(prev => ({ ...prev, cliente: { ...prev.cliente, telefone: e.target.value } }))}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
+                      value={formData.cliente?.telefone || ''}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        cliente: { ...prev.cliente, telefone: e.target.value } 
+                      }))}
+                      className="w-full px-3 py-2 bg-white disabled:bg-slate-100 disabled:text-slate-500 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:border-blue-500 transition-all placeholder:text-slate-400"
                     />
                   </div>
                 </div>

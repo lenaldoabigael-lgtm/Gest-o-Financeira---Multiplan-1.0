@@ -284,13 +284,62 @@ const App: React.FC = () => {
         setProposals(proposalsRes.data);
       } else {
         const mockProposals: Proposal[] = [
-          { id: '1', contrato: '6GTLW', data: '2026-04-20', cliente: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', corretor: 'corretor', operadora: 'Amil', categoria: 'Saúde-PME', valor: 1566.62, vidas: 4, status: 'CADASTRADA', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'Amil', categoria: 'Saúde' } } },
-          { id: '2', contrato: 'GPLRG', data: '2026-04-20', cliente: 'T.F.S. SILVA FARMACIA LTDA', cpfCnpj: '12.345.678/0001-90', corretor: 'corretor', operadora: 'Bradesco Saúde', categoria: 'Saúde-PME', valor: 2379.28, vidas: 6, status: 'ENVIADA AO FINANCEIRO', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'Bradesco Saúde', categoria: 'Saúde' } } },
-          { id: '3', contrato: 'HXRYU', data: '2026-04-21', cliente: 'JOAO SILVA COSTA', cpfCnpj: '111.222.333-44', corretor: 'corretor', operadora: 'Unimed Nacional', categoria: 'Adesão', valor: 826.37, vidas: 2, status: 'PAGO', comissao: 0, detalhes: { proposta: { tipoPlano: 'Adesão', operadora: 'Unimed Nacional', categoria: 'Saúde' } } },
-          { id: '4', contrato: 'MPL99', data: '2026-04-22', cliente: 'CLINICA SAUDE INTEGRADA', cpfCnpj: '33.444.555/0001-22', corretor: 'Carlos Corretor', operadora: 'SulAmérica', categoria: 'Saúde-PME', valor: 3450.00, vidas: 8, status: 'CADASTRADA', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'SulAmérica', categoria: 'Saúde' } } },
-          { id: '5', contrato: 'AN772', data: '2026-04-18', cliente: 'RESTAURANTE BOA VISTA LTDA', cpfCnpj: '98.765.432/0001-11', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 1890.50, vidas: 5, status: 'PAGO', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'Hapvida', categoria: 'Saúde' } } },
-          { id: '6', contrato: 'MC551', data: '2026-04-19', cliente: 'CONSULTORIA FINANCEIRA ALFA', cpfCnpj: '55.666.777/0001-88', corretor: 'Michele', operadora: 'Porto Seguro', categoria: 'Saúde-PME', valor: 2100.00, vidas: 3, status: 'ENVIADA AO FINANCEIRO', comissao: 0, detalhes: { proposta: { tipoPlano: 'PME', operadora: 'Porto Seguro', categoria: 'Saúde' } } },
-          { id: '7', contrato: 'LZ334', data: '2026-04-21', cliente: 'MARCOS VINICIUS PEREIRA', cpfCnpj: '222.333.444-55', corretor: 'Luiza', operadora: 'Amil', categoria: 'Individual', valor: 450.00, vidas: 1, status: 'CADASTRADA', comissao: 0, detalhes: { proposta: { tipoPlano: 'Individual', operadora: 'Amil', categoria: 'Saúde' } } }
+          { 
+            id: '1', contrato: '6GTLW', data: '2026-04-20', cliente: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', corretor: 'corretor', operadora: 'Amil', categoria: 'Saúde-PME', valor: 1566.62, vidas: 4, status: 'CADASTRADA', comissao: 0, 
+            detalhes: { 
+              cliente: { nome: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', email: 'edilma@exemplo.com', telefone: '(81) 98888-7777', dataNascimento: '15/05/1985' },
+              proposta: { contrato: '6GTLW', dataVenda: '2026-04-20', corretor: 'corretor', operadora: 'Amil', categoria: 'Saúde-PME', tipoPlano: 'PME' },
+              financeiro: { valorContrato: 1566.62, vidas: 4, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 1566.62, comissao: 0, vencimento: '2026-04-20' }] }
+            } 
+          },
+          { 
+            id: '2', contrato: 'GPLRG', data: '2026-04-20', cliente: 'T.F.S. SILVA FARMACIA LTDA', cpfCnpj: '12.345.678/0001-90', corretor: 'corretor', operadora: 'Bradesco Saúde', categoria: 'Saúde-PME', valor: 2379.28, vidas: 6, status: 'ENVIADA AO FINANCEIRO', comissao: 0, 
+            detalhes: { 
+              cliente: { nome: 'T.F.S. SILVA FARMACIA LTDA', cpfCnpj: '12.345.678/0001-90', email: 'farmacia@exemplo.com', telefone: '(81) 3444-2222', dataNascimento: '' },
+              proposta: { contrato: 'GPLRG', dataVenda: '2026-04-20', corretor: 'corretor', operadora: 'Bradesco Saúde', categoria: 'Saúde-PME', tipoPlano: 'PME' },
+              financeiro: { valorContrato: 2379.28, vidas: 6, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 2379.28, comissao: 0, vencimento: '2026-04-20' }] }
+            } 
+          },
+          { 
+            id: '3', contrato: 'HXRYU', data: '2026-04-21', cliente: 'JOAO SILVA COSTA', cpfCnpj: '111.222.333-44', corretor: 'corretor', operadora: 'Unimed Nacional', categoria: 'Adesão', valor: 826.37, vidas: 2, status: 'PAGO', comissao: 0, 
+            detalhes: { 
+              cliente: { nome: 'JOAO SILVA COSTA', cpfCnpj: '111.222.333-44', email: 'joao.costa@exemplo.com', telefone: '(81) 99999-1111', dataNascimento: '10/10/1990' },
+              proposta: { contrato: 'HXRYU', dataVenda: '2026-04-21', corretor: 'corretor', operadora: 'Unimed Nacional', categoria: 'Adesão', tipoPlano: 'Adesão' },
+              financeiro: { valorContrato: 826.37, vidas: 2, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 826.37, comissao: 0, vencimento: '2026-04-21' }] }
+            } 
+          },
+          { 
+            id: '4', contrato: 'MPL99', data: '2026-04-22', cliente: 'CLINICA SAUDE INTEGRADA', cpfCnpj: '33.444.555/0001-22', corretor: 'Carlos Corretor', operadora: 'SulAmérica', categoria: 'Saúde-PME', valor: 3450.00, vidas: 8, status: 'CADASTRADA', comissao: 0, 
+            detalhes: { 
+              cliente: { nome: 'CLINICA SAUDE INTEGRADA', cpfCnpj: '33.444.555/0001-22', email: 'contato@clinicasaude.com.br', telefone: '(81) 3333-5555', dataNascimento: '' },
+              proposta: { contrato: 'MPL99', dataVenda: '2026-04-22', corretor: 'Carlos Corretor', operadora: 'SulAmérica', categoria: 'Saúde-PME', tipoPlano: 'PME' },
+              financeiro: { valorContrato: 3450.00, vidas: 8, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 3450.00, comissao: 0, vencimento: '2026-04-22' }] }
+            } 
+          },
+          { 
+            id: '5', contrato: 'AN772', data: '2026-04-18', cliente: 'RESTAURANTE BOA VISTA LTDA', cpfCnpj: '98.765.432/0001-11', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 1890.50, vidas: 5, status: 'PAGO', comissao: 0, 
+            detalhes: { 
+              cliente: { nome: 'RESTAURANTE BOA VISTA LTDA', cpfCnpj: '98.765.432/0001-11', email: 'boavista@restaurante.com', telefone: '(81) 3222-4444', dataNascimento: '' },
+              proposta: { contrato: 'AN772', dataVenda: '2026-04-18', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', tipoPlano: 'PME' },
+              financeiro: { valorContrato: 1890.50, vidas: 5, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 1890.50, comissao: 0, vencimento: '2026-04-18' }] }
+            } 
+          },
+          { 
+            id: '6', contrato: 'MC551', data: '2026-04-19', cliente: 'CONSULTORIA FINANCEIRA ALFA', cpfCnpj: '55.666.777/0001-88', corretor: 'Michele', operadora: 'Porto Seguro', categoria: 'Saúde-PME', valor: 2100.00, vidas: 3, status: 'ENVIADA AO FINANCEIRO', comissao: 0, 
+            detalhes: { 
+              cliente: { nome: 'CONSULTORIA FINANCEIRA ALFA', cpfCnpj: '55.666.777/0001-88', email: 'alfa@consultoria.com', telefone: '(81) 3111-9999', dataNascimento: '' },
+              proposta: { contrato: 'MC551', dataVenda: '2026-04-19', corretor: 'Michele', operadora: 'Porto Seguro', categoria: 'Saúde-PME', tipoPlano: 'PME' },
+              financeiro: { valorContrato: 2100.00, vidas: 3, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 2100.00, comissao: 0, vencimento: '2026-04-19' }] }
+            } 
+          },
+          { 
+            id: '7', contrato: 'LZ334', data: '2026-04-21', cliente: 'MARCOS VINICIUS PEREIRA', cpfCnpj: '222.333.444-55', corretor: 'Luiza', operadora: 'Amil', categoria: 'Individual', valor: 450.00, vidas: 1, status: 'CADASTRADA', comissao: 0, 
+            detalhes: { 
+              cliente: { nome: 'MARCOS VINICIUS PEREIRA', cpfCnpj: '222.333.444-55', email: 'marcos.vinicius@exemplo.com', telefone: '(81) 97777-3333', dataNascimento: '25/08/1992' },
+              proposta: { contrato: 'LZ334', dataVenda: '2026-04-21', corretor: 'Luiza', operadora: 'Amil', categoria: 'Individual', tipoPlano: 'Individual' },
+              financeiro: { valorContrato: 450.00, vidas: 1, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 450.00, comissao: 0, vencimento: '2026-04-21' }] }
+            } 
+          }
         ];
         setProposals(mockProposals);
       }
