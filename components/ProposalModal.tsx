@@ -256,14 +256,24 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
 
         const safeBeneficiarios = Array.isArray(d.beneficiarios) ? d.beneficiarios : [];
 
+        const loadedValor = d.financeiro?.valorContrato !== undefined ? Number(d.financeiro.valorContrato) : (Number(proposal.valor) || 0);
+        const loadedVidas = d.financeiro?.vidas !== undefined ? Number(d.financeiro.vidas) : (Number(proposal.vidas) || 1);
+        const loadedTaxa = Number(d.financeiro?.valorTaxa ?? d.financeiro?.taxaAdesao ?? 0);
+        
+        let loadedComissao = Number(d.financeiro?.parcelas?.[0]?.comissao ?? proposal.comissao);
+        if ((isNaN(loadedComissao) || loadedComissao <= 0) && loadedValor > 0) {
+          loadedComissao = (loadedTaxa > 0 && loadedValor > loadedTaxa) ? (loadedValor - loadedTaxa) : loadedValor;
+        }
+
         const safeFinanceiro = {
-          valorContrato: d.financeiro?.valorContrato !== undefined ? d.financeiro.valorContrato : (proposal.valor || 0),
-          vidas: d.financeiro?.vidas !== undefined ? d.financeiro.vidas : (proposal.vidas || 1),
-          taxaAdesao: d.financeiro?.taxaAdesao || 0,
+          valorContrato: loadedValor,
+          vidas: loadedVidas,
+          valorTaxa: loadedTaxa,
+          taxaAdesao: loadedTaxa,
           impostos: d.financeiro?.impostos || 0,
           parcelas: Array.isArray(d.financeiro?.parcelas) && d.financeiro.parcelas.length > 0 
-            ? d.financeiro.parcelas 
-            : [{ id: '1', numero: '1ª Parcela', valor: proposal.valor || 0, comissao: proposal.comissao || 0, vencimento: proposal.data || '' }]
+            ? d.financeiro.parcelas.map((p: any, i: number) => i === 0 ? { ...p, valor: loadedValor, comissao: loadedComissao } : p)
+            : [{ id: '1', numero: '1ª Parcela', valor: loadedValor, comissao: loadedComissao, vencimento: proposal.data || '' }]
         };
 
         const safeDocumentos = Array.isArray(d.documentos) ? d.documentos : [];
@@ -286,8 +296,19 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
 
   if (!isOpen) return null;
 
+  const isMasterUser = Boolean(
+    user && (
+      (user.email || '').toLowerCase().trim() === 'lenaldo.abigael@hotmail.com' ||
+      (user.login || '').toLowerCase().trim() === 'lenaldo.abigael@hotmail.com' ||
+      (user.login || '').toLowerCase().trim() === 'admin'
+    )
+  );
+
   const isUserAdminOrGestor = Boolean(
+    isMasterUser ||
     user.role === 'admin' || 
+    user.role === 'gestor' ||
+    user.role === 'supervisor' ||
     (user.login || '').trim().toLowerCase() === 'admin' || 
     user.permissions?.propostas || 
     user.permissions?.criarPropostas
@@ -295,9 +316,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
 
   const isReadOnlyLocked = Boolean(
     proposal && 
-    (proposal.status === 'PAGO' || proposal.status === 'PAGA' || proposal.status === 'ENVIADA AO FINANCEIRO' || proposal.status === 'ENVIADA') &&
-    !isUserAdminOrGestor &&
-    (user.role === 'corretor' || (user.login || '').trim().toLowerCase() === 'corretor')
+    (proposal.status === 'PAGO' || proposal.status === 'PAGA') &&
+    !isUserAdminOrGestor
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -357,7 +377,23 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
 
     const nextStatus = (proposal?.status && proposal.status !== 'CADASTRADA') 
       ? proposal.status 
-      : (formData.proposta.pagamentoCartao ? 'ENVIADA AO FINANCEIRO' : 'CADASTRADA');
+      : 'CADASTRADA';
+
+    const parcelComissao = Number(formData.financeiro.parcelas[0]?.comissao);
+    let finalComissao = (!isNaN(parcelComissao) && parcelComissao > 0) ? parcelComissao : 0;
+    if (finalComissao <= 0 && valorContrato > 0) {
+      finalComissao = (formData.financeiro.valorTaxa > 0 && valorContrato > formData.financeiro.valorTaxa)
+        ? (valorContrato - formData.financeiro.valorTaxa)
+        : valorContrato;
+    }
+
+    const updatedFormData = {
+      ...formData,
+      financeiro: {
+        ...formData.financeiro,
+        parcelas: formData.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, valor: valorContrato, comissao: finalComissao } : p)
+      }
+    };
 
     onSave({
       contrato: contratoDefinitivo,
@@ -370,8 +406,8 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
       valor: valorContrato,
       vidas: vidas,
       status: nextStatus,
-      comissao: formData.proposta.pagamentoCartao ? 0 : (Number(formData.financeiro.parcelas[0]?.comissao) || 0),
-      detalhes: formData
+      comissao: finalComissao,
+      detalhes: updatedFormData
     });
     onClose();
   };
@@ -678,13 +714,15 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                         const val = e.target.value;
                         setFormData(prev => {
                           const novaTaxa = calcularTaxaAdesao(val, prev.proposta.tipoPlano || '', prev.financeiro.vidas);
+                          const contratoVal = prev.financeiro.valorContrato;
+                          const calculatedComissao = (novaTaxa > 0 && contratoVal > novaTaxa) ? (contratoVal - novaTaxa) : contratoVal;
                           return { 
                             ...prev, 
                             proposta: { ...prev.proposta, operadora: val },
                             financeiro: {
                               ...prev.financeiro,
                               valorTaxa: novaTaxa,
-                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: prev.proposta.pagamentoCartao ? -novaTaxa : Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
+                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: calculatedComissao } : p)
                             }
                           };
                         });
@@ -718,13 +756,15 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                         const val = e.target.value;
                         setFormData(prev => {
                           const novaTaxa = calcularTaxaAdesao(prev.proposta.operadora || '', val, prev.financeiro.vidas);
+                          const contratoVal = prev.financeiro.valorContrato;
+                          const calculatedComissao = (novaTaxa > 0 && contratoVal > novaTaxa) ? (contratoVal - novaTaxa) : contratoVal;
                           return { 
                             ...prev, 
                             proposta: { ...prev.proposta, tipoPlano: val },
                             financeiro: {
                               ...prev.financeiro,
                               valorTaxa: novaTaxa,
-                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: prev.proposta.pagamentoCartao ? -novaTaxa : Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
+                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: calculatedComissao } : p)
                             }
                           };
                         });
@@ -772,13 +812,10 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                         checked={formData.proposta.pagamentoCartao || false} 
                         onChange={(e) => {
                           const checked = e.target.checked;
-                          setFormData(prev => {
-                            const updated = { ...prev, proposta: { ...prev.proposta, pagamentoCartao: checked } };
-                            if (updated.financeiro.parcelas[0]) {
-                              updated.financeiro.parcelas[0].comissao = checked ? -updated.financeiro.valorTaxa : Math.max(0, updated.financeiro.valorContrato - updated.financeiro.valorTaxa);
-                            }
-                            return updated;
-                          });
+                          setFormData(prev => ({
+                            ...prev,
+                            proposta: { ...prev.proposta, pagamentoCartao: checked }
+                          }));
                         }}
                         className="w-4 h-4 text-orange-600 bg-white border-slate-300 rounded focus:ring-orange-500 focus:ring-2 cursor-pointer"
                       />
@@ -1008,14 +1045,19 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                     <CurrencyInput
                       value={formData.financeiro.valorContrato}
                       onChange={(val) => {
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          financeiro: { 
-                            ...prev.financeiro, 
-                            valorContrato: val,
-                            parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, valor: val, comissao: prev.proposta.pagamentoCartao ? -prev.financeiro.valorTaxa : Math.max(0, val - prev.financeiro.valorTaxa) } : p)
-                          } 
-                        }));
+                        setFormData(prev => {
+                          const calculatedComissao = (prev.financeiro.valorTaxa > 0 && val > prev.financeiro.valorTaxa)
+                            ? (val - prev.financeiro.valorTaxa)
+                            : val;
+                          return { 
+                            ...prev, 
+                            financeiro: { 
+                              ...prev.financeiro, 
+                              valorContrato: val,
+                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, valor: val, comissao: calculatedComissao } : p)
+                            } 
+                          };
+                        });
                       }}
                       placeholder="0,00"
                     />
@@ -1030,13 +1072,15 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                         const novasVidas = parseInt(e.target.value) || 0;
                         setFormData(prev => {
                           const novaTaxa = calcularTaxaAdesao(prev.proposta.operadora || '', prev.proposta.tipoPlano || '', novasVidas);
+                          const contratoVal = prev.financeiro.valorContrato;
+                          const calculatedComissao = (novaTaxa > 0 && contratoVal > novaTaxa) ? (contratoVal - novaTaxa) : contratoVal;
                           return { 
                             ...prev, 
                             financeiro: { 
                               ...prev.financeiro, 
                               vidas: novasVidas,
                               valorTaxa: novaTaxa,
-                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: prev.proposta.pagamentoCartao ? -novaTaxa : Math.max(0, prev.financeiro.valorContrato - novaTaxa) } : p)
+                              parcelas: prev.financeiro.parcelas.map((p, i) => i === 0 ? { ...p, comissao: calculatedComissao } : p)
                             } 
                           };
                         });
@@ -1062,13 +1106,16 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
 
                 {/* Sub-table: Detalhamento das Parcelas */}
                 <div className="pt-2">
-                  <h4 className="text-[11px] font-bold text-slate-600 mb-2">Detalhamento das Parcelas</h4>
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-[11px] font-bold text-slate-600">Detalhamento das Parcelas</h4>
+                    <span className="text-[10px] font-medium text-slate-400">Você pode ajustar o valor da comissão da parcela diretamente</span>
+                  </div>
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-200">
                         <th className="pb-1.5 px-2">Parcela</th>
                         <th className="pb-1.5 px-2">Valor</th>
-                        <th className="pb-1.5 px-2">Comissão</th>
+                        <th className="pb-1.5 px-2">Comissão (R$)</th>
                         <th className="pb-1.5 px-2">Vencimento</th>
                       </tr>
                     </thead>
@@ -1077,8 +1124,20 @@ const ProposalModal: React.FC<ProposalModalProps> = ({ isOpen, onClose, onSave, 
                         <tr key={p.id} className="text-xs text-slate-700 font-medium">
                           <td className="py-2 px-2">{p.numero}</td>
                           <td className="py-2 px-2 font-bold">{formatBrlCurrency(p.valor)}</td>
-                          <td className={`py-2 px-2 font-bold ${p.comissao < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                            {formatBrlCurrency(p.comissao)}
+                          <td className="py-1 px-2 font-bold w-36">
+                            <CurrencyInput
+                              value={p.comissao}
+                              onChange={(newComissao) => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  financeiro: {
+                                    ...prev.financeiro,
+                                    parcelas: prev.financeiro.parcelas.map(item => item.id === p.id ? { ...item, comissao: newComissao } : item)
+                                  }
+                                }));
+                              }}
+                              placeholder="0,00"
+                            />
                           </td>
                           <td className="py-2 px-2">{p.vencimento}</td>
                         </tr>

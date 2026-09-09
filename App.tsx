@@ -362,59 +362,59 @@ const App: React.FC = () => {
       } else {
         const mockProposals: Proposal[] = [
           { 
-            id: '1', contrato: '6GTLW', data: '2026-04-20', cliente: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', corretor: 'corretor', operadora: 'Amil', categoria: 'Saúde-PME', valor: 1566.62, vidas: 4, status: 'CADASTRADA', comissao: 0, 
+            id: '1', contrato: '6GTLW', data: '2026-04-20', cliente: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', corretor: 'corretor', operadora: 'Amil', categoria: 'Saúde-PME', valor: 1566.62, vidas: 4, status: 'CADASTRADA', comissao: 1566.62, 
             detalhes: { 
               cliente: { nome: 'EDILMA SANTOS BOMFIM BISPO', cpfCnpj: '015.070.045-83', email: 'edilma@exemplo.com', telefone: '(81) 98888-7777', dataNascimento: '15/05/1985' },
               proposta: { contrato: '6GTLW', dataVenda: '2026-04-20', corretor: 'corretor', operadora: 'Amil', categoria: 'Saúde-PME', tipoPlano: 'PME' },
-              financeiro: { valorContrato: 1566.62, vidas: 4, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 1566.62, comissao: 0, vencimento: '2026-04-20' }] }
+              financeiro: { valorContrato: 1566.62, vidas: 4, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 1566.62, comissao: 1566.62, vencimento: '2026-04-20' }] }
             } 
           },
           { 
-            id: '2', contrato: 'GPLRG', data: '2026-04-20', cliente: 'T.F.S. SILVA FARMACIA LTDA', cpfCnpj: '12.345.678/0001-90', corretor: 'corretor', operadora: 'Bradesco Saúde', categoria: 'Saúde-PME', valor: 2379.28, vidas: 6, status: 'ENVIADA AO FINANCEIRO', comissao: 0, 
+            id: '2', contrato: 'GPLRG', data: '2026-04-20', cliente: 'T.F.S. SILVA FARMACIA LTDA', cpfCnpj: '12.345.678/0001-90', corretor: 'corretor', operadora: 'Bradesco Saúde', categoria: 'Saúde-PME', valor: 2379.28, vidas: 6, status: 'ENVIADA AO FINANCEIRO', comissao: 2379.28, 
             detalhes: { 
               cliente: { nome: 'T.F.S. SILVA FARMACIA LTDA', cpfCnpj: '12.345.678/0001-90', email: 'farmacia@exemplo.com', telefone: '(81) 3444-2222', dataNascimento: '' },
               proposta: { contrato: 'GPLRG', dataVenda: '2026-04-20', corretor: 'corretor', operadora: 'Bradesco Saúde', categoria: 'Saúde-PME', tipoPlano: 'PME' },
-              financeiro: { valorContrato: 2379.28, vidas: 6, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 2379.28, comissao: 0, vencimento: '2026-04-20' }] }
+              financeiro: { valorContrato: 2379.28, vidas: 6, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 2379.28, comissao: 2379.28, vencimento: '2026-04-20' }] }
             } 
           },
           { 
-            id: '3', contrato: 'HXRYU', data: '2026-04-21', cliente: 'JOAO SILVA COSTA', cpfCnpj: '111.222.333-44', corretor: 'corretor', operadora: 'Unimed Nacional', categoria: 'Adesão', valor: 826.37, vidas: 2, status: 'PAGO', comissao: 0, 
+            id: '3', contrato: 'HXRYU', data: '2026-04-21', cliente: 'JOAO SILVA COSTA', cpfCnpj: '111.222.333-44', corretor: 'corretor', operadora: 'Unimed Nacional', categoria: 'Adesão', valor: 826.37, vidas: 2, status: 'PAGO', comissao: 826.37, 
             detalhes: { 
               cliente: { nome: 'JOAO SILVA COSTA', cpfCnpj: '111.222.333-44', email: 'joao.costa@exemplo.com', telefone: '(81) 99999-1111', dataNascimento: '10/10/1990' },
               proposta: { contrato: 'HXRYU', dataVenda: '2026-04-21', corretor: 'corretor', operadora: 'Unimed Nacional', categoria: 'Adesão', tipoPlano: 'Adesão' },
-              financeiro: { valorContrato: 826.37, vidas: 2, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 826.37, comissao: 0, vencimento: '2026-04-21' }] }
+              financeiro: { valorContrato: 826.37, vidas: 2, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 826.37, comissao: 826.37, vencimento: '2026-04-21' }] }
             } 
           },
           { 
-            id: '4', contrato: 'MPL99', data: '2026-04-22', cliente: 'CLINICA SAUDE INTEGRADA', cpfCnpj: '33.444.555/0001-22', corretor: 'Carlos Corretor', operadora: 'SulAmérica', categoria: 'Saúde-PME', valor: 3450.00, vidas: 8, status: 'CADASTRADA', comissao: 0, 
+            id: '4', contrato: 'MPL99', data: '2026-04-22', cliente: 'CLINICA SAUDE INTEGRADA', cpfCnpj: '33.444.555/0001-22', corretor: 'Carlos Corretor', operadora: 'SulAmérica', categoria: 'Saúde-PME', valor: 3450.00, vidas: 8, status: 'CADASTRADA', comissao: 3450.00, 
             detalhes: { 
               cliente: { nome: 'CLINICA SAUDE INTEGRADA', cpfCnpj: '33.444.555/0001-22', email: 'contato@clinicasaude.com.br', telefone: '(81) 3333-5555', dataNascimento: '' },
               proposta: { contrato: 'MPL99', dataVenda: '2026-04-22', corretor: 'Carlos Corretor', operadora: 'SulAmérica', categoria: 'Saúde-PME', tipoPlano: 'PME' },
-              financeiro: { valorContrato: 3450.00, vidas: 8, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 3450.00, comissao: 0, vencimento: '2026-04-22' }] }
+              financeiro: { valorContrato: 3450.00, vidas: 8, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 3450.00, comissao: 3450.00, vencimento: '2026-04-22' }] }
             } 
           },
           { 
-            id: '5', contrato: 'AN772', data: '2026-04-18', cliente: 'RESTAURANTE BOA VISTA LTDA', cpfCnpj: '98.765.432/0001-11', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 1890.50, vidas: 5, status: 'PAGO', comissao: 0, 
+            id: '5', contrato: 'AN772', data: '2026-04-18', cliente: 'RESTAURANTE BOA VISTA LTDA', cpfCnpj: '98.765.432/0001-11', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', valor: 1890.50, vidas: 5, status: 'PAGO', comissao: 1890.50, 
             detalhes: { 
               cliente: { nome: 'RESTAURANTE BOA VISTA LTDA', cpfCnpj: '98.765.432/0001-11', email: 'boavista@restaurante.com', telefone: '(81) 3222-4444', dataNascimento: '' },
               proposta: { contrato: 'AN772', dataVenda: '2026-04-18', corretor: 'Anny', operadora: 'Hapvida', categoria: 'Saúde-PME', tipoPlano: 'PME' },
-              financeiro: { valorContrato: 1890.50, vidas: 5, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 1890.50, comissao: 0, vencimento: '2026-04-18' }] }
+              financeiro: { valorContrato: 1890.50, vidas: 5, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 1890.50, comissao: 1890.50, vencimento: '2026-04-18' }] }
             } 
           },
           { 
-            id: '6', contrato: 'MC551', data: '2026-04-19', cliente: 'CONSULTORIA FINANCEIRA ALFA', cpfCnpj: '55.666.777/0001-88', corretor: 'Michele', operadora: 'Porto Seguro', categoria: 'Saúde-PME', valor: 2100.00, vidas: 3, status: 'ENVIADA AO FINANCEIRO', comissao: 0, 
+            id: '6', contrato: 'MC551', data: '2026-04-19', cliente: 'CONSULTORIA FINANCEIRA ALFA', cpfCnpj: '55.666.777/0001-88', corretor: 'Michele', operadora: 'Porto Seguro', categoria: 'Saúde-PME', valor: 2100.00, vidas: 3, status: 'ENVIADA AO FINANCEIRO', comissao: 2100.00, 
             detalhes: { 
               cliente: { nome: 'CONSULTORIA FINANCEIRA ALFA', cpfCnpj: '55.666.777/0001-88', email: 'alfa@consultoria.com', telefone: '(81) 3111-9999', dataNascimento: '' },
               proposta: { contrato: 'MC551', dataVenda: '2026-04-19', corretor: 'Michele', operadora: 'Porto Seguro', categoria: 'Saúde-PME', tipoPlano: 'PME' },
-              financeiro: { valorContrato: 2100.00, vidas: 3, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 2100.00, comissao: 0, vencimento: '2026-04-19' }] }
+              financeiro: { valorContrato: 2100.00, vidas: 3, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 2100.00, comissao: 2100.00, vencimento: '2026-04-19' }] }
             } 
           },
           { 
-            id: '7', contrato: 'LZ334', data: '2026-04-21', cliente: 'MARCOS VINICIUS PEREIRA', cpfCnpj: '222.333.444-55', corretor: 'Luiza', operadora: 'Amil', categoria: 'Individual', valor: 450.00, vidas: 1, status: 'CADASTRADA', comissao: 0, 
+            id: '7', contrato: 'LZ334', data: '2026-04-21', cliente: 'MARCOS VINICIUS PEREIRA', cpfCnpj: '222.333.444-55', corretor: 'Luiza', operadora: 'Amil', categoria: 'Individual', valor: 450.00, vidas: 1, status: 'CADASTRADA', comissao: 450.00, 
             detalhes: { 
               cliente: { nome: 'MARCOS VINICIUS PEREIRA', cpfCnpj: '222.333.444-55', email: 'marcos.vinicius@exemplo.com', telefone: '(81) 97777-3333', dataNascimento: '25/08/1992' },
               proposta: { contrato: 'LZ334', dataVenda: '2026-04-21', corretor: 'Luiza', operadora: 'Amil', categoria: 'Individual', tipoPlano: 'Individual' },
-              financeiro: { valorContrato: 450.00, vidas: 1, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 450.00, comissao: 0, vencimento: '2026-04-21' }] }
+              financeiro: { valorContrato: 450.00, vidas: 1, parcelas: [{ id: '1', numero: '1ª Parcela', valor: 450.00, comissao: 450.00, vencimento: '2026-04-21' }] }
             } 
           }
         ];
@@ -999,8 +999,42 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             lots={paymentLots} 
             proposals={proposals}
             requirements={proposalRequirements}
+            user={user}
+            onEditProposal={(p) => {
+              if (p.status === 'PAGO') {
+                alert('Propostas com status PAGO não podem ser alteradas.');
+                return;
+              }
+              setEditingProposal(p);
+              setIsProposalModalOpen(true);
+            }}
+            onReturnPendingProposal={async (proposalId) => {
+              const prop = proposals.find(p => p.id === proposalId);
+              if (!prop) return;
+
+              const { error: propError } = await supabase
+                .from('proposals')
+                .update({ status: 'CADASTRADA', lote_id: null })
+                .eq('id', proposalId);
+
+              if (propError) {
+                console.error('Erro ao devolver proposta:', propError);
+                alert('Erro ao devolver proposta para CADASTRADA. Verifique o console.');
+                return;
+              }
+
+              await fetchData();
+              alert(`Proposta ${prop.contrato || ''} devolvida com sucesso para o status CADASTRADA.`);
+            }}
             onGenerateLot={async (corretor, ids) => {
+              // 1. Validação de segurança: garantir que nenhuma proposta já pertença a outro lote
               const selectedProposals = proposals.filter(p => ids.includes(p.id));
+              const alreadyInLot = selectedProposals.filter(p => p.lote_id || p.status === 'PAGO');
+              if (alreadyInLot.length > 0) {
+                alert(`Não foi possível gerar o lote: algumas propostas já estão vinculadas a outro lote ou pagas.\nPropostas: ${alreadyInLot.map(p => p.contrato || p.cliente).join(', ')}`);
+                await fetchData();
+                return;
+              }
               
               const impostos = proposalRequirements.filter(r => r.tipo === 'IMPOSTO_CORRETOR');
               const totalValue = selectedProposals.reduce((acc, p) => {
@@ -1125,6 +1159,47 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                 }
                 
                 fetchData();
+              }
+            }}
+            onReverseLot={async (lotId) => {
+              const lot = paymentLots.find(l => l.id === lotId);
+              if (!lot) return;
+
+              try {
+                // 1. Reverter todas as propostas associadas para status 'ENVIADA AO FINANCEIRO' e desvincular lote
+                const { error: propError } = await supabase
+                  .from('proposals')
+                  .update({ status: 'ENVIADA AO FINANCEIRO', lote_id: null })
+                  .eq('lote_id', lotId);
+
+                if (propError) {
+                  console.error('Erro ao reverter status das propostas:', propError);
+                  alert('Erro ao desvincular propostas do lote: ' + propError.message);
+                  return;
+                }
+
+                // 2. Remover lançamento financeiro de contas a pagar gerado automaticamente (se houver)
+                await supabase
+                  .from('transactions')
+                  .delete()
+                  .eq('descricao', `PAGAMENTO COMISSÃO - ${lot.codigo}`);
+
+                // 3. Excluir o lote de pagamento
+                const { error: lotError } = await supabase
+                  .from('payment_lots')
+                  .delete()
+                  .eq('id', lotId);
+
+                if (lotError) {
+                  console.error('Erro ao excluir lote:', lotError);
+                  alert('Erro ao excluir o lote: ' + lotError.message);
+                } else {
+                  await fetchData();
+                  alert(`Lote ${lot.codigo} foi estornado com sucesso! As propostas retornaram para a fila "Aguardando Fechamento".`);
+                }
+              } catch (err: any) {
+                console.error('Erro inesperado no estorno do lote:', err);
+                alert('Erro ao estornar lote: ' + (err.message || 'Erro desconhecido.'));
               }
             }}
           />

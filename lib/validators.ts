@@ -63,6 +63,7 @@ export interface ProposalValidationResult {
   invalidVidas: boolean;
   invalidContrato: boolean;
   invalidCpfCnpj: boolean;
+  invalidComissao: boolean;
 }
 
 export function validateProposalForAdvance(p: any): ProposalValidationResult {
@@ -104,6 +105,13 @@ export function validateProposalForAdvance(p: any): ProposalValidationResult {
     errors.push('CPF ou CNPJ do Cliente é inválido ou incompleto');
   }
 
+  // 6. Comissão (não pode ser zerada se a proposta possui valor)
+  const comissao = Number(p.comissao !== undefined ? p.comissao : p.detalhes?.financeiro?.parcelas?.[0]?.comissao);
+  const invalidComissao = !isCartao && valor > 0 && (isNaN(comissao) || comissao <= 0);
+  if (invalidComissao) {
+    errors.push('Comissão da proposta não pode ser zerada (R$ 0,00). Defina um valor de comissão válido.');
+  }
+
   return {
     isValid: errors.length === 0,
     errors,
@@ -111,6 +119,7 @@ export function validateProposalForAdvance(p: any): ProposalValidationResult {
     invalidValor,
     invalidVidas,
     invalidContrato,
-    invalidCpfCnpj
+    invalidCpfCnpj,
+    invalidComissao
   };
 }

@@ -100,7 +100,21 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
   const [rows, setRows] = useState(() =>
     data.map(p => {
       const doc = corrigirDocumento(p.cpfCnpj || '');
-      return { ...p, cpfCnpj: doc.valor, _cpfValido: doc.valido };
+      const v = Number(p.valor) || 0;
+      let c = Number(p.comissao);
+      const taxa = Number(p.detalhes?.financeiro?.valorTaxa) || 0;
+      if ((isNaN(c) || c <= 0) && v > 0) {
+        c = (taxa > 0 && v > taxa) ? (v - taxa) : v;
+      }
+      const rawVidas = Number(p.vidas);
+      const finalVidas = isNaN(rawVidas) || rawVidas <= 0 ? 1 : rawVidas;
+      return { 
+        ...p, 
+        vidas: finalVidas,
+        cpfCnpj: doc.valor, 
+        comissao: isNaN(c) ? 0 : c,
+        _cpfValido: doc.valido 
+      };
     })
   );
   const [vendedoraLote, setVendedoraLote] = useState('');
@@ -118,6 +132,11 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
       if (i !== index) return r;
       const atualizado = { ...r, [campo]: valor };
       if (campo === 'cpfCnpj') atualizado._cpfValido = corrigirDocumento(valor).valido;
+      if (campo === 'valor' && (Number(atualizado.comissao) <= 0 || Number(atualizado.comissao) === Number(r.valor))) {
+        const v = Number(valor) || 0;
+        const taxa = Number(r.detalhes?.financeiro?.valorTaxa) || 0;
+        atualizado.comissao = (taxa > 0 && v > taxa) ? (v - taxa) : v;
+      }
       return atualizado;
     }));
   };
@@ -134,6 +153,31 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
     setRows(prev => prev.map(r =>
       (!r.corretor || r.corretor === 'Corretor Geral') ? { ...r, corretor: vendedoraLote.trim() } : r
     ));
+  };
+
+  const autoCorrigirComissoes = () => {
+    setRows(prev => prev.map(r => {
+      const v = Number(r.valor) || 0;
+      const c = Number(r.comissao) || 0;
+      const taxa = Number(r.detalhes?.financeiro?.valorTaxa) || 0;
+      if (c <= 0 && v > 0) {
+        const novaComissao = (taxa > 0 && v > taxa) ? (v - taxa) : v;
+        return {
+          ...r,
+          comissao: novaComissao,
+          detalhes: {
+            ...r.detalhes,
+            financeiro: {
+              ...r.detalhes?.financeiro,
+              parcelas: [
+                { id: '1', numero: '1ª Parcela', valor: v, comissao: novaComissao, vencimento: r.data || '' }
+              ]
+            }
+          }
+        };
+      }
+      return r;
+    }));
   };
 
   const semContrato = (r: any) => !r.contrato || r.contrato.trim() === '' || r.contrato.startsWith('IMP-');
@@ -164,6 +208,11 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
       lista.push('valor zerado');
     }
 
+    const comissaoNum = Number(r.comissao);
+    if ((isNaN(comissaoNum) || comissaoNum <= 0) && valorNum > 0 && !r.detalhes?.proposta?.pagamentoCartao) {
+      lista.push('comissão zerada');
+    }
+
     const vidasNum = Number(r.vidas);
     if (isNaN(vidasNum) || vidasNum <= 0) {
       lista.push('vidas zerado');
@@ -191,6 +240,7 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
 
   const totalSemContrato = rows.filter(r => semContrato(r)).length;
   const totalDuplicado = rows.filter((r, i) => contratoDuplicado(r, i)).length;
+  const totalComissaoZerada = rows.filter(r => (Number(r.comissao) <= 0) && Number(r.valor) > 0 && !r.detalhes?.proposta?.pagamentoCartao).length;
   const totalBloqueio = rows.filter((r, i) => pendenciasBloqueio(r, i).length > 0).length;
   const totalAviso = rows.filter(r => pendenciasAviso(r).length > 0).length;
 
@@ -203,7 +253,31 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
       );
       if (!ok) return;
     }
-    onConfirm(rows);
+    // Garantir sincronização do financeiro e parcelas
+    const rowsSincronizadas = rows.map(r => {
+      const v = Number(r.valor) || 0;
+      const c = Number(r.comissao) || 0;
+      return {
+        ...r,
+        detalhes: {
+          ...r.detalhes,
+          financeiro: {
+            ...r.detalhes?.financeiro,
+            valorContrato: v,
+            parcelas: [
+              {
+                id: r.detalhes?.financeiro?.parcelas?.[0]?.id || '1',
+                numero: r.detalhes?.financeiro?.parcelas?.[0]?.numero || '1ª Parcela',
+                valor: v,
+                comissao: c,
+                vencimento: r.data || ''
+              }
+            ]
+          }
+        }
+      };
+    });
+    onConfirm(rowsSincronizadas);
   };
 
   return (
@@ -236,13 +310,25 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
           </button>
         </div>
 
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Aplicar vendedora a todas as linhas sem uma:</span>
-          <input type="text" value={vendedoraLote} onChange={e => setVendedoraLote(e.target.value)}
-            placeholder="Nome da vendedora..." className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm flex-1 max-w-xs" />
-          <button onClick={aplicarVendedoraEmLote} className="px-4 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-bold uppercase tracking-wide hover:bg-slate-700">
-            Aplicar
-          </button>
+        <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-[300px]">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Vendedora em lote:</span>
+            <input type="text" value={vendedoraLote} onChange={e => setVendedoraLote(e.target.value)}
+              placeholder="Nome da vendedora..." className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm flex-1 max-w-xs bg-white" />
+            <button onClick={aplicarVendedoraEmLote} className="px-4 py-1.5 bg-slate-800 text-white rounded-lg text-xs font-bold uppercase tracking-wide hover:bg-slate-700">
+              Aplicar
+            </button>
+          </div>
+
+          {totalComissaoZerada > 0 && (
+            <button 
+              onClick={autoCorrigirComissoes}
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black uppercase tracking-wide flex items-center gap-2 shadow-sm shadow-emerald-600/30 transition-all"
+            >
+              <i className="fa-solid fa-wand-magic-sparkles"></i>
+              Auto-Corrigir {totalComissaoZerada} Comissão(ões) Zerada(s)
+            </button>
+          )}
         </div>
 
         {totalBloqueio > 0 && (
@@ -250,8 +336,9 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
             <i className="fa-solid fa-circle-info text-red-500"></i>
             <span className="text-xs font-bold text-red-700">
               {totalSemContrato > 0 && `${totalSemContrato} sem número de contrato. `}
-              {totalDuplicado > 0 && `${totalDuplicado} com contrato repetido (na planilha ou já existente no sistema). `}
-              Corrija o campo "Contrato" (vermelho na tabela) — a importação só libera depois.
+              {totalDuplicado > 0 && `${totalDuplicado} com contrato repetido. `}
+              {totalComissaoZerada > 0 && `${totalComissaoZerada} com comissão zerada (clique em Auto-Corrigir ou ajuste o valor). `}
+              Corrija os campos destacados em vermelho para liberar a importação.
             </span>
           </div>
         )}
@@ -269,7 +356,8 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
                     <th className="p-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Operadora</th>
                     <th className="p-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vendedora</th>
                     <th className="p-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
-                    <th className="p-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Avisos</th>
+                    <th className="p-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Comissão</th>
+                    <th className="p-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status / Avisos</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -277,6 +365,7 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
                     const bloqueios = pendenciasBloqueio(r, index);
                     const avisos = pendenciasAviso(r);
                     const expandida = linhaExpandida === index;
+                    const cNum = Number(r.comissao) || 0;
                     return (
                       <React.Fragment key={index}>
                         <tr className={bloqueios.length > 0 ? 'bg-red-50/40' : avisos.length > 0 ? 'bg-amber-50/40' : ''}>
@@ -296,7 +385,7 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
                           <td className="p-2">
                             <input value={r.contrato || ''} onChange={e => atualizarLinha(index, 'contrato', e.target.value)}
                               placeholder="Obrigatório"
-                              className={`w-full px-2 py-1.5 rounded-lg border text-sm font-bold ${bloqueios.length > 0 ? 'border-red-300 bg-red-50 text-red-700 placeholder-red-300' : 'border-transparent hover:border-slate-200 text-blue-600'}`} />
+                              className={`w-full px-2 py-1.5 rounded-lg border text-sm font-bold ${bloqueios.length > 0 && (semContrato(r) || contratoDuplicado(r, index)) ? 'border-red-300 bg-red-50 text-red-700 placeholder-red-300' : 'border-transparent hover:border-slate-200 text-blue-600'}`} />
                           </td>
                           <td className="p-2">
                             <input value={r.operadora || ''} onChange={e => atualizarLinha(index, 'operadora', e.target.value)}
@@ -322,7 +411,18 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
                                 const parsed = parseBrlMoney(e.target.value);
                                 atualizarLinha(index, 'valor', parsed);
                               }}
-                              className={`w-28 px-2 py-1.5 rounded-lg border text-sm font-bold ${valorSuspeito(Number(r.valor)) ? 'border-red-300 bg-red-50 text-red-700' : 'border-transparent hover:border-slate-200 text-emerald-600'}`} 
+                              className={`w-24 px-2 py-1.5 rounded-lg border text-sm font-bold ${valorSuspeito(Number(r.valor)) ? 'border-red-300 bg-red-50 text-red-700' : 'border-transparent hover:border-slate-200 text-slate-700'}`} 
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input 
+                              type="text" 
+                              value={r.comissao !== undefined && r.comissao !== null ? (typeof r.comissao === 'number' ? formatBrl(r.comissao) : r.comissao) : ''}
+                              onChange={e => {
+                                const parsed = parseBrlMoney(e.target.value);
+                                atualizarLinha(index, 'comissao', parsed);
+                              }}
+                              className={`w-24 px-2 py-1.5 rounded-lg border text-sm font-bold ${cNum <= 0 && Number(r.valor) > 0 ? 'border-red-300 bg-red-50 text-red-700 font-black' : 'border-transparent hover:border-slate-200 text-emerald-600'}`} 
                             />
                           </td>
                           <td className="p-2">
@@ -337,14 +437,12 @@ export const RevisaoImportacaoModal: React.FC<RevisaoImportacaoModalProps> = ({
                         </tr>
                         {expandida && (
                           <tr className="bg-slate-50/60">
-                            <td colSpan={8} className="p-4">
-                              <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                            <td colSpan={9} className="p-4">
+                              <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
                                 <CampoSecundario label="Vidas" value={r.vidas ?? 0}
                                   onChange={v => atualizarLinha(index, 'vidas', parseInt(v) || 0)} type="number" />
                                 <CampoSecundario label="Data Venda" value={r.data || ''}
                                   onChange={v => atualizarLinha(index, 'data', v)} type="date" />
-                                <CampoSecundario label="Comissão" value={r.comissao ?? 0}
-                                  onChange={v => atualizarLinha(index, 'comissao', parseFloat(v) || 0)} type="number" />
                                 <CampoSecundario label="E-mail" value={r.detalhes?.cliente?.email || ''}
                                   onChange={v => atualizarDetalhe(index, 'cliente', 'email', v)}
                                   invalido={!emailValido(r.detalhes?.cliente?.email)} />

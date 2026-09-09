@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Proposal, ProposalRequirement } from '../types';
 import * as XLSX from 'xlsx';
 import { RevisaoImportacaoModal } from './RevisaoImportacaoModal';
@@ -29,7 +30,32 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [importPreviewData, setImportPreviewData] = useState<any[] | null>(null);
   const [viewingProposal, setViewingProposal] = useState<Proposal | null>(null);
-  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [activeDropdown, setActiveDropdown] = useState<{
+    id: string;
+    proposal: Proposal;
+    top: number;
+    left: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!activeDropdown) return;
+    const handleDismiss = () => {
+      setActiveDropdown(null);
+      setConfirmingSendId(null);
+      setConfirmingDeleteId(null);
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleDismiss();
+    };
+    window.addEventListener('scroll', handleDismiss, true);
+    window.addEventListener('resize', handleDismiss);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('scroll', handleDismiss, true);
+      window.removeEventListener('resize', handleDismiss);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeDropdown]);
   
   type SortColumn = 'contrato' | 'cliente' | 'corretor' | 'operadora' | 'valor' | 'status' | null;
   type SortDirection = 'asc' | 'desc';
@@ -192,56 +218,28 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
   const handleDownloadTemplate = () => {
     const templateData = [
       {
-        'Nº Contrato': '100203',
+        'Nº Contrato': '4557556',
         'Dt Venda': '2026-06-11',
         'Nome': 'João da Silva',
         'CPF / CNPJ': '123.456.789-00',
         'Corretor': 'Carlos Medeiros',
-        'Operadora': 'Unimed',
-        'Categoria': 'Pinho',
+        'Operadora': 'Hapvida',
+        'Tipo de Plano': 'Individual',
+        'Categoria': 'Saúde',
         'Valor Contrato': 450.00,
-        'Vidas': 2,
-        'Status': 'CADASTRADA',
-        'Comissão': 225.00,
-        'Data Nascimento': '1985-04-12',
-        'Email': 'joao@email.com',
-        'Telefone': '11999999999',
-        'CEP': '01001-000',
-        'Endereço': 'Praça da Sé',
-        'Número': '123',
-        'Complemento': 'Apt 42',
-        'Bairro': 'Sé',
-        'Cidade': 'São Paulo',
-        'Estado': 'SP',
-        'Tipo de Plano': 'Familiar',
-        'Unidade': 'São Paulo Centro',
-        'Valor Taxa': 15.00
+        'Vidas': 1
       },
       {
-        'Nº Contrato': '100204',
+        'Nº Contrato': '4523240',
         'Dt Venda': '2026-06-12',
         'Nome': 'Maria de Souza Ltda',
         'CPF / CNPJ': '12.345.678/0001-99',
         'Corretor': 'Carlos Medeiros',
-        'Operadora': 'Bradesco Saúde',
-        'Categoria': 'Top Nacional',
-        'Valor Contrato': 1500.00,
-        'Vidas': 5,
-        'Status': 'CADASTRADA',
-        'Comissão': 750.00,
-        'Data Nascimento': '1990-08-20',
-        'Email': 'contato@maria.com',
-        'Telefone': '11988888888',
-        'CEP': '01311-000',
-        'Endereço': 'Avenida Paulista',
-        'Número': '1000',
-        'Complemento': 'Sala 51',
-        'Bairro': 'Bela Vista',
-        'Cidade': 'São Paulo',
-        'Estado': 'SP',
+        'Operadora': 'Plamed',
         'Tipo de Plano': 'Empresarial',
-        'Unidade': 'Paulista',
-        'Valor Taxa': 20.00
+        'Categoria': 'Saúde',
+        'Valor Contrato': 1500.00,
+        'Vidas': 5
       }
     ];
 
@@ -250,7 +248,7 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
     XLSX.utils.book_append_sheet(workbook, worksheet, "Modelo Importação");
 
     // Auto-size columns
-    const max_width = 20;
+    const max_width = 22;
     worksheet["!cols"] = Object.keys(templateData[0]).map(() => ({ wch: max_width }));
 
     XLSX.writeFile(workbook, 'modelo_importacao_propostas.xlsx');
@@ -382,7 +380,8 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
           const valorNum = cleanMoney(rawValor);
 
           const rawVidas = row['Vidas'] || row['Qtde Vidas'] || row['Qtd Vidas'] || row['Quantidade Vidas'] || row['Quantidade de Vidas'] || row['Nº Vidas'] || row['Beneficiários'] || row['Qtde'];
-          const vidasNum = parseInt(rawVidas?.toString() || '0', 10) || 0;
+          const parsedVidas = parseInt(rawVidas?.toString() || '1', 10);
+          const vidasNum = isNaN(parsedVidas) || parsedVidas <= 0 ? 1 : parsedVidas;
           
           const dataVenda = parseExcelDate(row['Dt Venda'] || row['Data'] || row['Data Venda'] || row['Data da Venda']);
           const valorTaxaNum = cleanMoney(row['Valor Taxa'] || row['Taxa Adesão'] || row['Taxa']);
@@ -431,10 +430,14 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
           const comissaoFromRow = hasComissao ? cleanMoney(rawComissao) : NaN;
           
           let comissaoNum = 0;
-          if (!isNaN(comissaoFromRow) && comissaoFromRow !== 0) {
+          if (!isNaN(comissaoFromRow) && comissaoFromRow > 0) {
             comissaoNum = comissaoFromRow;
-          } else {
-            comissaoNum = Math.max(0, valorNum - finalTaxaNum);
+          } else if (valorNum > 0) {
+            if (finalTaxaNum > 0 && valorNum > finalTaxaNum) {
+              comissaoNum = valorNum - finalTaxaNum;
+            } else {
+              comissaoNum = valorNum;
+            }
           }
           
           return {
@@ -760,121 +763,45 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                       )}
                     </div>
                   </td>
-                  <td className="py-3 px-4 relative text-center">
+                  <td className="py-3 px-4 text-center">
                     <div className="inline-flex items-center justify-center">
-                      {openDropdownId === p.id && (
-                        <div className="fixed inset-0 z-40" onClick={() => setOpenDropdownId(null)}></div>
-                      )}
-                      
                       <button 
-                        onClick={() => setOpenDropdownId(openDropdownId === p.id ? null : p.id)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors z-10 cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (activeDropdown?.id === p.id) {
+                            setActiveDropdown(null);
+                            setConfirmingSendId(null);
+                            setConfirmingDeleteId(null);
+                            return;
+                          }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const menuWidth = 192; // w-48 = 12rem = 192px
+                          const menuEstimatedHeight = 180;
+                          
+                          const spaceBelow = window.innerHeight - rect.bottom;
+                          let top = rect.bottom + 4;
+                          if (spaceBelow < menuEstimatedHeight && rect.top > menuEstimatedHeight) {
+                            top = rect.top - menuEstimatedHeight - 4;
+                          }
+
+                          let left = rect.right - menuWidth;
+                          if (left < 10) left = 10;
+                          if (left + menuWidth > window.innerWidth - 10) {
+                            left = window.innerWidth - menuWidth - 10;
+                          }
+
+                          setActiveDropdown({
+                            id: p.id,
+                            proposal: p,
+                            top,
+                            left,
+                          });
+                        }}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors cursor-pointer"
                         title="Ações"
                       >
                         <span className="material-symbols-outlined text-base">more_vert</span>
                       </button>
-
-                      {openDropdownId === p.id && (
-                        <div className="absolute right-8 top-8 w-48 bg-white rounded-xl shadow-xl border border-slate-100 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 text-left">
-                          <button
-                            onClick={() => {
-                              setViewingProposal(p);
-                              setOpenDropdownId(null);
-                            }}
-                            className="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
-                          >
-                            <span className="material-symbols-outlined text-sm text-slate-400">visibility</span>
-                            <span>Visualizar</span>
-                          </button>
-                          
-                          <button
-                            onClick={() => {
-                              onEditProposal(p);
-                              setOpenDropdownId(null);
-                            }}
-                            disabled={p.status === 'PAGO' || p.status === 'PAGA'}
-                            className={`w-full text-left px-3.5 py-2 text-xs font-semibold flex items-center gap-2 cursor-pointer ${
-                              p.status === 'PAGO' || p.status === 'PAGA' ? 'text-slate-300 cursor-not-allowed' : 'text-blue-600 hover:bg-slate-50'
-                            }`}
-                          >
-                            <span className="material-symbols-outlined text-sm">edit</span>
-                            <span>Editar</span>
-                          </button>
-
-                          {p.status === 'CADASTRADA' && (
-                            confirmingSendId === p.id ? (
-                              <div className="px-2 py-1 mx-2 flex gap-1 bg-emerald-50 rounded-lg">
-                                <button
-                                  onClick={() => {
-                                    onEditProposal({ ...p, status: 'ENVIADA AO FINANCEIRO' } as any);
-                                    setConfirmingSendId(null);
-                                    setOpenDropdownId(null);
-                                  }}
-                                  className="flex-1 bg-emerald-600 text-white rounded text-[10px] font-bold py-1 cursor-pointer"
-                                >
-                                  Confirmar
-                                </button>
-                                <button
-                                  onClick={() => setConfirmingSendId(null)}
-                                  className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300 cursor-pointer"
-                                >
-                                  X
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const val = validateProposalForAdvance(p);
-                                  if (!val.isValid) {
-                                    setAlertMessage(`Não é possível enviar a proposta para o financeiro devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nEdite a proposta e corrija os dados antes de prosseguir.`);
-                                    return;
-                                  }
-                                  setConfirmingSendId(p.id);
-                                }}
-                                className="w-full text-left px-3.5 py-2 text-xs font-semibold text-emerald-600 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
-                              >
-                                <span className="material-symbols-outlined text-sm">send</span>
-                                <span>Enviar ao Financeiro</span>
-                              </button>
-                            )
-                          )}
-
-                          {p.status !== 'PAGO' && p.status !== 'PAGA' && p.status !== 'ENVIADA AO FINANCEIRO' && (
-                            confirmingDeleteId === p.id ? (
-                              <div className="px-2 py-1 mx-2 flex gap-1 bg-red-50 rounded-lg">
-                                <button
-                                  onClick={() => {
-                                    onDeleteProposal(p.id);
-                                    setConfirmingDeleteId(null);
-                                    setOpenDropdownId(null);
-                                  }}
-                                  className="flex-1 bg-red-600 text-white rounded text-[10px] font-bold py-1 cursor-pointer"
-                                >
-                                  Deletar
-                                </button>
-                                <button
-                                  onClick={() => setConfirmingDeleteId(null)}
-                                  className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300 cursor-pointer"
-                                >
-                                  X
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmingDeleteId(p.id);
-                                }}
-                                className="w-full text-left px-3.5 py-2 text-xs font-semibold text-red-600 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
-                              >
-                                <span className="material-symbols-outlined text-sm">delete</span>
-                                <span>Excluir</span>
-                              </button>
-                            )
-                          )}
-                        </div>
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -1079,6 +1006,125 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
             </div>
           </div>
         </div>
+      )}
+
+      {activeDropdown && createPortal(
+        <>
+          <div 
+            className="fixed inset-0 z-[999] bg-transparent" 
+            onClick={() => {
+              setActiveDropdown(null);
+              setConfirmingSendId(null);
+              setConfirmingDeleteId(null);
+            }}
+          />
+          <div 
+            className="fixed w-48 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 z-[1000] text-left animate-in fade-in zoom-in-95 duration-150"
+            style={{
+              top: `${activeDropdown.top}px`,
+              left: `${activeDropdown.left}px`,
+            }}
+          >
+            <button
+              onClick={() => {
+                setViewingProposal(activeDropdown.proposal);
+                setActiveDropdown(null);
+              }}
+              className="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-sm text-slate-400">visibility</span>
+              <span>Visualizar</span>
+            </button>
+            
+            <button
+              onClick={() => {
+                onEditProposal(activeDropdown.proposal);
+                setActiveDropdown(null);
+              }}
+              disabled={activeDropdown.proposal.status === 'PAGO' || activeDropdown.proposal.status === 'PAGA'}
+              className={`w-full text-left px-3.5 py-2 text-xs font-semibold flex items-center gap-2 cursor-pointer ${
+                activeDropdown.proposal.status === 'PAGO' || activeDropdown.proposal.status === 'PAGA' ? 'text-slate-300 cursor-not-allowed' : 'text-blue-600 hover:bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">edit</span>
+              <span>Editar</span>
+            </button>
+
+            {activeDropdown.proposal.status === 'CADASTRADA' && (
+              confirmingSendId === activeDropdown.proposal.id ? (
+                <div className="px-2 py-1 mx-2 flex gap-1 bg-emerald-50 rounded-lg">
+                  <button
+                    onClick={() => {
+                      onEditProposal({ ...activeDropdown.proposal, status: 'ENVIADA AO FINANCEIRO' } as any);
+                      setConfirmingSendId(null);
+                      setActiveDropdown(null);
+                    }}
+                    className="flex-1 bg-emerald-600 text-white rounded text-[10px] font-bold py-1 cursor-pointer"
+                  >
+                    Confirmar
+                  </button>
+                  <button
+                    onClick={() => setConfirmingSendId(null)}
+                    className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300 cursor-pointer"
+                  >
+                    X
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const val = validateProposalForAdvance(activeDropdown.proposal);
+                    if (!val.isValid) {
+                      setAlertMessage(`Não é possível enviar a proposta para o financeiro devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nEdite a proposta e corrija os dados antes de prosseguir.`);
+                      return;
+                    }
+                    setConfirmingSendId(activeDropdown.proposal.id);
+                  }}
+                  className="w-full text-left px-3.5 py-2 text-xs font-semibold text-emerald-600 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm">send</span>
+                  <span>Enviar ao Financeiro</span>
+                </button>
+              )
+            )}
+
+            {activeDropdown.proposal.status !== 'PAGO' && activeDropdown.proposal.status !== 'PAGA' && activeDropdown.proposal.status !== 'ENVIADA AO FINANCEIRO' && (
+              confirmingDeleteId === activeDropdown.proposal.id ? (
+                <div className="px-2 py-1 mx-2 flex gap-1 bg-red-50 rounded-lg">
+                  <button
+                    onClick={() => {
+                      onDeleteProposal(activeDropdown.proposal.id);
+                      setConfirmingDeleteId(null);
+                      setActiveDropdown(null);
+                    }}
+                    className="flex-1 bg-red-600 text-white rounded text-[10px] font-bold py-1 cursor-pointer"
+                  >
+                    Deletar
+                  </button>
+                  <button
+                    onClick={() => setConfirmingDeleteId(null)}
+                    className="px-2 bg-slate-200 text-slate-600 rounded text-[10px] font-bold hover:bg-slate-300 cursor-pointer"
+                  >
+                    X
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmingDeleteId(activeDropdown.proposal.id);
+                  }}
+                  className="w-full text-left px-3.5 py-2 text-xs font-semibold text-red-600 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                  <span>Excluir</span>
+                </button>
+              )
+            )}
+          </div>
+        </>,
+        document.body
       )}
     </div>
   );
