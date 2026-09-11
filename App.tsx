@@ -946,11 +946,39 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               }
             }}
             onImportProposals={async (importedProposals) => {
-              const uniqueImported = importedProposals.filter(importada => 
+              // Sanitiza e mapeia apenas as colunas oficiais da tabela proposals no Supabase
+              const sanitizedProposals = importedProposals.map(raw => {
+                const { 
+                  _cpfValido, 
+                  _corretorValido, 
+                  _duplicado, 
+                  _bloqueios,
+                  _avisos,
+                  ...rest 
+                } = (raw || {}) as any;
+
+                return {
+                  contrato: String(rest.contrato || '').trim(),
+                  data: rest.data || new Date().toISOString().split('T')[0],
+                  cliente: String(rest.cliente || '').trim(),
+                  cpfCnpj: String(rest.cpfCnpj || '').trim(),
+                  corretor: String(rest.corretor || '').trim(),
+                  operadora: String(rest.operadora || '').trim(),
+                  categoria: rest.categoria || 'Geral',
+                  valor: Number(rest.valor) || 0,
+                  vidas: Number(rest.vidas) || 1,
+                  status: 'CADASTRADA',
+                  comissao: Number(rest.comissao) || 0,
+                  detalhes: rest.detalhes || null,
+                  observacoes: rest.observacoes || null
+                };
+              });
+
+              const uniqueImported = sanitizedProposals.filter(importada => 
                 !proposals.some(p => p.contrato.trim() === importada.contrato.trim())
               );
 
-              const duplicadasCount = importedProposals.length - uniqueImported.length;
+              const duplicadasCount = sanitizedProposals.length - uniqueImported.length;
 
               if (uniqueImported.length === 0) {
                 alert(duplicadasCount > 0 ? 'Todas as propostas do arquivo já estão cadastradas (contratos duplicados).' : 'Nenhuma proposta válida encontrada no arquivo.');
