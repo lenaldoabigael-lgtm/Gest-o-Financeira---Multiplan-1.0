@@ -16,6 +16,8 @@ import ProposalStructureView from './components/ProposalStructureView';
 import ComissoesModule from './components/ComissoesModule';
 import PlanQuoteView from './components/PlanQuoteView';
 import { PortalCorretor } from './components/PortalCorretor';
+import { RhModule } from './components/rh/RhModule';
+import { NotificacoesConfigModule } from './components/configuracoes/NotificacoesConfigModule';
 import { supabase } from './lib/supabase';
 
 const DEFAULT_USERS: User[] = [
@@ -32,7 +34,7 @@ const DEFAULT_USERS: User[] = [
       centroCusto: true, contasPagar: true, contasReceber: true,
       dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
       gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true,
-      criarPropostas: true, exportarDados: true, cotacao: true
+      criarPropostas: true, exportarDados: true, cotacao: true, rh: true, notificacoes: true
     }
   },
   {
@@ -92,7 +94,7 @@ const getDefaultPermissionsForRole = (role?: string): UserPermissions => {
       centroCusto: true, contasPagar: true, contasReceber: true,
       dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
       gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true,
-      cotacao: true, exportarDados: true, criarPropostas: true, gestaoUsuarios: true
+      cotacao: true, exportarDados: true, criarPropostas: true, gestaoUsuarios: true, rh: true, notificacoes: true
     };
   }
   if (role === 'cadastro_propostas') {
@@ -849,6 +851,16 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
           </div>
         )}
         {activeTab === Tab.DASHBOARD && <Dashboard proposals={proposals} />}
+        {activeTab === Tab.NOTIFICACOES && <NotificacoesConfigModule user={user!} />}
+        {activeTab === Tab.RH && (
+          <RhModule 
+            user={user!} 
+            onAddTransaction={async (t) => { 
+              await supabase.from('transactions').insert(t); 
+              fetchData(); 
+            }} 
+          />
+        )}
         {activeTab === Tab.CONTAS_PAGAR && (
           <TransactionTable 
             type="PAGAR" 

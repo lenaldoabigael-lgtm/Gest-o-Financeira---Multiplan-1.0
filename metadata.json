@@ -1,6 +1,6 @@
 {
   "name": "Multiplan - Gestão Financeira & Cotador de Planos",
-  "description": "Sistema completo de gestão comercial, motor de cotação de planos de saúde e odontológicos com importador automático de tabelas oficiais em PDF.",
+  "description": "Sistema completo de gestão comercial, motor de cotação de planos de saúde/odontológicos, módulo de Recursos Humanos (CLT, Estagiários, Folha de Pagamento progressiva com INSS/FGTS e Rescisões) e financeiro integrado.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

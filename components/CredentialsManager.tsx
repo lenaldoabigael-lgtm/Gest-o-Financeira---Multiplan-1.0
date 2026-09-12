@@ -22,7 +22,9 @@ const DEFAULT_PERMISSIONS: UserPermissions = {
   cotacao: true,
   exportarDados: true,
   criarPropostas: true,
-  gestaoUsuarios: true
+  gestaoUsuarios: true,
+  rh: true,
+  notificacoes: true
 };
 
 const CORRETOR_PERMISSIONS: UserPermissions = {
@@ -41,7 +43,9 @@ const CORRETOR_PERMISSIONS: UserPermissions = {
   cotacao: true,
   exportarDados: false,
   criarPropostas: true,
-  gestaoUsuarios: false
+  gestaoUsuarios: false,
+  rh: false,
+  notificacoes: false
 };
 
 const CARGO_OPTIONS = [
@@ -896,6 +900,26 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                         className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
                       />
                       <span>Relatórios</span>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={!!editingPermissions.rh}
+                        onChange={() => handleToggleEditingPermission('rh')}
+                        className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
+                      />
+                      <span className="font-bold text-[#001a54]">Módulo de Recursos Humanos (RH)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">
+                      <input
+                        type="checkbox"
+                        checked={editingPermissions.notificacoes !== false}
+                        onChange={() => handleToggleEditingPermission('notificacoes')}
+                        className="w-4 h-4 text-[#001a54] rounded focus:ring-[#001a54] border-gray-300"
+                      />
+                      <span>Configurações de Notificações (WhatsApp)</span>
                     </label>
 
                     <label className="flex items-center gap-2.5 text-xs font-semibold text-gray-700 cursor-pointer select-none hover:text-gray-900">

@@ -24,6 +24,15 @@ const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout
       permission: user.permissions.dashboard
     },
     {
+      id: 'rh',
+      label: 'RH',
+      icon: 'fa-people-group',
+      materialIcon: 'badge',
+      isSingle: true,
+      tabId: Tab.RH,
+      permission: user.permissions.rh !== false
+    },
+    {
       id: 'comercial',
       label: 'Comercial',
       icon: 'fa-briefcase',
@@ -57,6 +66,7 @@ const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout
         { id: Tab.CENTRO_CUSTO, label: 'Centro de Custo', icon: 'fa-sitemap', materialIcon: 'account_tree', permission: user.permissions.centroCusto },
         { id: Tab.DETALHES, label: 'Relatórios', icon: 'fa-file-lines', materialIcon: 'insert_chart', permission: user.permissions.detalhes },
         { id: Tab.PLAN_CREDENCIAS, label: 'Usuários', icon: 'fa-user-gear', materialIcon: 'manage_accounts', permission: user.permissions.planCredencias },
+        { id: Tab.NOTIFICACOES, label: 'Notificações', icon: 'fa-bell', materialIcon: 'notifications', permission: user.permissions.notificacoes !== false },
       ]
     }
   ];
