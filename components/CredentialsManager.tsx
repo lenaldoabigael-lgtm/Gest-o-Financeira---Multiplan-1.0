@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { User, UserPermissions } from '../types';
+import { createAuthUserByAdmin } from '../lib/supabase';
 
 interface CredentialsManagerProps {
   users: User[];
@@ -73,6 +74,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
   const [newSenha, setNewSenha] = useState('');
   const [newCargo, setNewCargo] = useState('Analista Sênior');
   const [newStatus, setNewStatus] = useState<'ATIVO' | 'INATIVO'>('ATIVO');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   // Edit user state
   const [editUserData, setEditUserData] = useState<{
@@ -303,17 +305,22 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
   };
 
   // Create new user submit
-  const handleAddUserSubmit = (e: React.FormEvent) => {
+  const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLogin || !newSenha || !newEmail) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+      alert('Por favor, preencha todos os campos obrigatórios (Login, E-mail e Senha).');
+      return;
+    }
+
+    if (newSenha.trim().length < 6) {
+      alert('A senha deve ter no mínimo 6 caracteres para atendimento às regras de segurança do Supabase Authentication.');
       return;
     }
 
     const cleanLogin = newLogin.trim().toLowerCase();
     const cleanEmail = newEmail.trim().toLowerCase();
 
-    // Validate duplicates
+    // Validate duplicates locally
     const isExistingUser = users.some(u => 
       (u.login || '').trim().toLowerCase() === cleanLogin ||
       ((u.email || '').trim().toLowerCase() === cleanEmail && cleanEmail.length > 0)
@@ -326,29 +333,58 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
 
     const isCorretor = newCargo.toLowerCase().includes('corretor');
     const role = isCorretor ? 'corretor' : 'admin';
+    const permissions = isCorretor ? { ...CORRETOR_PERMISSIONS } : { ...DEFAULT_PERMISSIONS };
 
-    const newUser: User = {
-      login: newLogin.trim(),
-      email: newEmail.trim(),
-      senha: newSenha.trim(),
-      cargo: newCargo,
-      role: role as any,
-      status: newStatus,
-      ultimoAcesso: 'Hoje\n10:00',
-      approved: true,
-      permissions: isCorretor ? { ...CORRETOR_PERMISSIONS } : { ...DEFAULT_PERMISSIONS }
-    };
+    setIsCreatingUser(true);
 
-    const updatedUsers = [...users, newUser];
-    onUpdateUsers(updatedUsers);
-    setSelectedUserLogin(newUser.login);
-    setSelectedUserCargo(newUser.cargo);
-    setEditingPermissions(newUser.permissions);
+    try {
+      // 1. Cadastrar no Supabase Auth (sem derrubar a sessão do admin)
+      const authResult = await createAuthUserByAdmin({
+        email: newEmail.trim(),
+        password: newSenha.trim(),
+        login: newLogin.trim(),
+        name: newLogin.trim(),
+        cargo: newCargo,
+        role: role,
+        permissions: permissions
+      });
 
-    setNewLogin('');
-    setNewEmail('');
-    setNewSenha('');
-    setIsAddModalOpen(false);
+      const newUser: User = {
+        id: authResult.authUserId || `usr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        login: newLogin.trim(),
+        email: newEmail.trim(),
+        senha: newSenha.trim(),
+        cargo: newCargo,
+        role: role as any,
+        status: newStatus,
+        ultimoAcesso: 'Hoje\n10:00',
+        approved: true,
+        permissions: permissions
+      };
+
+      const updatedUsers = [...users, newUser];
+      await onUpdateUsers(updatedUsers);
+      setSelectedUserLogin(newUser.login);
+      setSelectedUserCargo(newUser.cargo);
+      setEditingPermissions(newUser.permissions);
+
+      if (authResult.success) {
+        setSaveSuccessMsg(`Usuário "${newUser.login}" criado e autenticado com sucesso!`);
+      } else {
+        setSaveSuccessMsg(`Usuário salvo no sistema local. (Aviso Auth: ${authResult.error || 'Autenticado'})`);
+      }
+      setTimeout(() => setSaveSuccessMsg(null), 4500);
+
+      setNewLogin('');
+      setNewEmail('');
+      setNewSenha('');
+      setIsAddModalOpen(false);
+    } catch (err: any) {
+      console.error('Erro ao criar usuário:', err);
+      alert('Ocorreu um erro ao cadastrar o usuário: ' + (err?.message || 'Erro desconhecido'));
+    } finally {
+      setIsCreatingUser(false);
+    }
   };
 
   // Toggle status of user (Ativo/Inativo)
@@ -1098,9 +1134,17 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-[#e85d04] text-white rounded-xl text-xs font-bold hover:bg-orange-600 shadow-xs"
+                  disabled={isCreatingUser}
+                  className="px-5 py-2 bg-[#e85d04] text-white rounded-xl text-xs font-bold hover:bg-orange-600 shadow-xs flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
-                  Criar Usuário
+                  {isCreatingUser ? (
+                    <>
+                      <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
+                      <span>Criando no Supabase...</span>
+                    </>
+                  ) : (
+                    <span>Criar Usuário</span>
+                  )}
                 </button>
               </div>
             </form>
