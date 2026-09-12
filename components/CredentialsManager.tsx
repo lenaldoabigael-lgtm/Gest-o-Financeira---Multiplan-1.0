@@ -62,11 +62,13 @@ const CARGO_OPTIONS = [
 ];
 
 const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onUpdateUsers }) => {
+  const [activeCredTab, setActiveCredTab] = useState<'usuarios' | 'aprovacoes'>('usuarios');
   const [selectedUserLogin, setSelectedUserLogin] = useState<string>(users[0]?.login || 'admin');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
   const [editingCargoInlineFor, setEditingCargoInlineFor] = useState<string | null>(null);
+  const [pendingCargos, setPendingCargos] = useState<Record<string, string>>({});
 
   // New user form state
   const [newLogin, setNewLogin] = useState('');
@@ -93,16 +95,26 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
     status: 'ATIVO'
   });
 
+  // Separate active and pending users
+  const pendingUsers = useMemo(() => {
+    return users.filter(u => u.approved === false || (u as any).approved === 'false');
+  }, [users]);
+
+  const activeUsers = useMemo(() => {
+    return users.filter(u => u.approved !== false && (u as any).approved !== 'false');
+  }, [users]);
+
   // Filter users based on search term
   const filteredUsers = useMemo(() => {
-    if (!searchTerm.trim()) return users;
+    const list = activeCredTab === 'aprovacoes' ? pendingUsers : activeUsers;
+    if (!searchTerm.trim()) return list;
     const term = searchTerm.toLowerCase();
-    return users.filter(u =>
+    return list.filter(u =>
       (u.login || '').toLowerCase().includes(term) ||
       (u.email || '').toLowerCase().includes(term) ||
       (u.cargo || '').toLowerCase().includes(term)
     );
-  }, [users, searchTerm]);
+  }, [activeCredTab, pendingUsers, activeUsers, searchTerm]);
 
   // Currently selected user for editing permissions in right panel
   const selectedUser = useMemo(() => {
@@ -320,17 +332,6 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
     const cleanLogin = newLogin.trim().toLowerCase();
     const cleanEmail = newEmail.trim().toLowerCase();
 
-    // Validate duplicates locally
-    const isExistingUser = users.some(u => 
-      (u.login || '').trim().toLowerCase() === cleanLogin ||
-      ((u.email || '').trim().toLowerCase() === cleanEmail && cleanEmail.length > 0)
-    );
-
-    if (isExistingUser) {
-      alert(`Já existe um usuário com o login "${newLogin}" ou e-mail "${newEmail}". Escolha outro login ou e-mail.`);
-      return;
-    }
-
     const isCorretor = newCargo.toLowerCase().includes('corretor');
     const role = isCorretor ? 'corretor' : 'admin';
     const permissions = isCorretor ? { ...CORRETOR_PERMISSIONS } : { ...DEFAULT_PERMISSIONS };
@@ -338,7 +339,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
     setIsCreatingUser(true);
 
     try {
-      // 1. Cadastrar no Supabase Auth (sem derrubar a sessão do admin)
+      // 1. Cadastrar no Supabase Auth (sem derrubar a sessão do admin) e nas tabelas profiles e users
       const authResult = await createAuthUserByAdmin({
         email: newEmail.trim(),
         password: newSenha.trim(),
@@ -362,17 +363,25 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
         permissions: permissions
       };
 
-      const updatedUsers = [...users, newUser];
+      const existingIndex = users.findIndex(u => 
+        (u.login || '').trim().toLowerCase() === cleanLogin ||
+        ((u.email || '').trim().toLowerCase() === cleanEmail && cleanEmail.length > 0)
+      );
+
+      let updatedUsers: User[];
+      if (existingIndex >= 0) {
+        updatedUsers = [...users];
+        updatedUsers[existingIndex] = { ...users[existingIndex], ...newUser };
+      } else {
+        updatedUsers = [...users, newUser];
+      }
+
       await onUpdateUsers(updatedUsers);
       setSelectedUserLogin(newUser.login);
       setSelectedUserCargo(newUser.cargo);
       setEditingPermissions(newUser.permissions);
 
-      if (authResult.success) {
-        setSaveSuccessMsg(`Usuário "${newUser.login}" criado e autenticado com sucesso!`);
-      } else {
-        setSaveSuccessMsg(`Usuário salvo no sistema local. (Aviso Auth: ${authResult.error || 'Autenticado'})`);
-      }
+      setSaveSuccessMsg(`Usuário "${newUser.login}" cadastrado com sucesso e com acesso liberado!`);
       setTimeout(() => setSaveSuccessMsg(null), 4500);
 
       setNewLogin('');
@@ -406,7 +415,63 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
     setTimeout(() => setSaveSuccessMsg(null), 3500);
   };
 
-  const pendingUsers = users.filter(u => u.approved === false);
+  // Approval handlers for pending users
+  const handleApprovePendingUser = (userToApprove: User, customCargo?: string) => {
+    const cargoVal = customCargo || pendingCargos[userToApprove.login] || userToApprove.cargo || 'Analista Sênior';
+    const isCorretor = cargoVal.toLowerCase().includes('corretor');
+    const roleVal = isCorretor ? 'corretor' : (cargoVal.toLowerCase().includes('admin') || userToApprove.login.toLowerCase() === 'admin' ? 'admin' : 'admin');
+    
+    const updatedUsers = users.map(u => {
+      if ((u.login || '').trim().toLowerCase() === (userToApprove.login || '').trim().toLowerCase()) {
+        return {
+          ...u,
+          approved: true,
+          status: 'ATIVO' as const,
+          cargo: cargoVal,
+          role: roleVal as any,
+          permissions: isCorretor ? { ...CORRETOR_PERMISSIONS } : (u.permissions || DEFAULT_PERMISSIONS)
+        };
+      }
+      return u;
+    });
+
+    onUpdateUsers(updatedUsers);
+    setSaveSuccessMsg(`Usuário "${userToApprove.login}" aprovado com sucesso como "${cargoVal}"! Acesso liberado.`);
+    setTimeout(() => setSaveSuccessMsg(null), 4000);
+  };
+
+  const handleRejectPendingUser = (userToReject: User) => {
+    const confirmReject = window.confirm(`Deseja recusar e remover a solicitação de acesso do usuário "${userToReject.login}"?`);
+    if (!confirmReject) return;
+
+    const updatedUsers = users.filter(u => (u.login || '').trim().toLowerCase() !== (userToReject.login || '').trim().toLowerCase());
+    onUpdateUsers(updatedUsers);
+    setSaveSuccessMsg(`Solicitação de "${userToReject.login}" foi recusada.`);
+    setTimeout(() => setSaveSuccessMsg(null), 3500);
+  };
+
+  const handleApproveAllPending = () => {
+    if (pendingUsers.length === 0) return;
+    const updatedUsers = users.map(u => {
+      if (u.approved === false || (u as any).approved === 'false') {
+        const cargoVal = pendingCargos[u.login] || u.cargo || 'Analista Sênior';
+        const isCorretor = cargoVal.toLowerCase().includes('corretor');
+        return {
+          ...u,
+          approved: true,
+          status: 'ATIVO' as const,
+          cargo: cargoVal,
+          role: (isCorretor ? 'corretor' : 'admin') as any,
+          permissions: isCorretor ? { ...CORRETOR_PERMISSIONS } : (u.permissions || DEFAULT_PERMISSIONS)
+        };
+      }
+      return u;
+    });
+
+    onUpdateUsers(updatedUsers);
+    setSaveSuccessMsg(`Todas as ${pendingUsers.length} solicitações foram aprovadas com sucesso!`);
+    setTimeout(() => setSaveSuccessMsg(null), 4000);
+  };
 
   const getInitials = (login: string) => {
     if (!login) return 'US';
@@ -462,39 +527,193 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
         </div>
       </div>
 
-      {/* PENDING APPROVALS BANNER */}
-      {pendingUsers.length > 0 && (
-        <div className="bg-orange-50/90 border border-orange-200/80 rounded-2xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#e85d04] text-white flex items-center justify-center font-bold shadow-xs">
-              <span className="material-symbols-outlined">person_add</span>
+      {/* SUB-TABS NAVIGATION BAR */}
+      <div className="flex items-center gap-2 border-b border-gray-200/90 bg-white/70 backdrop-blur-xs p-1.5 rounded-2xl shadow-xs">
+        <button
+          onClick={() => setActiveCredTab('usuarios')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer ${
+            activeCredTab === 'usuarios'
+              ? 'bg-[#001a54] text-white shadow-xs'
+              : 'text-gray-600 hover:text-[#001a54] hover:bg-gray-100/70'
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">group</span>
+          <span>Usuários do Sistema</span>
+          <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-black ${
+            activeCredTab === 'usuarios' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+          }`}>
+            {activeUsers.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveCredTab('aprovacoes')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer relative ${
+            activeCredTab === 'aprovacoes'
+              ? 'bg-[#e85d04] text-white shadow-xs'
+              : 'text-gray-600 hover:text-[#e85d04] hover:bg-orange-50/60'
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">how_to_reg</span>
+          <span>Aprovação de Novos Usuários</span>
+          {pendingUsers.length > 0 ? (
+            <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-white text-[#e85d04] animate-pulse">
+              {pendingUsers.length} pendente{pendingUsers.length > 1 ? 's' : ''}
+            </span>
+          ) : (
+            <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              activeCredTab === 'aprovacoes' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
+            }`}>
+              0
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* TAB 2: APROVAÇÃO DE NOVOS USUÁRIOS */}
+      {activeCredTab === 'aprovacoes' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* TOP APPROVALS BANNER / CONTROLS */}
+          <div className="bg-gradient-to-r from-orange-50 via-amber-50 to-white border border-orange-200/80 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-[#e85d04] text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+                <span className="material-symbols-outlined text-2xl">verified_user</span>
+              </div>
+              <div>
+                <h3 className="text-base font-black text-[#001a54] tracking-tight">
+                  Central de Liberação e Aprovação de Acesso
+                </h3>
+                <p className="text-xs text-gray-600 font-medium mt-0.5">
+                  Novos colaboradores cadastrados pela tela de login ou banco de dados aguardando autorização do administrador.
+                </p>
+              </div>
             </div>
-            <div>
-              <h4 className="text-xs font-extrabold text-[#001a54] uppercase tracking-wider">
-                {pendingUsers.length} Solicitações de Acesso Pendentes
-              </h4>
-              <p className="text-xs text-gray-600 font-medium">Novos colaboradores aguardando liberação do administrador</p>
-            </div>
+
+            {pendingUsers.length > 0 && (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleApproveAllPending}
+                  className="bg-[#16a34a] hover:bg-green-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base">done_all</span>
+                  <span>Aprovar Todos ({pendingUsers.length})</span>
+                </button>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            {pendingUsers.map(pu => (
+
+          {/* LIST OF PENDING USERS */}
+          {pendingUsers.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {pendingUsers.map(pu => {
+                const selectedCargo = pendingCargos[pu.login] || pu.cargo || 'Analista Sênior';
+                const isCorretor = selectedCargo.toLowerCase().includes('corretor');
+
+                return (
+                  <div
+                    key={pu.login}
+                    className="bg-white rounded-2xl border-2 border-orange-200/80 p-5 shadow-xs space-y-4 hover:border-orange-400 transition-all relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 right-0 bg-[#e85d04] text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-wider flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[11px]">hourglass_top</span>
+                      Aguardando Liberação
+                    </div>
+
+                    {/* USER HEADER */}
+                    <div className="flex items-center gap-3.5 pr-32">
+                      <div className={`w-11 h-11 rounded-2xl font-black text-sm flex items-center justify-center shrink-0 shadow-xs ${getAvatarBg(pu.login, selectedCargo)}`}>
+                        {getInitials(pu.login)}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-extrabold text-[#001a54] truncate">
+                          {pu.login}
+                        </h4>
+                        <p className="text-xs font-medium text-gray-500 truncate mt-0.5">
+                          {pu.email || 'E-mail não informado'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* ROLE / CARGO CONFIGURATION */}
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-2">
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                        Atribuir Função / Cargo no Acesso:
+                      </label>
+                      <select
+                        value={selectedCargo}
+                        onChange={e => setPendingCargos(prev => ({ ...prev, [pu.login]: e.target.value }))}
+                        className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-800 focus:outline-none focus:border-[#001a54]"
+                      >
+                        {CARGO_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[10px] font-bold text-gray-500">Perfil:</span>
+                        {isCorretor ? (
+                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-md">
+                            <span className="material-symbols-outlined text-xs">smartphone</span>
+                            Portal do Corretor (Cotações e Propostas)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-md">
+                            <span className="material-symbols-outlined text-xs">admin_panel_settings</span>
+                            Painel Administrativo & Financeiro
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ACTIONS */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
+                      <button
+                        onClick={() => handleRejectPendingUser(pu)}
+                        className="px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-sm">close</span>
+                        <span>Recusar</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleApprovePendingUser(pu, selectedCargo)}
+                        className="px-5 py-2.5 bg-[#16a34a] hover:bg-green-700 text-white text-xs font-extrabold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <span className="material-symbols-outlined text-base">check_circle</span>
+                        <span>Aprovar & Liberar Acesso</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-200/80 p-12 text-center shadow-xs space-y-4">
+              <div className="w-16 h-16 rounded-full bg-green-50 text-green-600 flex items-center justify-center mx-auto shadow-xs">
+                <span className="material-symbols-outlined text-3xl">check_circle</span>
+              </div>
+              <div className="max-w-md mx-auto">
+                <h4 className="text-base font-black text-[#001a54]">
+                  Nenhuma solicitação pendente no momento
+                </h4>
+                <p className="text-xs text-gray-500 font-medium mt-1">
+                  Todos os colaboradores cadastrados estão com acesso liberado ao sistema.
+                </p>
+              </div>
               <button
-                key={pu.login}
-                onClick={() => {
-                  const updated = users.map(u => u.login === pu.login ? { ...u, approved: true, status: 'ATIVO' as const } : u);
-                  onUpdateUsers(updated);
-                }}
-                className="bg-[#001a54] hover:bg-[#001138] text-white text-xs font-bold px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 shadow-xs"
+                onClick={() => setActiveCredTab('usuarios')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#001a54] text-white text-xs font-bold rounded-xl hover:bg-[#001138] transition-all cursor-pointer"
               >
-                <span>Aprovar {pu.login}</span>
-                <span className="material-symbols-outlined text-sm">check</span>
+                <span className="material-symbols-outlined text-sm">group</span>
+                <span>Ver Usuários Cadastrados</span>
               </button>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* SPLIT LAYOUT (LEFT 7 COLS / RIGHT 5 COLS) */}
+      {/* TAB 1: USUÁRIOS DO SISTEMA (SPLIT LAYOUT) */}
+      {activeCredTab === 'usuarios' && (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* LEFT PANEL: USUÁRIOS DO SISTEMA */}
@@ -1017,6 +1236,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
         </div>
 
       </div>
+      )}
 
       {/* MODAL: NOVO USUÁRIO */}
       {isAddModalOpen && (

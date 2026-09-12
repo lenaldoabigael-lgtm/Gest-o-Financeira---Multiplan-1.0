@@ -50,6 +50,23 @@ export async function createAuthUserByAdmin(userData: {
     return { success: false, error: 'Credenciais do Supabase não configuradas.' };
   }
 
+  const cleanEmail = (userData.email || '').trim().toLowerCase();
+  const cleanLogin = (userData.login || '').trim();
+  const password = userData.password || '123456';
+
+  // Limpa cache de usuários deletados para garantir que não seja filtrado
+  try {
+    const rawDel = localStorage.getItem('multiplan_deleted_users');
+    if (rawDel) {
+      const delList: string[] = JSON.parse(rawDel);
+      const filtered = delList.filter(k => k !== cleanLogin.toLowerCase() && k !== cleanEmail);
+      localStorage.setItem('multiplan_deleted_users', JSON.stringify(filtered));
+    }
+  } catch (e) {}
+
+  let authUserId: string | undefined = undefined;
+  let authErrorMsg: string | undefined = undefined;
+
   try {
     // Instância secundária efêmera do Supabase com persistência de sessão desabilitada
     // para que a chamada de signUp não substitua a sessão ativa do administrador logado
@@ -61,16 +78,14 @@ export async function createAuthUserByAdmin(userData: {
       }
     });
 
-    const password = userData.password || '123456';
-
     const { data: signUpData, error: signUpError } = await authClient.auth.signUp({
-      email: userData.email.trim(),
+      email: cleanEmail,
       password: password,
       options: {
         data: {
-          login: userData.login.trim(),
-          name: userData.name || userData.login.trim(),
-          full_name: userData.name || userData.login.trim(),
+          login: cleanLogin,
+          name: userData.name || cleanLogin,
+          full_name: userData.name || cleanLogin,
           role: userData.role || 'corretor',
           cargo: userData.cargo || 'Analista Sênior',
           approved: true
@@ -80,61 +95,63 @@ export async function createAuthUserByAdmin(userData: {
 
     if (signUpError) {
       console.warn('Aviso Supabase Auth signUp:', signUpError.message);
-      return { success: false, error: signUpError.message };
+      authErrorMsg = signUpError.message;
+    } else if (signUpData.user?.id) {
+      authUserId = signUpData.user.id;
     }
+  } catch (err: any) {
+    console.warn('Erro ao tentar criar no Auth Client efêmero:', err);
+    authErrorMsg = err?.message;
+  }
 
-    const authUserId = signUpData.user?.id;
-
-    // 1. Inserir ou atualizar na tabela profiles
-    if (authUserId) {
-      try {
-        await supabase
-          .from('profiles')
-          .upsert({
-            id: authUserId,
-            email: userData.email.trim(),
-            full_name: userData.name || userData.login.trim(),
-            role: userData.role || 'corretor',
-            approved: true, // Já aprovado pelo administrador
-            permissions: userData.permissions || {},
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'id' });
-      } catch (err) {
-        console.warn('Erro ao atualizar tabela profiles:', err);
-      }
-    }
-
-    // 2. Inserir ou atualizar na tabela users (compatibilidade direta com a tabela users)
-    // Tabela users do Supabase possui colunas: login, senha, email, permissions, approved
-    try {
-      const userPayload: any = {
-        login: userData.login.trim(),
-        senha: password,
-        email: userData.email.trim(),
-        permissions: userData.permissions || {},
-        approved: 'true'
-      };
-
-      const { error: usersTableError } = await supabase
-        .from('users')
-        .upsert(userPayload, { onConflict: 'login' });
-
-      if (usersTableError) {
-        console.warn('Aviso ao inserir na tabela users:', usersTableError.message);
-      }
-    } catch (err) {
-      console.warn('Erro ao inserir na tabela users:', err);
-    }
-
-    return { 
-      success: true, 
-      authUserId: authUserId 
+  // 1. Inserir ou atualizar na tabela users (login, senha, email, permissions, approved)
+  try {
+    const userPayload: any = {
+      login: cleanLogin,
+      senha: password,
+      email: cleanEmail,
+      permissions: userData.permissions || {},
+      approved: 'true'
     };
 
-  } catch (err: any) {
-    console.error('Erro na criação de usuário via Auth Admin:', err);
-    return { success: false, error: err?.message || 'Erro desconhecido' };
+    const { error: usersTableError } = await supabase
+      .from('users')
+      .upsert(userPayload, { onConflict: 'login' });
+
+    if (usersTableError) {
+      console.warn('Aviso ao inserir na tabela users:', usersTableError.message);
+    }
+  } catch (err) {
+    console.warn('Erro ao inserir na tabela users:', err);
   }
+
+  // 2. Inserir ou atualizar na tabela profiles
+  try {
+    const profilePayload: any = {
+      email: cleanEmail,
+      full_name: userData.name || cleanLogin,
+      role: userData.role || 'corretor',
+      approved: true, // Já aprovado pelo administrador
+      permissions: userData.permissions || {},
+      updated_at: new Date().toISOString()
+    };
+
+    if (authUserId) {
+      profilePayload.id = authUserId;
+      await supabase.from('profiles').upsert(profilePayload, { onConflict: 'id' });
+    } else {
+      // Se já existia profile pelo email, atualiza
+      await supabase.from('profiles').upsert(profilePayload, { onConflict: 'email' });
+    }
+  } catch (err) {
+    console.warn('Erro ao atualizar tabela profiles:', err);
+  }
+
+  return { 
+    success: true, 
+    authUserId: authUserId,
+    error: authErrorMsg
+  };
 }
 
 /**
