@@ -85,7 +85,7 @@ export async function createAuthUserByAdmin(userData: {
 
     const authUserId = signUpData.user?.id;
 
-    // Se criado no Auth, vinculamos o perfil aprovado imediatamente na tabela profiles
+    // 1. Inserir ou atualizar na tabela profiles
     if (authUserId) {
       try {
         await supabase
@@ -96,12 +96,34 @@ export async function createAuthUserByAdmin(userData: {
             full_name: userData.name || userData.login.trim(),
             role: userData.role || 'corretor',
             approved: true, // Já aprovado pelo administrador
-            permissions: userData.permissions,
+            permissions: userData.permissions || {},
             updated_at: new Date().toISOString()
           }, { onConflict: 'id' });
       } catch (err) {
         console.warn('Erro ao atualizar tabela profiles:', err);
       }
+    }
+
+    // 2. Inserir ou atualizar na tabela users (compatibilidade direta com a tabela users)
+    // Tabela users do Supabase possui colunas: login, senha, email, permissions, approved
+    try {
+      const userPayload: any = {
+        login: userData.login.trim(),
+        senha: password,
+        email: userData.email.trim(),
+        permissions: userData.permissions || {},
+        approved: 'true'
+      };
+
+      const { error: usersTableError } = await supabase
+        .from('users')
+        .upsert(userPayload, { onConflict: 'login' });
+
+      if (usersTableError) {
+        console.warn('Aviso ao inserir na tabela users:', usersTableError.message);
+      }
+    } catch (err) {
+      console.warn('Erro ao inserir na tabela users:', err);
     }
 
     return { 

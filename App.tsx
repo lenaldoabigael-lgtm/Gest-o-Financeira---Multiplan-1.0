@@ -304,16 +304,14 @@ const App: React.FC = () => {
     setIsLoading(true);
     setErrorType(null);
     try {
-      const [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes, profilesRes, cotacoesRes] = await Promise.all([
+      const [transactionsRes, costCentersRes, proposalsRes, requirementsRes, lotsRes, profilesRes, usersTableRes, cotacoesRes] = await Promise.all([
         supabase.from('transactions').select('*').order('vencimento', { ascending: false }),
         supabase.from('cost_centers').select('*').order('nome'),
         supabase.from('proposals').select('*').order('data', { ascending: false }),
         supabase.from('proposal_requirements').select('*').order('nome'),
         supabase.from('payment_lots').select('*').order('dataAprovacao', { ascending: false }),
-        // Lista de contas agora vem de profiles (ligada ao Supabase Auth), não mais
-        // da tabela users antiga. Gestão de Credenciais ainda vai precisar de um
-        // ajuste próprio pra editar cargo/status a partir daqui — ver observação.
         supabase.from('profiles').select('*'),
+        supabase.from('users').select('*').then(r => r, () => ({ data: null, error: null })),
         supabase.from('cotacoes').select('*').order('created_at', { ascending: false }).then(r => r, () => ({ data: null, error: null }))
       ]);
 
@@ -343,19 +341,60 @@ const App: React.FC = () => {
         }
       }
 
+      // Combina dados de profiles e da tabela users
+      const mapUsers: Record<string, User> = {};
+
       if (profilesRes.data) {
-        const usersFromProfiles: User[] = profilesRes.data.map((p: any) => ({
-          id: p.id,
-          login: p.login || p.email,
-          email: p.email,
-          role: p.role,
-          status: 'ATIVO',
-          approved: p.approved !== false,
-          permissions: p.permissions || getDefaultPermissionsForRole(p.role),
-        }));
-        setAppUsers(mergeWithDefaultUsers(usersFromProfiles));
-      } else {
-        setAppUsers(mergeWithDefaultUsers([]));
+        for (const p of profilesRes.data) {
+          const key = (p.email || p.login || p.id).toLowerCase();
+          mapUsers[key] = {
+            id: p.id,
+            login: p.login || p.email?.split('@')[0] || p.email,
+            email: p.email,
+            role: p.role || 'corretor',
+            cargo: p.cargo || (p.role === 'admin' ? 'Gerente Financeiro' : 'Analista Sênior'),
+            status: 'ATIVO',
+            approved: p.approved !== false,
+            permissions: p.permissions || getDefaultPermissionsForRole(p.role),
+          };
+        }
+      }
+
+      if (usersTableRes.data) {
+        for (const u of usersTableRes.data) {
+          const key = (u.email || u.login).toLowerCase();
+          const existing = mapUsers[key];
+          mapUsers[key] = {
+            id: existing?.id || `usr_${u.login}`,
+            login: u.login,
+            email: u.email || existing?.email || '',
+            senha: u.senha || existing?.senha,
+            role: existing?.role || (u.permissions?.criarPropostas && !u.permissions?.financeiro ? 'corretor' : 'admin'),
+            cargo: existing?.cargo || 'Analista Sênior',
+            status: u.approved === 'false' || u.approved === false ? 'INATIVO' : 'ATIVO',
+            approved: u.approved !== 'false' && u.approved !== false,
+            permissions: u.permissions || existing?.permissions || getDefaultPermissionsForRole(existing?.role || 'admin'),
+          };
+        }
+      }
+
+      const mergedUsers = mergeWithDefaultUsers(Object.values(mapUsers));
+      setAppUsers(mergedUsers);
+
+      // Auto-sincronização de segurança: garante que qualquer usuário em profiles também esteja inserido na tabela users
+      if (profilesRes.data && profilesRes.data.length > 0) {
+        for (const p of profilesRes.data) {
+          try {
+            const loginVal = p.login || p.email?.split('@')[0] || p.email;
+            await supabase.from('users').upsert({
+              login: loginVal,
+              senha: '      ', // valor padrão ou preservado
+              email: p.email || '',
+              approved: p.approved !== false ? 'true' : 'false',
+              permissions: p.permissions || getDefaultPermissionsForRole(p.role)
+            }, { onConflict: 'login' });
+          } catch (err) {}
+        }
       }
 
       if (transactionsRes.data) setTransactions(transactionsRes.data);
@@ -1327,33 +1366,33 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               }
               for (const u of nu) { 
                 try {
+                  // Tabela users possui estritamente as colunas: login, senha, email, permissions, approved
                   await supabase.from('users').upsert({
                     login: u.login,
-                    senha: u.senha,
-                    email: u.email,
-                    cargo: u.cargo,
-                    role: u.role,
-                    status: u.status,
-                    approved: u.approved !== false,
-                    permissions: u.permissions
-                  });
+                    senha: u.senha || '123456',
+                    email: u.email || '',
+                    approved: u.approved !== false ? 'true' : 'false',
+                    permissions: u.permissions || {}
+                  }, { onConflict: 'login' });
 
                   if (u.id || u.email) {
                     const profilePayload: any = {
-                      login: u.login,
-                      role: u.role,
+                      full_name: u.name || u.login,
+                      role: u.role || 'corretor',
                       approved: u.approved !== false,
-                      permissions: u.permissions,
+                      permissions: u.permissions || {},
+                      updated_at: new Date().toISOString()
                     };
                     if (u.email) profilePayload.email = u.email;
+                    
                     if (u.id) {
-                      await supabase.from('profiles').update(profilePayload).eq('id', u.id);
+                      await supabase.from('profiles').upsert({ id: u.id, ...profilePayload }, { onConflict: 'id' });
                     } else if (u.email) {
                       await supabase.from('profiles').update(profilePayload).eq('email', u.email);
                     }
                   }
                 } catch (e) {
-                  console.warn('Error upserting user:', e);
+                  console.warn('Error upserting user to DB:', e);
                 }
               } 
             }} 
