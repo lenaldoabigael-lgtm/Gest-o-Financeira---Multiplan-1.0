@@ -4,14 +4,12 @@ import { MultiplanLogo } from './MultiplanLogo';
 
 interface LoginProps {
   onLogin: (emailOrLogin: string, pass: string) => Promise<boolean>;
-  onRegister: (login: string, email: string, pass: string) => Promise<boolean>;
+  onRegister?: (login: string, email: string, pass: string) => Promise<boolean>;
   error?: string | null;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
-  const [isRegistering, setIsRegistering] = useState(false);
+const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
   const [identifier, setIdentifier] = useState('');
-  const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -22,17 +20,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
     setLocalError(null);
     setLoading(true);
     try {
-      if (isRegistering) {
-        const success = await onRegister(identifier.trim(), email.trim(), senha.trim());
-        if (success) {
-          setIsRegistering(false);
-          setSenha('');
-        }
-      } else {
-        const success = await onLogin(identifier.trim(), senha.trim());
-        if (!success) {
-          setLocalError('E-mail/usuário ou senha incorretos, ou conta pendente de aprovação.');
-        }
+      const success = await onLogin(identifier.trim(), senha.trim());
+      if (!success) {
+        setLocalError('E-mail/usuário ou senha incorretos, ou conta desativada.');
       }
     } catch (err: any) {
       setLocalError(err?.message || 'Ocorreu um erro ao autenticar.');
@@ -51,15 +41,15 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
         
         <div className="mb-6 text-center">
           <h2 className="text-2xl font-black text-[#001a54] mb-1">
-            {isRegistering ? 'Solicitar Acesso' : 'Bem Vindo'}
+            Acesso ao Sistema
           </h2>
           <p className="text-xs font-medium text-slate-400">
-            {isRegistering ? 'Preencha os dados para solicitar seu acesso ao sistema.' : 'Entre com suas credenciais abaixo.'}
+            Entre com suas credenciais corporativas abaixo.
           </p>
         </div>
 
         {(localError || error) && (
-          <div className="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold text-center leading-relaxed">
+          <div className="mb-5 p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold text-center leading-relaxed animate-in fade-in">
             {localError || error}
           </div>
         )}
@@ -67,7 +57,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5 group">
             <label className="text-[11px] font-black text-slate-500 uppercase tracking-wider" htmlFor="identifier">
-              {isRegistering ? 'Nome de Usuário / Login' : 'E-mail ou Usuário'}
+              E-mail ou Usuário
             </label>
             <input
               id="identifier"
@@ -76,28 +66,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               className="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 outline-none focus:border-[#001a54] focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-normal"
-              placeholder={isRegistering ? "Ex: seu.nome" : "admin ou seu@email.com"}
+              placeholder="admin ou seu@multiplan.com"
               required
             />
           </div>
-
-          {isRegistering && (
-            <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
-              <label className="text-[11px] font-black text-slate-500 uppercase tracking-wider" htmlFor="email">
-                E-mail Corporativo
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-800 outline-none focus:border-[#001a54] focus:bg-white transition-all placeholder:text-slate-400 placeholder:font-normal"
-                placeholder="email@multiplan.com"
-                required
-              />
-            </div>
-          )}
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -143,29 +115,22 @@ const Login: React.FC<LoginProps> = ({ onLogin, onRegister, error }) => {
             {loading ? (
               <>
                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                <span>Conectando...</span>
+                <span>Autenticando...</span>
               </>
             ) : (
-              <span>{isRegistering ? 'Enviar Solicitação' : 'Entrar no Sistema'}</span>
+              <span>Entrar no Sistema</span>
             )}
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 text-center flex flex-col items-center gap-3">
-          <button 
-            type="button"
-            onClick={() => {
-              setIsRegistering(!isRegistering);
-              setLocalError(null);
-            }}
-            className="text-[11px] font-black text-[#001a54] hover:text-[#002b66] transition-colors uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            {isRegistering ? (
-               <>JÁ TEM CONTA? <span className="text-orange-600 underline">ENTRAR AGORA</span></>
-            ) : (
-               <>NÃO TEM ACESSO? <span className="text-orange-600 underline">SOLICITAR CADASTRO</span></>
-            )}
-          </button>
+        <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+          <div className="flex items-center justify-center gap-2 text-slate-400 mb-1">
+            <span className="material-symbols-outlined text-base text-slate-400">lock</span>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Acesso Corporativo Seguro</span>
+          </div>
+          <p className="text-[11px] text-slate-400 font-medium leading-relaxed mt-1">
+            Novos acessos são criados internamente pela equipe e liberados pelo Administrador.
+          </p>
         </div>
       </div>
     </div>

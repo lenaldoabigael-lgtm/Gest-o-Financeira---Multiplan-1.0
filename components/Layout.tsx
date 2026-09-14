@@ -9,10 +9,11 @@ interface LayoutProps {
   setActiveTab: (tab: Tab) => void;
   onLogout: () => void;
   onOpenCorretorPortal?: () => void;
+  onOpenSolicitarAcesso?: () => void;
   children: React.ReactNode;
 }
 
-const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout, onOpenCorretorPortal, children }) => {
+const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout, onOpenCorretorPortal, onOpenSolicitarAcesso, children }) => {
   const menuGroups = [
     {
       id: 'dashboard',
@@ -156,6 +157,17 @@ const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout
           </div>
 
           <div className="flex items-center gap-3">
+            {onOpenSolicitarAcesso && (
+              <button
+                onClick={onOpenSolicitarAcesso}
+                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
+                title="Solicitar cadastro de novo usuário / colaborador"
+              >
+                <span className="material-symbols-outlined text-[17px] text-amber-700">person_add</span>
+                <span>Solicitar Usuário</span>
+              </button>
+            )}
+
             {onOpenCorretorPortal && (
               <button
                 onClick={onOpenCorretorPortal}

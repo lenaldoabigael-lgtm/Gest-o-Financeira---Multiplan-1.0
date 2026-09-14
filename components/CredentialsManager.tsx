@@ -1,9 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { User, UserPermissions } from '../types';
-import { createAuthUserByAdmin } from '../lib/supabase';
+import { User, UserPermissions, UserAccessRequest } from '../types';
+import { createAuthUserByAdmin, getUserAccessRequests, updateUserAccessRequest } from '../lib/supabase';
+import { ModalSolicitarAcesso } from './ModalSolicitarAcesso';
 
 interface CredentialsManagerProps {
   users: User[];
+  currentUser?: User;
   onUpdateUsers: (users: User[]) => void;
 }
 
@@ -61,14 +63,45 @@ const CARGO_OPTIONS = [
   'Administrador'
 ];
 
-const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onUpdateUsers }) => {
+const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], currentUser, onUpdateUsers }) => {
   const [activeCredTab, setActiveCredTab] = useState<'usuarios' | 'aprovacoes'>('usuarios');
   const [selectedUserLogin, setSelectedUserLogin] = useState<string>(users[0]?.login || 'admin');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
   const [editingCargoInlineFor, setEditingCargoInlineFor] = useState<string | null>(null);
   const [pendingCargos, setPendingCargos] = useState<Record<string, string>>({});
+
+  // Access Requests state (solicitações internas)
+  const [accessRequests, setAccessRequests] = useState<UserAccessRequest[]>([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [requestFilter, setRequestFilter] = useState<'TODOS' | 'PENDENTE' | 'APROVADO' | 'RECUSADO'>('PENDENTE');
+  const [requestSearchTerm, setRequestSearchTerm] = useState('');
+  const [requestConfigs, setRequestConfigs] = useState<Record<string, { cargo: string; password: string }>>({});
+  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+  const [rejectModalData, setRejectModalData] = useState<{
+    open: boolean;
+    request: UserAccessRequest | null;
+    reason: string;
+  }>({ open: false, request: null, reason: '' });
+
+  // Load access requests from Supabase / localStorage
+  const loadRequests = async () => {
+    setIsLoadingRequests(true);
+    try {
+      const data = await getUserAccessRequests();
+      setAccessRequests(data);
+    } catch (err) {
+      console.warn('Erro ao carregar solicitações de acesso:', err);
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
 
   // New user form state
   const [newLogin, setNewLogin] = useState('');
@@ -129,6 +162,13 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
     selectedUser?.cargo || (selectedUser?.login?.toLowerCase() === 'admin' ? 'Gerente Geral & Financeiro' : 'Analista Sênior')
   );
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const [addModalError, setAddModalError] = useState<string | null>(null);
+  const [globalNotification, setGlobalNotification] = useState<{
+    type: 'success' | 'error' | 'warning';
+    title: string;
+    message: string;
+    details?: string;
+  } | null>(null);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
 
   // Sync state whenever selected user or users list updates
@@ -319,13 +359,15 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
   // Create new user submit
   const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAddModalError(null);
+
     if (!newLogin || !newSenha || !newEmail) {
-      alert('Por favor, preencha todos os campos obrigatórios (Login, E-mail e Senha).');
+      setAddModalError('Por favor, preencha todos os campos obrigatórios (Login, E-mail e Senha).');
       return;
     }
 
     if (newSenha.trim().length < 6) {
-      alert('A senha deve ter no mínimo 6 caracteres para atendimento às regras de segurança do Supabase Authentication.');
+      setAddModalError('A senha deve ter no mínimo 6 caracteres para atendimento às regras de segurança do Supabase Authentication.');
       return;
     }
 
@@ -349,6 +391,26 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
         role: role,
         permissions: permissions
       });
+
+      const isEmailRateLimit = authResult.authError && (
+        authResult.authError.toLowerCase().includes('rate limit') ||
+        authResult.authError.toLowerCase().includes('email rate limit exceeded')
+      );
+      const isAlreadyRegistered = authResult.authError && authResult.authError.toLowerCase().includes('already registered');
+
+      // Se ocorreu erro crítico no Supabase Auth que NÃO seja rate limit ou e-mail já existente
+      if (authResult.authError && !authResult.authUserId && !isAlreadyRegistered && !isEmailRateLimit) {
+        console.error('Erro Supabase Auth:', authResult.authError);
+        setAddModalError(`Erro retornado pelo Supabase Auth: ${authResult.authError}`);
+        setGlobalNotification({
+          type: 'error',
+          title: 'Erro ao cadastrar no Supabase Auth',
+          message: `O Supabase recusou o cadastro de "${newLogin}": ${authResult.authError}`,
+          details: 'Verifique se o e-mail é válido ou se a senha atende aos requisitos.'
+        });
+        setIsCreatingUser(false);
+        return;
+      }
 
       const newUser: User = {
         id: authResult.authUserId || `usr_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -381,16 +443,50 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
       setSelectedUserCargo(newUser.cargo);
       setEditingPermissions(newUser.permissions);
 
-      setSaveSuccessMsg(`Usuário "${newUser.login}" cadastrado com sucesso e com acesso liberado!`);
-      setTimeout(() => setSaveSuccessMsg(null), 4500);
+      if (isEmailRateLimit) {
+        setGlobalNotification({
+          type: 'warning',
+          title: 'Usuário Gravado e Acesso Liberado',
+          message: `Usuário "${newUser.login}" cadastrado com sucesso no banco de dados e liberado!`,
+          details: 'Aviso do Supabase Auth: Limite de envio de e-mails da hora atingido (Rate Limit do provedor), mas o login direto com usuário e senha no sistema está 100% liberado e operacional.'
+        });
+        setSaveSuccessMsg(`Usuário "${newUser.login}" gravado no sistema com sucesso.`);
+      } else if (isAlreadyRegistered) {
+        setGlobalNotification({
+          type: 'warning',
+          title: 'Usuário Gravado no Sistema',
+          message: `O usuário "${newUser.login}" foi gravado e liberado com sucesso. (Nota: E-mail já constava no Auth do Supabase).`
+        });
+        setSaveSuccessMsg(`Usuário "${newUser.login}" gravado no sistema com sucesso.`);
+      } else if (authResult.userTableError) {
+        setGlobalNotification({
+          type: 'warning',
+          title: 'Usuário cadastrado com aviso',
+          message: `Usuário "${newUser.login}" cadastrado. Aviso na tabela users: ${authResult.userTableError}`
+        });
+        setSaveSuccessMsg(`Usuário "${newUser.login}" cadastrado com aviso!`);
+      } else {
+        setGlobalNotification({
+          type: 'success',
+          title: 'Cadastro Concluído',
+          message: `Usuário "${newUser.login}" (${newUser.email}) gravado com sucesso no Supabase e liberado!`
+        });
+        setSaveSuccessMsg(`Usuário "${newUser.login}" cadastrado com sucesso no Supabase e liberado!`);
+      }
 
       setNewLogin('');
       setNewEmail('');
       setNewSenha('');
+      setAddModalError(null);
       setIsAddModalOpen(false);
     } catch (err: any) {
       console.error('Erro ao criar usuário:', err);
-      alert('Ocorreu um erro ao cadastrar o usuário: ' + (err?.message || 'Erro desconhecido'));
+      setAddModalError('Ocorreu um erro ao cadastrar o usuário: ' + (err?.message || 'Erro desconhecido'));
+      setGlobalNotification({
+        type: 'error',
+        title: 'Falha no Cadastro',
+        message: err?.message || 'Erro desconhecido ao processar cadastro de usuário.'
+      });
     } finally {
       setIsCreatingUser(false);
     }
@@ -415,7 +511,7 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
     setTimeout(() => setSaveSuccessMsg(null), 3500);
   };
 
-  // Approval handlers for pending users
+  // Approval handlers for pending users (legacy)
   const handleApprovePendingUser = (userToApprove: User, customCargo?: string) => {
     const cargoVal = customCargo || pendingCargos[userToApprove.login] || userToApprove.cargo || 'Analista Sênior';
     const isCorretor = cargoVal.toLowerCase().includes('corretor');
@@ -438,6 +534,121 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
     onUpdateUsers(updatedUsers);
     setSaveSuccessMsg(`Usuário "${userToApprove.login}" aprovado com sucesso como "${cargoVal}"! Acesso liberado.`);
     setTimeout(() => setSaveSuccessMsg(null), 4000);
+  };
+
+  // Approval handler for internal UserAccessRequest
+  const handleApproveAccessRequest = async (req: UserAccessRequest) => {
+    const cfg = requestConfigs[req.id] || {
+      cargo: req.cargoSugerido || 'Analista Sênior',
+      password: 'mplan' + Math.floor(1000 + Math.random() * 9000)
+    };
+    const cargoVal = cfg.cargo || req.cargoSugerido || 'Analista Sênior';
+    const passwordVal = cfg.password || '123456';
+    const isCorretor = cargoVal.toLowerCase().includes('corretor');
+    const roleVal = isCorretor ? 'corretor' : 'admin';
+    const permissions = isCorretor ? { ...CORRETOR_PERMISSIONS } : { ...DEFAULT_PERMISSIONS };
+
+    setProcessingRequestId(req.id);
+
+    try {
+      // 1. Criar usuário no Supabase Auth + profiles + users
+      const authResult = await createAuthUserByAdmin({
+        email: req.email.trim(),
+        password: passwordVal.trim(),
+        login: req.nome.trim(),
+        name: req.nome.trim(),
+        cargo: cargoVal,
+        role: roleVal,
+        permissions: permissions
+      });
+
+      // 2. Atualizar o registro da solicitação de acesso
+      await updateUserAccessRequest(req.id, {
+        status: 'APROVADO',
+        aprovadoPor: currentUser?.login || 'Administrador',
+        aprovadoEm: new Date().toISOString()
+      });
+
+      // 3. Adicionar/Atualizar na lista de usuários do sistema
+      const newUser: User = {
+        id: authResult.authUserId || `usr_${Date.now()}`,
+        login: req.nome.trim(),
+        email: req.email.trim(),
+        senha: passwordVal.trim(),
+        cargo: cargoVal,
+        role: roleVal as any,
+        status: 'ATIVO',
+        ultimoAcesso: 'Hoje\n10:00',
+        approved: true,
+        permissions: permissions
+      };
+
+      const existingIdx = users.findIndex(u => 
+        (u.email || '').trim().toLowerCase() === req.email.trim().toLowerCase() ||
+        (u.login || '').trim().toLowerCase() === req.nome.trim().toLowerCase()
+      );
+
+      let updatedUsers: User[];
+      if (existingIdx >= 0) {
+        updatedUsers = [...users];
+        updatedUsers[existingIdx] = { ...users[existingIdx], ...newUser };
+      } else {
+        updatedUsers = [...users, newUser];
+      }
+
+      await onUpdateUsers(updatedUsers);
+      await loadRequests();
+
+      setGlobalNotification({
+        type: 'success',
+        title: 'Solicitação Aprovada com Sucesso!',
+        message: `O colaborador "${req.nome}" teve seu acesso liberado com o cargo "${cargoVal}".`,
+        details: `Credenciais de acesso: E-mail: ${req.email} | Senha: ${passwordVal}`
+      });
+      setSaveSuccessMsg(`Acesso de "${req.nome}" aprovado e liberado com sucesso!`);
+      setTimeout(() => setSaveSuccessMsg(null), 4000);
+    } catch (err: any) {
+      console.error('Erro ao aprovar solicitação:', err);
+      setGlobalNotification({
+        type: 'error',
+        title: 'Erro ao aprovar solicitação',
+        message: err?.message || 'Falha ao provisionar credencial no banco de dados.'
+      });
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
+  // Rejection handler for internal UserAccessRequest
+  const handleConfirmRejectAccessRequest = async () => {
+    if (!rejectModalData.request) return;
+    const req = rejectModalData.request;
+    setProcessingRequestId(req.id);
+
+    try {
+      await updateUserAccessRequest(req.id, {
+        status: 'RECUSADO',
+        aprovadoPor: currentUser?.login || 'Administrador',
+        aprovadoEm: new Date().toISOString(),
+        motivoRecusa: rejectModalData.reason.trim() || 'Solicitação não autorizada pela administração.'
+      });
+
+      await loadRequests();
+
+      setGlobalNotification({
+        type: 'warning',
+        title: 'Solicitação Recusada',
+        message: `A solicitação de "${req.nome}" (${req.email}) foi marcada como RECUSADA.`
+      });
+      setSaveSuccessMsg(`Solicitação de "${req.nome}" recusada.`);
+      setTimeout(() => setSaveSuccessMsg(null), 3500);
+      setRejectModalData({ open: false, request: null, reason: '' });
+    } catch (err: any) {
+      console.error('Erro ao recusar solicitação:', err);
+      alert('Erro ao registrar recusa: ' + err.message);
+    } finally {
+      setProcessingRequestId(null);
+    }
   };
 
   const handleRejectPendingUser = (userToReject: User) => {
@@ -527,6 +738,39 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
         </div>
       </div>
 
+      {/* GLOBAL NOTIFICATION BANNER */}
+      {globalNotification && (
+        <div className={`p-4 rounded-2xl border flex items-start justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300 shadow-sm ${
+          globalNotification.type === 'error'
+            ? 'bg-red-50/90 border-red-200 text-red-900'
+            : globalNotification.type === 'warning'
+            ? 'bg-amber-50/90 border-amber-200 text-amber-900'
+            : 'bg-emerald-50/90 border-emerald-200 text-emerald-900'
+        }`}>
+          <div className="flex items-start gap-3">
+            <span className={`material-symbols-outlined text-xl mt-0.5 ${
+              globalNotification.type === 'error' ? 'text-red-600' : globalNotification.type === 'warning' ? 'text-amber-600' : 'text-emerald-600'
+            }`}>
+              {globalNotification.type === 'error' ? 'error' : globalNotification.type === 'warning' ? 'warning' : 'check_circle'}
+            </span>
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider">{globalNotification.title}</h4>
+              <p className="text-xs font-medium mt-0.5">{globalNotification.message}</p>
+              {globalNotification.details && (
+                <p className="text-[11px] opacity-80 mt-1 font-mono bg-black/5 p-1.5 rounded-lg">{globalNotification.details}</p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => setGlobalNotification(null)}
+            className="text-gray-400 hover:text-gray-700 p-1 rounded-lg hover:bg-black/5 transition-all cursor-pointer shrink-0"
+            title="Fechar aviso"
+          >
+            <span className="material-symbols-outlined text-sm">close</span>
+          </button>
+        </div>
+      )}
+
       {/* SUB-TABS NAVIGATION BAR */}
       <div className="flex items-center gap-2 border-b border-gray-200/90 bg-white/70 backdrop-blur-xs p-1.5 rounded-2xl shadow-xs">
         <button
@@ -547,7 +791,10 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
         </button>
 
         <button
-          onClick={() => setActiveCredTab('aprovacoes')}
+          onClick={() => {
+            setActiveCredTab('aprovacoes');
+            loadRequests();
+          }}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer relative ${
             activeCredTab === 'aprovacoes'
               ? 'bg-[#e85d04] text-white shadow-xs'
@@ -555,22 +802,22 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
           }`}
         >
           <span className="material-symbols-outlined text-base">how_to_reg</span>
-          <span>Aprovação de Novos Usuários</span>
-          {pendingUsers.length > 0 ? (
+          <span>Aprovação de Solicitações de Acesso</span>
+          {(accessRequests.filter(r => r.status === 'PENDENTE').length + pendingUsers.length) > 0 ? (
             <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-white text-[#e85d04] animate-pulse">
-              {pendingUsers.length} pendente{pendingUsers.length > 1 ? 's' : ''}
+              {accessRequests.filter(r => r.status === 'PENDENTE').length + pendingUsers.length} pendente{(accessRequests.filter(r => r.status === 'PENDENTE').length + pendingUsers.length) > 1 ? 's' : ''}
             </span>
           ) : (
             <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
               activeCredTab === 'aprovacoes' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
             }`}>
-              0
+              {accessRequests.length}
             </span>
           )}
         </button>
       </div>
 
-      {/* TAB 2: APROVAÇÃO DE NOVOS USUÁRIOS */}
+      {/* TAB 2: APROVAÇÃO & SOLICITAÇÕES DE NOVOS USUÁRIOS */}
       {activeCredTab === 'aprovacoes' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* TOP APPROVALS BANNER / CONTROLS */}
@@ -584,131 +831,426 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
                   Central de Liberação e Aprovação de Acesso
                 </h3>
                 <p className="text-xs text-gray-600 font-medium mt-0.5">
-                  Novos colaboradores cadastrados pela tela de login ou banco de dados aguardando autorização do administrador.
+                  Gerencie as solicitações internas de novos usuários submetidas por colaboradores e autorize o acesso ao sistema.
                 </p>
               </div>
             </div>
 
-            {pendingUsers.length > 0 && (
-              <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <button
+                onClick={() => setIsRequestModalOpen(true)}
+                className="bg-[#001a54] hover:bg-[#001138] text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base">person_add</span>
+                <span>+ Solicitar Novo Usuário</span>
+              </button>
+
+              <button
+                onClick={loadRequests}
+                disabled={isLoadingRequests}
+                className="bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-extrabold px-3 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title="Recarregar solicitações"
+              >
+                <span className={`material-symbols-outlined text-base ${isLoadingRequests ? 'animate-spin text-orange-600' : ''}`}>refresh</span>
+                <span className="hidden sm:inline">Atualizar</span>
+              </button>
+
+              {pendingUsers.length > 0 && (
                 <button
                   onClick={handleApproveAllPending}
                   className="bg-[#16a34a] hover:bg-green-700 text-white text-xs font-extrabold px-4 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-base">done_all</span>
-                  <span>Aprovar Todos ({pendingUsers.length})</span>
+                  <span>Aprovar Pendentes Legados ({pendingUsers.length})</span>
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          {/* LIST OF PENDING USERS */}
-          {pendingUsers.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {pendingUsers.map(pu => {
-                const selectedCargo = pendingCargos[pu.login] || pu.cargo || 'Analista Sênior';
-                const isCorretor = selectedCargo.toLowerCase().includes('corretor');
+          {/* FILTER TABS & SEARCH BAR */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-gray-200 shadow-xs">
+            <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
+              {(['PENDENTE', 'APROVADO', 'RECUSADO', 'TODOS'] as const).map(tabKey => {
+                const count = tabKey === 'PENDENTE'
+                  ? accessRequests.filter(r => r.status === 'PENDENTE').length + pendingUsers.length
+                  : tabKey === 'APROVADO'
+                  ? accessRequests.filter(r => r.status === 'APROVADO').length
+                  : tabKey === 'RECUSADO'
+                  ? accessRequests.filter(r => r.status === 'RECUSADO').length
+                  : accessRequests.length + pendingUsers.length;
+
+                const label = tabKey === 'PENDENTE' ? 'Pendentes' : tabKey === 'APROVADO' ? 'Aprovadas' : tabKey === 'RECUSADO' ? 'Recusadas' : 'Todas';
 
                 return (
-                  <div
-                    key={pu.login}
-                    className="bg-white rounded-2xl border-2 border-orange-200/80 p-5 shadow-xs space-y-4 hover:border-orange-400 transition-all relative overflow-hidden"
+                  <button
+                    key={tabKey}
+                    onClick={() => setRequestFilter(tabKey)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                      requestFilter === tabKey
+                        ? 'bg-[#001a54] text-white shadow-xs'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
                   >
-                    <div className="absolute top-0 right-0 bg-[#e85d04] text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-wider flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[11px]">hourglass_top</span>
-                      Aguardando Liberação
-                    </div>
-
-                    {/* USER HEADER */}
-                    <div className="flex items-center gap-3.5 pr-32">
-                      <div className={`w-11 h-11 rounded-2xl font-black text-sm flex items-center justify-center shrink-0 shadow-xs ${getAvatarBg(pu.login, selectedCargo)}`}>
-                        {getInitials(pu.login)}
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-extrabold text-[#001a54] truncate">
-                          {pu.login}
-                        </h4>
-                        <p className="text-xs font-medium text-gray-500 truncate mt-0.5">
-                          {pu.email || 'E-mail não informado'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* ROLE / CARGO CONFIGURATION */}
-                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-2">
-                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                        Atribuir Função / Cargo no Acesso:
-                      </label>
-                      <select
-                        value={selectedCargo}
-                        onChange={e => setPendingCargos(prev => ({ ...prev, [pu.login]: e.target.value }))}
-                        className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-800 focus:outline-none focus:border-[#001a54]"
-                      >
-                        {CARGO_OPTIONS.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </select>
-
-                      <div className="flex items-center gap-2 pt-1">
-                        <span className="text-[10px] font-bold text-gray-500">Perfil:</span>
-                        {isCorretor ? (
-                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-md">
-                            <span className="material-symbols-outlined text-xs">smartphone</span>
-                            Portal do Corretor (Cotações e Propostas)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-0.5 rounded-md">
-                            <span className="material-symbols-outlined text-xs">admin_panel_settings</span>
-                            Painel Administrativo & Financeiro
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* ACTIONS */}
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
-                      <button
-                        onClick={() => handleRejectPendingUser(pu)}
-                        className="px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-sm">close</span>
-                        <span>Recusar</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleApprovePendingUser(pu, selectedCargo)}
-                        className="px-5 py-2.5 bg-[#16a34a] hover:bg-green-700 text-white text-xs font-extrabold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                      >
-                        <span className="material-symbols-outlined text-base">check_circle</span>
-                        <span>Aprovar & Liberar Acesso</span>
-                      </button>
-                    </div>
-                  </div>
+                    <span>{label}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                      requestFilter === tabKey ? 'bg-white/20 text-white' : 'bg-white text-gray-700'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
                 );
               })}
             </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-200/80 p-12 text-center shadow-xs space-y-4">
-              <div className="w-16 h-16 rounded-full bg-green-50 text-green-600 flex items-center justify-center mx-auto shadow-xs">
-                <span className="material-symbols-outlined text-3xl">check_circle</span>
-              </div>
-              <div className="max-w-md mx-auto">
-                <h4 className="text-base font-black text-[#001a54]">
-                  Nenhuma solicitação pendente no momento
-                </h4>
-                <p className="text-xs text-gray-500 font-medium mt-1">
-                  Todos os colaboradores cadastrados estão com acesso liberado ao sistema.
-                </p>
-              </div>
-              <button
-                onClick={() => setActiveCredTab('usuarios')}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#001a54] text-white text-xs font-bold rounded-xl hover:bg-[#001138] transition-all cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-sm">group</span>
-                <span>Ver Usuários Cadastrados</span>
-              </button>
+
+            <div className="relative w-full sm:w-72">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">search</span>
+              <input
+                type="text"
+                placeholder="Buscar solicitação..."
+                value={requestSearchTerm}
+                onChange={e => setRequestSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:bg-white focus:outline-none focus:border-[#001a54]"
+              />
             </div>
-          )}
+          </div>
+
+          {/* LIST OF INTERNAL ACCESS REQUESTS */}
+          {(() => {
+            const filteredReqs = accessRequests.filter(r => {
+              const matchStatus = requestFilter === 'TODOS' || r.status === requestFilter;
+              if (!matchStatus) return false;
+              if (!requestSearchTerm.trim()) return true;
+              const t = requestSearchTerm.toLowerCase();
+              return (
+                (r.nome || '').toLowerCase().includes(t) ||
+                (r.email || '').toLowerCase().includes(t) ||
+                (r.cargoSugerido || '').toLowerCase().includes(t) ||
+                (r.solicitanteNome || '').toLowerCase().includes(t) ||
+                (r.justificativa || '').toLowerCase().includes(t)
+              );
+            });
+
+            const showLegacyPending = (requestFilter === 'PENDENTE' || requestFilter === 'TODOS') && pendingUsers.length > 0;
+
+            if (filteredReqs.length === 0 && !showLegacyPending) {
+              return (
+                <div className="bg-white rounded-2xl border border-gray-200/80 p-12 text-center shadow-xs space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-orange-50 text-[#e85d04] flex items-center justify-center mx-auto shadow-xs">
+                    <span className="material-symbols-outlined text-3xl">inbox</span>
+                  </div>
+                  <div className="max-w-md mx-auto">
+                    <h4 className="text-base font-black text-[#001a54]">
+                      Nenhuma solicitação encontrada
+                    </h4>
+                    <p className="text-xs text-gray-500 font-medium mt-1">
+                      {requestFilter === 'PENDENTE'
+                        ? 'Não há solicitações de acesso pendentes de aprovação no momento.'
+                        : 'Não há registros para o filtro selecionado.'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsRequestModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#001a54] text-white text-xs font-bold rounded-xl hover:bg-[#001138] transition-all cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">person_add</span>
+                    <span>Criar Nova Solicitação Interna</span>
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {filteredReqs.map(req => {
+                  const cfg = requestConfigs[req.id] || {
+                    cargo: req.cargoSugerido || 'Analista Sênior',
+                    password: 'mplan' + Math.floor(1000 + Math.random() * 9000)
+                  };
+                  const isPending = req.status === 'PENDENTE';
+                  const isApproved = req.status === 'APROVADO';
+                  const isRefused = req.status === 'RECUSADO';
+                  const isProcessing = processingRequestId === req.id;
+                  const isCorretor = (cfg.cargo || '').toLowerCase().includes('corretor');
+
+                  return (
+                    <div
+                      key={req.id}
+                      className={`bg-white rounded-2xl border-2 p-5 shadow-xs space-y-4 transition-all relative overflow-hidden flex flex-col justify-between ${
+                        isPending
+                          ? 'border-orange-200 hover:border-orange-400'
+                          : isApproved
+                          ? 'border-emerald-200 bg-emerald-50/10'
+                          : 'border-rose-200 bg-rose-50/10'
+                      }`}
+                    >
+                      {/* STATUS BADGE */}
+                      <div className={`absolute top-0 right-0 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-wider flex items-center gap-1 ${
+                        isPending
+                          ? 'bg-[#e85d04]'
+                          : isApproved
+                          ? 'bg-emerald-600'
+                          : 'bg-rose-600'
+                      }`}>
+                        <span className="material-symbols-outlined text-[11px]">
+                          {isPending ? 'hourglass_top' : isApproved ? 'check_circle' : 'cancel'}
+                        </span>
+                        {isPending ? 'Aguardando Admin' : isApproved ? 'Acesso Aprovado' : 'Solicitação Recusada'}
+                      </div>
+
+                      <div className="space-y-3.5">
+                        {/* HEADER: USER INFO */}
+                        <div className="flex items-start gap-3.5 pr-32">
+                          <div className={`w-12 h-12 rounded-2xl font-black text-sm flex items-center justify-center shrink-0 shadow-xs ${getAvatarBg(req.nome, cfg.cargo)}`}>
+                            {getInitials(req.nome)}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-base font-black text-[#001a54] truncate">
+                              {req.nome}
+                            </h4>
+                            <p className="text-xs font-semibold text-gray-600 truncate mt-0.5">
+                              {req.email}
+                            </p>
+                            {req.telefone && (
+                              <p className="text-[11px] font-medium text-gray-500 mt-0.5 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-xs text-gray-400">call</span>
+                                {req.telefone}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* SOLICITANTE AUDIT LINE */}
+                        <div className="p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl text-xs flex items-center gap-2">
+                          <span className="material-symbols-outlined text-slate-400 text-sm">badge</span>
+                          <div className="truncate text-slate-700">
+                            <span className="text-slate-500">Solicitado internamente por: </span>
+                            <strong className="text-[#001a54] font-bold">{req.solicitanteNome || req.solicitanteLogin || 'Colaborador'}</strong>
+                            {req.solicitanteEmail ? ` (${req.solicitanteEmail})` : ''}
+                            <span className="text-slate-400 text-[10px] ml-1">
+                              • {new Date(req.createdAt).toLocaleDateString('pt-BR')} às {new Date(req.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* JUSTIFICATIVA BOX */}
+                        {req.justificativa && (
+                          <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-1">
+                            <span className="text-[10px] font-black text-amber-900 uppercase tracking-wider flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs">format_quote</span>
+                              Justificativa do Pedido:
+                            </span>
+                            <p className="text-xs text-amber-950 font-medium leading-relaxed italic">
+                              "{req.justificativa}"
+                            </p>
+                          </div>
+                        )}
+
+                        {/* IF PENDING: CONFIGURATION CONTROLS */}
+                        {isPending && (
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+                            <div>
+                              <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider mb-1">
+                                Atribuir Função / Cargo no Sistema:
+                              </label>
+                              <select
+                                value={cfg.cargo}
+                                onChange={e => {
+                                  const newCargo = e.target.value;
+                                  setRequestConfigs(prev => ({
+                                    ...prev,
+                                    [req.id]: {
+                                      cargo: newCargo,
+                                      password: cfg.password
+                                    }
+                                  }));
+                                }}
+                                className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-800 focus:outline-none focus:border-[#001a54]"
+                              >
+                                {CARGO_OPTIONS.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <label className="block text-[10px] font-black text-slate-600 uppercase tracking-wider mb-1">
+                                  Senha Temporária:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={cfg.password}
+                                  onChange={e => {
+                                    const newPwd = e.target.value;
+                                    setRequestConfigs(prev => ({
+                                      ...prev,
+                                      [req.id]: {
+                                        cargo: cfg.cargo,
+                                        password: newPwd
+                                      }
+                                    }));
+                                  }}
+                                  className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-mono font-bold text-gray-800 focus:outline-none focus:border-[#001a54]"
+                                  placeholder="Senha inicial"
+                                />
+                              </div>
+
+                              <div className="flex flex-col justify-end">
+                                <span className="text-[10px] font-bold text-slate-500 mb-1">Tipo de Acesso:</span>
+                                {isCorretor ? (
+                                  <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-1.5 rounded-lg">
+                                    <span className="material-symbols-outlined text-xs">smartphone</span>
+                                    Portal do Corretor
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-[10px] font-black px-2 py-1.5 rounded-lg">
+                                    <span className="material-symbols-outlined text-xs">admin_panel_settings</span>
+                                    Painel Financeiro
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* IF APPROVED INFO */}
+                        {isApproved && (
+                          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-start gap-2">
+                            <span className="material-symbols-outlined text-emerald-600 text-base mt-0.5">verified</span>
+                            <div>
+                              <p className="font-bold">Acesso Aprovado e Credencial Criada</p>
+                              <p className="text-[11px] text-emerald-800 mt-0.5">
+                                Aprovado por <strong className="font-bold">{req.aprovadoPor || 'Admin'}</strong>
+                                {req.aprovadoEm ? ` em ${new Date(req.aprovadoEm).toLocaleDateString('pt-BR')} às ${new Date(req.aprovadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* IF REFUSED INFO */}
+                        {isRefused && (
+                          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2">
+                            <span className="material-symbols-outlined text-rose-600 text-base mt-0.5">cancel</span>
+                            <div>
+                              <p className="font-bold">Solicitação Recusada</p>
+                              <p className="text-[11px] text-rose-800 mt-0.5">
+                                Recusada por <strong className="font-bold">{req.aprovadoPor || 'Admin'}</strong>
+                                {req.aprovadoEm ? ` em ${new Date(req.aprovadoEm).toLocaleDateString('pt-BR')}` : ''}.
+                              </p>
+                              {req.motivoRecusa && (
+                                <p className="text-[11px] text-rose-900 mt-1 italic">
+                                  Motivo: "{req.motivoRecusa}"
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* BOTTOM ACTIONS (FOR PENDING) */}
+                      {isPending && (
+                        <div className="flex items-center justify-between gap-2 pt-3 border-t border-gray-100 mt-2">
+                          <button
+                            onClick={() => setRejectModalData({ open: true, request: req, reason: '' })}
+                            disabled={isProcessing}
+                            className="px-3.5 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          >
+                            <span className="material-symbols-outlined text-sm">close</span>
+                            <span>Recusar</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleApproveAccessRequest(req)}
+                            disabled={isProcessing}
+                            className="px-5 py-2.5 bg-[#16a34a] hover:bg-green-700 text-white text-xs font-extrabold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50"
+                          >
+                            {isProcessing ? (
+                              <>
+                                <span className="material-symbols-outlined text-base animate-spin">refresh</span>
+                                <span>Criando Credencial...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="material-symbols-outlined text-base">check_circle</span>
+                                <span>Aprovar & Criar Credencial</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* LEGACY PENDING USERS */}
+                {showLegacyPending && pendingUsers.map(pu => {
+                  const selectedCargo = pendingCargos[pu.login] || pu.cargo || 'Analista Sênior';
+                  const isCorretor = selectedCargo.toLowerCase().includes('corretor');
+
+                  return (
+                    <div
+                      key={pu.login}
+                      className="bg-white rounded-2xl border-2 border-orange-200 p-5 shadow-xs space-y-4 hover:border-orange-400 transition-all relative overflow-hidden flex flex-col justify-between"
+                    >
+                      <div className="absolute top-0 right-0 bg-[#e85d04] text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-wider flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[11px]">hourglass_top</span>
+                        Pendente Legado
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3.5 pr-32">
+                          <div className={`w-11 h-11 rounded-2xl font-black text-sm flex items-center justify-center shrink-0 shadow-xs ${getAvatarBg(pu.login, selectedCargo)}`}>
+                            {getInitials(pu.login)}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-extrabold text-[#001a54] truncate">
+                              {pu.login}
+                            </h4>
+                            <p className="text-xs font-medium text-gray-500 truncate mt-0.5">
+                              {pu.email || 'E-mail não informado'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-2">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                            Atribuir Função / Cargo no Acesso:
+                          </label>
+                          <select
+                            value={selectedCargo}
+                            onChange={e => setPendingCargos(prev => ({ ...prev, [pu.login]: e.target.value }))}
+                            className="w-full p-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-800 focus:outline-none focus:border-[#001a54]"
+                          >
+                            {CARGO_OPTIONS.map(opt => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
+                        <button
+                          onClick={() => handleRejectPendingUser(pu)}
+                          className="px-3.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-sm">close</span>
+                          <span>Recusar</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleApprovePendingUser(pu, selectedCargo)}
+                          className="px-5 py-2.5 bg-[#16a34a] hover:bg-green-700 text-white text-xs font-extrabold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                        >
+                          <span className="material-symbols-outlined text-base">check_circle</span>
+                          <span>Aprovar & Liberar</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -720,19 +1262,30 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
         <div className="lg:col-span-7 bg-white rounded-2xl border border-gray-200/80 p-5 shadow-xs space-y-4 flex flex-col justify-between min-h-[560px]">
           <div>
             {/* CARD HEADER */}
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-[#001a54] text-xl">group</span>
                 <h3 className="text-base font-extrabold text-[#001a54] tracking-tight">Usuários do Sistema</h3>
               </div>
 
-              <button
-                onClick={() => setIsAddModalOpen(true)}
-                className="bg-[#001a54] hover:bg-[#001138] text-white text-xs font-extrabold px-4 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1.5"
-              >
-                <span className="material-symbols-outlined text-base">person_add</span>
-                <span>Novo Usuário</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsRequestModalOpen(true)}
+                  className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-extrabold px-3 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Solicitar cadastro interno de novo usuário"
+                >
+                  <span className="material-symbols-outlined text-sm text-amber-700">person_add</span>
+                  <span>Solicitar Usuário</span>
+                </button>
+
+                <button
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="bg-[#001a54] hover:bg-[#001138] text-white text-xs font-extrabold px-4 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base">add</span>
+                  <span>Novo Usuário</span>
+                </button>
+              </div>
             </div>
 
             {/* USERS TABLE */}
@@ -1253,6 +1806,19 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
             </div>
 
             <form onSubmit={handleAddUserSubmit} className="space-y-4">
+              {addModalError && (
+                <div className="p-3.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-start gap-2.5 animate-in fade-in duration-200">
+                  <span className="material-symbols-outlined text-red-600 text-base mt-0.5 shrink-0">error</span>
+                  <div className="flex-1">
+                    <p className="font-bold text-red-900 mb-0.5">Não foi possível concluir o cadastro:</p>
+                    <p>{addModalError}</p>
+                  </div>
+                  <button type="button" onClick={() => setAddModalError(null)} className="text-red-400 hover:text-red-700">
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
@@ -1584,6 +2150,73 @@ const CredentialsManager: React.FC<CredentialsManagerProps> = ({ users = [], onU
           </div>
         </div>
       )}
+
+      {/* MODAL: RECUSAR SOLICITAÇÃO DE ACESSO */}
+      {rejectModalData.open && rejectModalData.request && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[120] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-200 border-t-4 border-rose-500">
+            <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-3">
+              <h3 className="text-base font-extrabold text-rose-600 tracking-tight flex items-center gap-2">
+                <span className="material-symbols-outlined text-xl">cancel</span>
+                Recusar Solicitação de Acesso
+              </h3>
+              <button 
+                onClick={() => setRejectModalData({ open: false, request: null, reason: '' })} 
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-3 py-2">
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Você está recusando a solicitação de acesso de <strong className="text-gray-900 font-bold">{rejectModalData.request.nome}</strong> ({rejectModalData.request.email}).
+              </p>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-1">
+                  Motivo da Recusa (opcional / justificativa):
+                </label>
+                <textarea
+                  value={rejectModalData.reason}
+                  onChange={e => setRejectModalData(prev => ({ ...prev, reason: e.target.value }))}
+                  placeholder="Ex.: Função já preenchida ou dados divergentes."
+                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:outline-none focus:border-rose-500 min-h-[80px]"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 mt-2">
+              <button
+                type="button"
+                onClick={() => setRejectModalData({ open: false, request: null, reason: '' })}
+                className="px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRejectAccessRequest}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <span className="material-symbols-outlined text-sm">check</span>
+                <span>Confirmar Recusa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SOLICITAR ACESSO INTERNO */}
+      <ModalSolicitarAcesso
+        isOpen={isRequestModalOpen}
+        onClose={() => setIsRequestModalOpen(false)}
+        currentUser={currentUser}
+        onSuccess={() => {
+          loadRequests();
+          setActiveCredTab('aprovacoes');
+        }}
+      />
     </div>
   );
 };

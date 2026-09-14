@@ -1,5 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
+import { UserAccessRequest } from '../types';
 
 const sanitizeUrl = (url?: string): string => {
   const fallback = 'https://wpjehsjzeuxdtoovkocp.supabase.co';
@@ -45,9 +46,16 @@ export async function createAuthUserByAdmin(userData: {
   telefone?: string;
   login: string;
   permissions?: any;
-}): Promise<{ success: boolean; authUserId?: string; error?: string }> {
+}): Promise<{ 
+  success: boolean; 
+  authUserId?: string; 
+  authError?: string; 
+  userTableError?: string; 
+  profileTableError?: string; 
+  message?: string 
+}> {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return { success: false, error: 'Credenciais do Supabase não configuradas.' };
+    return { success: false, authError: 'Credenciais do Supabase não configuradas.' };
   }
 
   const cleanEmail = (userData.email || '').trim().toLowerCase();
@@ -66,10 +74,15 @@ export async function createAuthUserByAdmin(userData: {
 
   let authUserId: string | undefined = undefined;
   let authErrorMsg: string | undefined = undefined;
+  let userTableErrorMsg: string | undefined = undefined;
+  let profileTableErrorMsg: string | undefined = undefined;
 
+  const validRole = ['admin', 'cadastro_propostas', 'pagamento_comissoes', 'corretor'].includes(userData.role || '') 
+    ? (userData.role as string) 
+    : (cleanLogin.toLowerCase().includes('admin') ? 'admin' : 'cadastro_propostas');
+
+  // 1. Tenta criar no Supabase Auth usando cliente com chave pública
   try {
-    // Instância secundária efêmera do Supabase com persistência de sessão desabilitada
-    // para que a chamada de signUp não substitua a sessão ativa do administrador logado
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         persistSession: false,
@@ -84,11 +97,11 @@ export async function createAuthUserByAdmin(userData: {
       options: {
         data: {
           login: cleanLogin,
-          name: userData.name || cleanLogin,
-          full_name: userData.name || cleanLogin,
-          role: userData.role || 'corretor',
+          name: cleanLogin,
+          role: validRole,
           cargo: userData.cargo || 'Analista Sênior',
-          approved: true
+          approved: true,
+          permissions: userData.permissions || {}
         }
       }
     });
@@ -101,12 +114,27 @@ export async function createAuthUserByAdmin(userData: {
     }
   } catch (err: any) {
     console.warn('Erro ao tentar criar no Auth Client efêmero:', err);
-    authErrorMsg = err?.message;
+    authErrorMsg = err?.message || 'Falha na comunicação com Supabase Auth';
   }
 
-  // 1. Inserir ou atualizar na tabela users (login, senha, email, permissions, approved)
+  // 2. Se não conseguiu ID pelo signUp (ex: e-mail já existia ou cadastro anônimo bloqueado), busca se já existe no profiles/auth
+  if (!authUserId) {
+    try {
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .or(`email.ilike.${cleanEmail},login.ilike.${cleanLogin}`)
+        .maybeSingle();
+
+      if (existingProfile?.id) {
+        authUserId = existingProfile.id;
+      }
+    } catch (e) {}
+  }
+
+  // 3. Inserir ou atualizar na tabela users (login, senha, email, permissions, approved)
   try {
-    const userPayload: any = {
+    const userPayload = {
       login: cleanLogin,
       senha: password,
       email: cleanEmail,
@@ -120,38 +148,192 @@ export async function createAuthUserByAdmin(userData: {
 
     if (usersTableError) {
       console.warn('Aviso ao inserir na tabela users:', usersTableError.message);
+      userTableErrorMsg = usersTableError.message;
+
+      // Tentativa de fallback com insert simples
+      try {
+        const { error: insertErr } = await supabase.from('users').insert(userPayload);
+        if (!insertErr) {
+          userTableErrorMsg = undefined;
+        }
+      } catch (e) {}
     }
-  } catch (err) {
+
+    // Se houver registro com mesmo e-mail mas login diferente (ex: "Hellen Kelma"), atualiza a senha lá também
+    if (cleanEmail) {
+      try {
+        await supabase
+          .from('users')
+          .update({ senha: password, approved: 'true', permissions: userData.permissions || {} })
+          .ilike('email', cleanEmail);
+      } catch (e) {}
+    }
+  } catch (err: any) {
     console.warn('Erro ao inserir na tabela users:', err);
+    userTableErrorMsg = err?.message;
   }
 
-  // 2. Inserir ou atualizar na tabela profiles
+  // 4. Inserir ou atualizar na tabela profiles (id, email, login, role, approved, permissions)
   try {
-    const profilePayload: any = {
-      email: cleanEmail,
-      full_name: userData.name || cleanLogin,
-      role: userData.role || 'corretor',
-      approved: true, // Já aprovado pelo administrador
-      permissions: userData.permissions || {},
-      updated_at: new Date().toISOString()
-    };
-
     if (authUserId) {
-      profilePayload.id = authUserId;
-      await supabase.from('profiles').upsert(profilePayload, { onConflict: 'id' });
+      const profilePayload = {
+        id: authUserId,
+        email: cleanEmail,
+        login: cleanLogin,
+        role: validRole,
+        approved: true,
+        permissions: userData.permissions || {}
+      };
+      const { error: pErr } = await supabase.from('profiles').upsert(profilePayload, { onConflict: 'id' });
+      if (pErr) {
+        profileTableErrorMsg = pErr.message;
+      }
     } else {
-      // Se já existia profile pelo email, atualiza
-      await supabase.from('profiles').upsert(profilePayload, { onConflict: 'email' });
+      // Se não temos o authUserId, tenta atualizar por email
+      const { error: pUpdErr } = await supabase.from('profiles').update({
+        login: cleanLogin,
+        role: validRole,
+        approved: true,
+        permissions: userData.permissions || {}
+      }).ilike('email', cleanEmail);
+      if (pUpdErr) {
+        profileTableErrorMsg = pUpdErr.message;
+      }
     }
-  } catch (err) {
+  } catch (err: any) {
     console.warn('Erro ao atualizar tabela profiles:', err);
+    profileTableErrorMsg = err?.message;
   }
+
+  const isSuccess = !userTableErrorMsg || !!authUserId || !authErrorMsg;
 
   return { 
-    success: true, 
+    success: isSuccess, 
     authUserId: authUserId,
-    error: authErrorMsg
+    authError: authErrorMsg,
+    userTableError: userTableErrorMsg,
+    profileTableError: profileTableErrorMsg
   };
+}
+
+/**
+ * Salva uma nova solicitação interna de acesso
+ */
+export async function saveUserAccessRequest(request: UserAccessRequest): Promise<{ success: boolean; error?: string }> {
+  // 1. Salva no localStorage como cache seguro imediato
+  try {
+    const raw = localStorage.getItem('multiplan_user_access_requests');
+    const list: UserAccessRequest[] = raw ? JSON.parse(raw) : [];
+    const updated = [request, ...list.filter(r => r.id !== request.id)];
+    localStorage.setItem('multiplan_user_access_requests', JSON.stringify(updated));
+  } catch (e) {}
+
+  // 2. Tenta persistir no Supabase
+  try {
+    const payload = {
+      id: request.id,
+      nome: request.nome,
+      email: request.email,
+      telefone: request.telefone || '',
+      cargo_sugerido: request.cargoSugerido,
+      justificativa: request.justificativa,
+      solicitante_login: request.solicitanteLogin,
+      solicitante_email: request.solicitanteEmail || '',
+      status: request.status,
+      created_at: request.created_at,
+      aprovado_por: request.aprovadoPor,
+      aprovado_em: request.aprovadoEm,
+      motivo_recusa: request.motivoRecusa
+    };
+
+    const { error } = await supabase.from('user_access_requests').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.warn('Aviso ao salvar solicitação no Supabase:', error.message);
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.warn('Erro ao salvar solicitação no Supabase (salvo localmente):', err);
+    return { success: true };
+  }
+}
+
+/**
+ * Carrega a lista de solicitações internas de acesso
+ */
+export async function getUserAccessRequests(): Promise<UserAccessRequest[]> {
+  let localList: UserAccessRequest[] = [];
+  try {
+    const raw = localStorage.getItem('multiplan_user_access_requests');
+    if (raw) localList = JSON.parse(raw);
+  } catch (e) {}
+
+  try {
+    const { data, error } = await supabase
+      .from('user_access_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && data && Array.isArray(data)) {
+      const dbList: UserAccessRequest[] = data.map(item => ({
+        id: item.id,
+        nome: item.nome,
+        email: item.email,
+        telefone: item.telefone,
+        cargoSugerido: item.cargo_sugerido || item.cargoSugerido || 'Analista Sênior',
+        justificativa: item.justificativa || '',
+        solicitanteLogin: item.solicitante_login || item.solicitanteLogin || 'Colaborador',
+        solicitanteEmail: item.solicitante_email || item.solicitanteEmail || '',
+        status: item.status || 'PENDENTE',
+        created_at: item.created_at || new Date().toISOString(),
+        aprovadoPor: item.aprovado_por || item.aprovadoPor,
+        aprovadoEm: item.aprovado_em || item.aprovadoEm,
+        motivoRecusa: item.motivo_recusa || item.motivoRecusa
+      }));
+
+      // Combina com local garantindo sem perdas
+      const map = new Map<string, UserAccessRequest>();
+      for (const item of localList) map.set(item.id, item);
+      for (const item of dbList) map.set(item.id, item);
+      const combined = Array.from(map.values()).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      try {
+        localStorage.setItem('multiplan_user_access_requests', JSON.stringify(combined));
+      } catch (e) {}
+
+      return combined;
+    }
+  } catch (err) {
+    console.warn('Erro ao buscar solicitações do Supabase (usando local):', err);
+  }
+
+  return localList;
+}
+
+/**
+ * Atualiza o status de uma solicitação de acesso (Aprovada / Recusada)
+ */
+export async function updateUserAccessRequest(
+  id: string,
+  updates: Partial<UserAccessRequest>
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const raw = localStorage.getItem('multiplan_user_access_requests');
+    const list: UserAccessRequest[] = raw ? JSON.parse(raw) : [];
+    const updated = list.map(item => item.id === id ? { ...item, ...updates } : item);
+    localStorage.setItem('multiplan_user_access_requests', JSON.stringify(updated));
+  } catch (e) {}
+
+  try {
+    const payload: any = {};
+    if (updates.status) payload.status = updates.status;
+    if (updates.aprovadoPor) payload.aprovado_por = updates.aprovadoPor;
+    if (updates.aprovadoEm) payload.aprovado_em = updates.aprovadoEm;
+    if (updates.motivoRecusa) payload.motivo_recusa = updates.motivoRecusa;
+
+    await supabase.from('user_access_requests').update(payload).eq('id', id);
+  } catch (e) {}
+
+  return { success: true };
 }
 
 /**

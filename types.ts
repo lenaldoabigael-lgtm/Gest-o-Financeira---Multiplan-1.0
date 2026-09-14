@@ -35,6 +35,22 @@ export interface User {
   permissions: UserPermissions;
 }
 
+export interface UserAccessRequest {
+  id: string;
+  nome: string;
+  email: string;
+  telefone?: string;
+  cargoSugerido: string;
+  justificativa: string;
+  solicitanteLogin: string;
+  solicitanteEmail?: string;
+  status: 'PENDENTE' | 'APROVADO' | 'RECUSADO';
+  created_at: string;
+  aprovadoPor?: string;
+  aprovadoEm?: string;
+  motivoRecusa?: string;
+}
+
 export type TransactionType = 'PAGAR' | 'RECEBER';
 export type Status = 'PAGO' | 'PENDENTE' | 'RECEBIDO';
 
