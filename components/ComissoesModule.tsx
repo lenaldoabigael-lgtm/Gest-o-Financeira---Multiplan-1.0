@@ -275,7 +275,7 @@ function ComissoesView({ proposals, onUpdateProposal }: { proposals: Proposal[],
   };
 
   const toggleParcela = (proposal: Proposal, parcelaIndex: number) => {
-    const currentStatus = proposal.parcelas_status?.[parcelaIndex];
+    const currentStatus = proposal.parcelas_status?.[parcelaIndex] || (parcelaIndex === 1 && proposal.status === 'PAGO' ? 'PAGO' : 'PENDENTE');
     let newStatus: 'PENDENTE' | 'PAGO' = 'PAGO';
     if (currentStatus === 'PAGO') {
       newStatus = 'PENDENTE';
@@ -345,7 +345,7 @@ function ComissoesView({ proposals, onUpdateProposal }: { proposals: Proposal[],
                         )}
                       </TableCell>
                       {Array.from({ length: 20 }).map((_, i) => {
-                        const status = p.parcelas_status?.[i + 1] || 'PENDENTE';
+                        const status = p.parcelas_status?.[i + 1] || (i === 0 && p.status === 'PAGO' ? 'PAGO' : 'PENDENTE');
                         const isAdiantamento = i === 0;
                         const isPago = status === 'PAGO';
 

@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { PaymentLot, Proposal, ProposalRequirement, User } from '../types';
 import { LOGO_BASE64 } from '../src/logo';
-import { validateProposalForAdvance } from '../lib/validators';
+import { validateProposalForAdvance, isCartaoCorretora } from '../lib/validators';
+import { calculateProposalNetCommission, calculateLotTotalNet } from '../lib/lotCalculations';
 
 interface FinanceViewProps {
   lots: PaymentLot[];
@@ -50,7 +51,9 @@ const FinanceView: React.FC<FinanceViewProps> = ({
     )
   );
 
-  const pendingProposals = proposals.filter(p => p.status === 'ENVIADA AO FINANCEIRO' && !p.lote_id);
+  // Propostas de Cartão da Corretora são quitadas no cartão corporativo e não devem gerar repasse ao corretor via lote
+  const cardProposalsInFinance = proposals.filter(p => p.status === 'ENVIADA AO FINANCEIRO' && !p.lote_id && isCartaoCorretora(p));
+  const pendingProposals = proposals.filter(p => p.status === 'ENVIADA AO FINANCEIRO' && !p.lote_id && !isCartaoCorretora(p));
   const groupedProposals = pendingProposals.reduce((acc, p) => {
     if (!acc[p.corretor]) acc[p.corretor] = [];
     acc[p.corretor].push(p);
@@ -256,6 +259,45 @@ const FinanceView: React.FC<FinanceViewProps> = ({
 
       {activeSubTab === 'AGUARDANDO' && (
         <div className="space-y-4">
+          {cardProposalsInFinance.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 shadow-xs">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-credit-card text-base"></i>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-amber-900 tracking-wider">
+                      {cardProposalsInFinance.length} Proposta(s) Paga(s) no Cartão da Corretora
+                    </h4>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      Estas propostas foram quitadas no cartão corporativo e foram isoladas para evitar pagamento duplicado de repasse ao vendedor.
+                    </p>
+                  </div>
+                </div>
+                {onEditProposal && (
+                  <button
+                    onClick={() => {
+                      for (const cp of cardProposalsInFinance) {
+                        onEditProposal({
+                          ...cp,
+                          status: 'PAGO',
+                          parcelas_status: { ...(cp.parcelas_status || {}), 1: 'PAGO' },
+                          parcelas_valores: { ...(cp.parcelas_valores || {}), 1: cp.parcelas_valores?.[1] || Number(cp.valor) || Number(cp.comissao) || 0 }
+                        } as any);
+                      }
+                      setAlertMessage(`${cardProposalsInFinance.length} proposta(s) do cartão foram movidas diretamente para PAGO.`);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+                  >
+                    <i className="fa-solid fa-circle-check"></i>
+                    <span>Concluir Todas como PAGO</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {Object.keys(groupedProposals).length === 0 ? (
              <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-12 text-center">
                <i className="fa-solid fa-folder-open text-4xl text-slate-200 mb-3"></i>
@@ -264,7 +306,8 @@ const FinanceView: React.FC<FinanceViewProps> = ({
           ) : (
             Object.entries(groupedProposals).map(([corretor, propsUncached]) => {
               const props = propsUncached as Proposal[];
-              const totalCorretor = props.reduce((acc, p) => acc + Number(p.comissao || 0), 0);
+              const totalBruto = props.reduce((acc, p) => acc + Number(p.comissao || 0), 0);
+              const totalLiquido = calculateLotTotalNet(props, requirements);
               return (
                 <div key={corretor} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                   <div className="flex justify-between items-center mb-4">
@@ -274,8 +317,12 @@ const FinanceView: React.FC<FinanceViewProps> = ({
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Total Comissões</p>
-                        <p className="text-lg font-black text-emerald-600 leading-none">R$ {totalCorretor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Comissões (Bruto / Líquido Est.)</p>
+                        <div className="flex items-baseline gap-2 justify-end mt-1">
+                          <span className="text-xs font-semibold text-slate-500" title="Valor Bruto">R$ {totalBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          <span className="text-xs text-slate-300">/</span>
+                          <span className="text-lg font-black text-emerald-600" title="Valor Líquido com retenções">R$ {totalLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                        </div>
                       </div>
                       <button 
                         disabled={generatingBroker === corretor}
@@ -540,39 +587,9 @@ const FinanceView: React.FC<FinanceViewProps> = ({
                             let totalDescontos = 0;
 
                             const rowsHtml = lotProposals.map(p => {
-                              const comissaoBase = Number(p.comissao || 0);
-                              const tipoPlano = (p.detalhes?.proposta?.tipoPlano || "").toUpperCase();
-                              const corretor = p.corretor.toUpperCase();
-                              const operadora = p.operadora.toUpperCase();
-
-                              const pctStr = impostos.find(r => {
-                                const parts = r.nome.split(" - ");
-                                if (parts.length === 4) {
-                                  const [c, op, tp] = parts;
-                                  const matchCorretor = c === corretor || c === "TODOS" || c === "TODOS OS CORRETORES";
-                                  const matchOperadora = op === operadora || op === "TODAS" || op === "TODAS AS OPERADORAS";
-                                  const matchTipoPlano = tp === tipoPlano || tp === "TODOS OS TIPOS" || tp === "TODOS";
-                                  return matchCorretor && matchOperadora && matchTipoPlano;
-                                } else if (parts.length >= 3) {
-                                  const [c, op] = parts;
-                                  const matchCorretor = c === corretor || c === "TODOS" || c === "TODOS OS CORRETORES";
-                                  const matchOperadora = op === operadora || op === "TODAS" || op === "TODAS AS OPERADORAS";
-                                  return matchCorretor && matchOperadora;
-                                }
-                                return false;
-                              });
-
-                              let txPercentual = 0;
-                              if (pctStr) {
-                                const parts = pctStr.nome.split(" - ");
-                                txPercentual = parseFloat(parts[parts.length - 1]) || 0;
-                              }
-
-                              const desconto = Number((comissaoBase * (txPercentual / 100)).toFixed(2));
-                              const liquido = comissaoBase - desconto;
-
-                              totalComissoes += comissaoBase;
-                              totalDescontos += desconto;
+                              const calc = calculateProposalNetCommission(p, requirements);
+                              totalComissoes += calc.comissaoBase;
+                              totalDescontos += calc.desconto;
 
                               return `
                                 <tr>
@@ -581,9 +598,9 @@ const FinanceView: React.FC<FinanceViewProps> = ({
                                   <td class="col-cliente">${p.cliente || '-'}</td>
                                   <td class="col-operadora">${p.operadora || '-'}</td>
                                   <td class="col-plano">${p.detalhes?.proposta?.tipoPlano || '-'}</td>
-                                  <td class="col-valor text-right">R$ ${comissaoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                                  <td class="col-desconto text-right text-red-500">-${txPercentual.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}% (R$ ${desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</td>
-                                  <td class="col-liquido text-right text-emerald">R$ ${liquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td class="col-valor text-right">R$ ${calc.comissaoBase.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td class="col-desconto text-right text-red-500">-${calc.txPercentual.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}% (R$ ${calc.desconto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</td>
+                                  <td class="col-liquido text-right text-emerald">R$ ${calc.liquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                                 </tr>
                               `;
                             }).join('');

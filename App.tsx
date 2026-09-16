@@ -20,6 +20,8 @@ import { RhModule } from './components/rh/RhModule';
 import { NotificacoesConfigModule } from './components/configuracoes/NotificacoesConfigModule';
 import { ModalSolicitarAcesso } from './components/ModalSolicitarAcesso';
 import { supabase } from './lib/supabase';
+import { calculateLotTotalNet, calculateProposalNetCommission } from './lib/lotCalculations';
+import { isCartaoCorretora } from './lib/validators';
 
 const DEFAULT_USERS: User[] = [
   {
@@ -1359,17 +1361,71 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             proposals={proposals} 
             requirements={proposalRequirements}
             onStatusChange={async (id, novoStatus) => {
-              if (novoStatus === 'ENVIADA AO FINANCEIRO') {
-                const p = proposals.find(p => p.id === id);
+              const p = proposals.find(prop => prop.id === id);
+              
+              // Se for cartão da corretora e a tentativa for de enviar ao financeiro, força transição direta para PAGO
+              let targetStatus = novoStatus;
+              if (p && isCartaoCorretora(p) && novoStatus === 'ENVIADA AO FINANCEIRO') {
+                targetStatus = 'PAGO';
+              }
+
+              if (targetStatus === 'ENVIADA AO FINANCEIRO') {
                 if (p && (!p.vidas || p.vidas === 0)) {
                   alert('Não é possível enviar propostas com 0 vidas para o financeiro.');
                   return;
                 }
               }
-              const { error } = await supabase.from('proposals').update({ status: novoStatus }).eq('id', id);
+
+              const isMovingToPago = targetStatus === 'PAGO';
+              const isCartao = p ? isCartaoCorretora(p) : false;
+
+              const updatePayload: any = {
+                status: targetStatus
+              };
+
+              if (isMovingToPago && p) {
+                // Atualiza 1ª parcela como PAGO
+                updatePayload.parcelas_status = {
+                  ...(p.parcelas_status || {}),
+                  1: 'PAGO'
+                };
+                updatePayload.parcelas_valores = {
+                  ...(p.parcelas_valores || {}),
+                  1: p.parcelas_valores?.[1] || Number(p.valor) || Number(p.comissao) || 0
+                };
+                updatePayload.detalhes = {
+                  ...(p.detalhes || {}),
+                  historico: [
+                    ...(p.detalhes?.historico || []),
+                    {
+                      id: Math.random().toString(36).substr(2, 9),
+                      data: new Date().toISOString(),
+                      responsavel: user?.login || 'Sistema',
+                      observacao: isCartao 
+                        ? 'Quitado no Cartão de Crédito da Corretora - Concluído diretamente como PAGO.'
+                        : 'Pagamento confirmado e marcado como PAGO.'
+                    }
+                  ]
+                };
+              } else if (targetStatus === 'ENVIADA AO FINANCEIRO' && p) {
+                updatePayload.detalhes = {
+                  ...(p.detalhes || {}),
+                  historico: [
+                    ...(p.detalhes?.historico || []),
+                    {
+                      id: Math.random().toString(36).substr(2, 9),
+                      data: new Date().toISOString(),
+                      responsavel: user?.login || 'Sistema',
+                      observacao: 'Enviada ao Financeiro para fechamento de lote.'
+                    }
+                  ]
+                };
+              }
+
+              const { error } = await supabase.from('proposals').update(updatePayload).eq('id', id);
               if (error) {
                 console.error('Erro ao atualizar status:', error);
-                alert('Erro ao atualizar status da proposta.');
+                alert('Erro ao atualizar status da proposta: ' + (error.message || ''));
               } else {
                 fetchData();
               }
@@ -1409,7 +1465,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               alert(`Proposta ${prop.contrato || ''} devolvida com sucesso para o status CADASTRADA.`);
             }}
             onGenerateLot={async (corretor, ids) => {
-              // 1. Validação de segurança: garantir que nenhuma proposta já pertença a outro lote
+              // 1. Validação de segurança: garantir que nenhuma proposta já pertença a outro lote ou esteja paga
               const selectedProposals = proposals.filter(p => ids.includes(p.id));
               const alreadyInLot = selectedProposals.filter(p => p.lote_id || p.status === 'PAGO');
               if (alreadyInLot.length > 0) {
@@ -1418,39 +1474,8 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                 return;
               }
               
-              const impostos = proposalRequirements.filter(r => r.tipo === 'IMPOSTO_CORRETOR');
-              const totalValue = selectedProposals.reduce((acc, p) => {
-                const comissaoBase = Number(p.comissao || 0);
-                const corretor = p.corretor.toUpperCase();
-                const operadora = p.operadora.toUpperCase();
-                const tipoPlano = (p.detalhes?.proposta?.tipoPlano || '').toUpperCase();
-                
-                const baseSearch = [
-                  `${corretor} - ${operadora}`,
-                  `TODOS - ${operadora}`,
-                  `${corretor} - TODAS`,
-                  `TODOS - TODAS`
-                ];
-                
-                let pctStr;
-                for (const base of baseSearch) {
-                  pctStr = impostos.find(r => r.nome.startsWith(`${base} - ${tipoPlano} - `)) ||
-                           impostos.find(r => r.nome.startsWith(`${base} - TODOS OS TIPOS - `)) ||
-                           impostos.find(r => r.nome.startsWith(`${base} - TODOS - `)) ||
-                           impostos.find(r => r.nome.split(' - ').length === 3 && r.nome.startsWith(`${base} - `));
-                  if (pctStr) break;
-                }
-                
-                let txPercentual = 0;
-                if (pctStr) {
-                  const parts = pctStr.nome.split(' - ');
-                  txPercentual = parseFloat(parts[parts.length - 1]) || 0;
-                }
-
-                const desconto = Number((comissaoBase * (txPercentual / 100)).toFixed(2));
-                const liquido = comissaoBase - desconto;
-                return acc + liquido;
-              }, 0);
+              // 2. Cálculo preciso com alíquotas de imposto / retenção da corretora centralizado
+              const totalValue = calculateLotTotalNet(selectedProposals, proposalRequirements);
 
               const code = `LOTE-${corretor.replace(/[^A-Z0-9]/ig, '').substring(0, 5).toUpperCase()}-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`;
               
@@ -1464,23 +1489,29 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                 status: 'PENDENTE'
               };
 
+              // 3. Inserção do lote no Supabase com padrão atômico e compensação/rollback
               const { data: lotData, error: lotError } = await supabase.from('payment_lots').insert([newLot]).select();
               
-              if (lotError) {
+              if (lotError || !lotData || lotData.length === 0) {
                 console.error('Erro ao criar lote:', lotError);
                 alert('Erro ao criar lote de pagamento. Verifique o console.');
                 return;
-              } else if (lotData && lotData.length > 0) {
-                const createdLotId = lotData[0].id;
-                const { error: propError } = await supabase.from('proposals').update({ lote_id: createdLotId }).in('id', ids);
-                
-                if (propError) {
-                  console.error('Erro ao atualizar propostas:', propError);
-                  alert('Erro ao vincular propostas ao lote. Verifique o console.');
-                } else {
-                  await fetchData();
-                  alert(`Lote gerado para ${corretor}: ${code}`);
-                }
+              }
+
+              const createdLotId = lotData[0].id;
+
+              // 4. Vinculação das propostas ao lote gerado
+              const { error: propError } = await supabase.from('proposals').update({ lote_id: createdLotId }).in('id', ids);
+              
+              if (propError) {
+                console.error('Erro ao vincular propostas ao lote. Executando rollback/compensação imediata:', propError);
+                // Rollback automático: exclui o lote órfão criado para manter integridade relacional
+                await supabase.from('payment_lots').delete().eq('id', createdLotId);
+                alert('Erro ao vincular propostas ao lote. A operação foi cancelada automaticamente para evitar inconsistências no banco.');
+                await fetchData();
+              } else {
+                await fetchData();
+                alert(`Lote ${code} gerado com sucesso para ${corretor} no valor líquido de R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}!`);
               }
             }}
             onReturnProposal={async (proposalId, lotId) => {
@@ -1488,60 +1519,113 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               const lot = paymentLots.find(l => l.id === lotId);
               if (!prop || !lot) return;
 
+              // 1. Desvincula a proposta e retorna ao status CADASTRADA
               const { error: propError } = await supabase.from('proposals').update({ status: 'CADASTRADA', lote_id: null }).eq('id', proposalId);
               if (propError) {
+                 console.error('Erro ao devolver proposta:', propError);
                  alert('Erro ao devolver proposta. Verifique o console.');
                  return;
               }
 
+              // 2. Recalcula o lote com as propostas restantes aplicando deduções de imposto idênticas
               const remainingProposals = proposals.filter(p => p.lote_id === lotId && p.id !== proposalId);
               if (remainingProposals.length === 0) {
                  await supabase.from('payment_lots').delete().eq('id', lotId);
               } else {
-                 const newTotal = remainingProposals.reduce((a, b) => a + Number(b.comissao), 0);
-                 await supabase.from('payment_lots').update({ qtdPropostas: remainingProposals.length, valorTotal: newTotal }).eq('id', lotId);
+                 const newTotal = calculateLotTotalNet(remainingProposals, proposalRequirements);
+                 await supabase.from('payment_lots').update({ 
+                   qtdPropostas: remainingProposals.length, 
+                   valorTotal: newTotal 
+                 }).eq('id', lotId);
               }
 
               await fetchData();
-              alert(`Proposta ${prop.contrato || ''} devolvida com sucesso para status Cadastrada.`);
+              alert(`Proposta ${prop.contrato || ''} devolvida com sucesso para status CADASTRADA.`);
             }}
             onPay={async (id) => {
               const lot = paymentLots.find(l => l.id === id);
-              const { error } = await supabase.from('payment_lots').update({ 
+              if (!lot) return;
+
+              const lotProps = proposals.filter(p => p.lote_id === id);
+
+              // 1. Atualiza o lote para PAGO
+              const { error: lotError } = await supabase.from('payment_lots').update({ 
                 status: 'PAGO', 
                 aprovadoPor: user?.login || 'Sistema', 
                 dataAprovacao: new Date().toISOString() 
               }).eq('id', id);
-              if (error) {
-                console.error('Erro ao pagar lote:', error);
-                alert('Erro ao pagar lote. Verifique o console.');
-              } else {
-                // Atualiza as propostas vinculadas ao lote para PAGO
-                const { error: propError } = await supabase.from('proposals').update({ status: 'PAGO' }).eq('lote_id', id);
-                if (propError) {
-                  console.error('Erro ao atualizar status das propostas para PAGO:', propError);
-                  alert('Aviso: Lote pago, mas houve erro ao atualizar as propostas vinculadas.');
-                }
-                
-                // Gerar transação automática em Contas a Pagar
-                if (lot) {
-                  const newTransaction = {
-                    type: 'PAGAR',
-                    vencimento: lot.vencimento,
-                    pagamento: new Date().toISOString().split('T')[0],
-                    descricao: `PAGAMENTO COMISSÃO - ${lot.codigo}`,
-                    valor: lot.valorTotal,
-                    formaPagamento: 'PIX',
-                    status: 'PAGO',
-                    centroCusto: 'COMISSÕES',
-                    subItem: 'CORRETORES',
-                    conta: 'CAIXA'
-                  };
-                  await supabase.from('transactions').insert(newTransaction);
-                }
-                
-                fetchData();
+
+              if (lotError) {
+                console.error('Erro ao pagar lote:', lotError);
+                alert('Erro ao processar liquidação do lote. Operação interrompida.');
+                return;
               }
+
+              // 2. Atualiza as propostas vinculadas para PAGO e sincroniza automaticamente a 1ª Parcela (Adiantamento)
+              try {
+                const updatePromises = lotProps.map(p => {
+                  const updatedParcelasStatus = {
+                    ...(p.parcelas_status || {}),
+                    1: 'PAGO'
+                  };
+                  const updatedParcelasValores = {
+                    ...(p.parcelas_valores || {}),
+                    1: p.parcelas_valores?.[1] || Number(p.valor) || Number(p.comissao) || 0
+                  };
+
+                  const updatedHistorico = [
+                    ...(p.detalhes?.historico || []),
+                    {
+                      id: Math.random().toString(36).substr(2, 9),
+                      data: new Date().toISOString(),
+                      responsavel: user?.login || 'Sistema',
+                      observacao: `Adiantamento/1ª Parcela liquidada via Lote ${lot.codigo}.`
+                    }
+                  ];
+
+                  const updatedDetalhes = {
+                    ...(p.detalhes || {}),
+                    historico: updatedHistorico
+                  };
+
+                  return supabase.from('proposals').update({
+                    status: 'PAGO',
+                    parcelas_status: updatedParcelasStatus,
+                    parcelas_valores: updatedParcelasValores,
+                    detalhes: updatedDetalhes
+                  }).eq('id', p.id);
+                });
+
+                const results = await Promise.all(updatePromises);
+                const hasError = results.some(r => r.error);
+                if (hasError) {
+                  console.warn('Aviso: Algumas propostas tiveram pendência ao salvar histórico ou parcelas.');
+                }
+              } catch (err) {
+                console.error('Erro ao sincronizar parcelas das propostas no pagamento:', err);
+              }
+
+              // 3. Gerar transação automática em Contas a Pagar com idêntica descrição
+              try {
+                const newTransaction = {
+                  type: 'PAGAR',
+                  vencimento: lot.vencimento,
+                  pagamento: new Date().toISOString().split('T')[0],
+                  descricao: `PAGAMENTO COMISSÃO - ${lot.codigo}`,
+                  valor: lot.valorTotal,
+                  formaPagamento: 'PIX',
+                  status: 'PAGO',
+                  centroCusto: 'COMISSÕES',
+                  subItem: 'CORRETORES',
+                  conta: 'CAIXA'
+                };
+                await supabase.from('transactions').insert(newTransaction);
+              } catch (err) {
+                console.warn('Erro ao registrar lançamento em contas a pagar:', err);
+              }
+
+              await fetchData();
+              alert(`Lote ${lot.codigo} liquidado com sucesso! A 1ª Parcela das propostas foi atualizada para PAGO.`);
             }}
             onReverseLot={async (lotId) => {
               const lot = paymentLots.find(l => l.id === lotId);
@@ -1586,7 +1670,24 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             }}
           />
         )}
-        {activeTab === Tab.COMISSOES && user.permissions.comissoes && <ComissoesModule proposals={proposals} onUpdateProposal={(updated: Proposal) => setProposals(proposals.map(p => p.id === updated.id ? updated : p))} requirements={proposalRequirements} />}
+        {activeTab === Tab.COMISSOES && user.permissions.comissoes && (
+          <ComissoesModule 
+            proposals={proposals} 
+            onUpdateProposal={async (updated: Proposal) => {
+              setProposals(prev => prev.map(p => p.id === updated.id ? updated : p));
+              try {
+                await supabase.from('proposals').update({
+                  parcelas_status: updated.parcelas_status,
+                  parcelas_valores: updated.parcelas_valores,
+                  parcelas_repassadas: updated.parcelas_repassadas
+                }).eq('id', updated.id);
+              } catch (err) {
+                console.error('Erro ao sincronizar atualização de comissões/parcelas no Supabase:', err);
+              }
+            }} 
+            requirements={proposalRequirements} 
+          />
+        )}
         {activeTab === Tab.ESTRUTURA_PROPOSTA && user.permissions.estruturaProposta && (
           <ProposalStructureView 
             requirements={proposalRequirements}

@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { Proposal, ProposalRequirement } from '../types';
 import * as XLSX from 'xlsx';
 import { RevisaoImportacaoModal } from './RevisaoImportacaoModal';
-import { validateProposalForAdvance, validateCpfCnpj } from '../lib/validators';
+import { validateProposalForAdvance, validateCpfCnpj, isCartaoCorretora } from '../lib/validators';
 import { parseBrlMoney, formatBrlCurrency, formatBrl } from '../lib/currency';
 
 interface ProposalsViewProps {
@@ -1055,7 +1055,23 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                 <div className="px-2 py-1 mx-2 flex gap-1 bg-emerald-50 rounded-lg">
                   <button
                     onClick={() => {
-                      onEditProposal({ ...activeDropdown.proposal, status: 'ENVIADA AO FINANCEIRO' } as any);
+                      const isCartao = isCartaoCorretora(activeDropdown.proposal);
+                      const targetStatus = isCartao ? 'PAGO' : 'ENVIADA AO FINANCEIRO';
+                      const updated = {
+                        ...activeDropdown.proposal,
+                        status: targetStatus,
+                        ...(isCartao ? {
+                          parcelas_status: {
+                            ...(activeDropdown.proposal.parcelas_status || {}),
+                            1: 'PAGO'
+                          },
+                          parcelas_valores: {
+                            ...(activeDropdown.proposal.parcelas_valores || {}),
+                            1: activeDropdown.proposal.parcelas_valores?.[1] || Number(activeDropdown.proposal.valor) || Number(activeDropdown.proposal.comissao) || 0
+                          }
+                        } : {})
+                      };
+                      onEditProposal(updated as any);
                       setConfirmingSendId(null);
                       setActiveDropdown(null);
                     }}
@@ -1074,17 +1090,22 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
+                    const isCartao = isCartaoCorretora(activeDropdown.proposal);
                     const val = validateProposalForAdvance(activeDropdown.proposal);
                     if (!val.isValid) {
-                      setAlertMessage(`Não é possível enviar a proposta para o financeiro devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nEdite a proposta e corrija os dados antes de prosseguir.`);
+                      setAlertMessage(`Não é possível ${isCartao ? 'concluir a proposta' : 'enviar a proposta para o financeiro'} devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nEdite a proposta e corrija os dados antes de prosseguir.`);
                       return;
                     }
                     setConfirmingSendId(activeDropdown.proposal.id);
                   }}
                   className="w-full text-left px-3.5 py-2 text-xs font-semibold text-emerald-600 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-sm">send</span>
-                  <span>Enviar ao Financeiro</span>
+                  <span className="material-symbols-outlined text-sm">
+                    {isCartaoCorretora(activeDropdown.proposal) ? 'check_circle' : 'send'}
+                  </span>
+                  <span>
+                    {isCartaoCorretora(activeDropdown.proposal) ? 'Concluir (Pago no Cartão)' : 'Enviar ao Financeiro'}
+                  </span>
                 </button>
               )
             )}

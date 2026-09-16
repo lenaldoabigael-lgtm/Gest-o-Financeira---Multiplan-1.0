@@ -44,14 +44,24 @@ export function validateCpfCnpj(doc: string): boolean {
 
 export function isCartaoCorretora(p: any): boolean {
   if (!p) return false;
+  const categoria = (p.categoria || '').toLowerCase();
+  const tipoPagamento = (p.detalhes?.proposta?.tipoPagamento || p.detalhes?.tipoPagamento || p.formaPagamento || '').toLowerCase();
+  const obs = (p.observacao || p.detalhes?.proposta?.observacao || '').toLowerCase();
+
   return Boolean(
     p.detalhes?.proposta?.pagamentoCartao === true ||
+    p.detalhes?.proposta?.pagamentoCartao === 'true' ||
     p.detalhes?.pagamentoCartao === true ||
+    p.detalhes?.pagamentoCartao === 'true' ||
     p.pagamentoCartao === true ||
-    (p.categoria && p.categoria.toLowerCase().includes('cartão')) ||
-    (p.categoria && p.categoria.toLowerCase().includes('cartao')) ||
-    p.categoria === 'Cartão Corretora' ||
-    (p.detalhes?.proposta?.tipoPagamento && p.detalhes.proposta.tipoPagamento.toLowerCase().includes('cart'))
+    p.pagamentoCartao === 'true' ||
+    categoria.includes('cartão') ||
+    categoria.includes('cartao') ||
+    tipoPagamento.includes('cart') ||
+    obs.includes('cartão da corretora') ||
+    obs.includes('cartao da corretora') ||
+    obs.includes('cartão corretora') ||
+    obs.includes('cartao corretora')
   );
 }
 

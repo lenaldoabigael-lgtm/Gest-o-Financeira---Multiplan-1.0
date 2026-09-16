@@ -498,18 +498,38 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                                 const val = validateProposalForAdvance(p);
                                 if (!val.isValid) {
                                   setAlertMessage(
-                                    `Não é possível enviar a proposta para o financeiro devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nPor favor, edite a proposta e corrija os dados antes de avançar.`
+                                    `Não é possível ${checkIsPagoCartao(p) ? 'concluir a proposta' : 'enviar a proposta para o financeiro'} devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nPor favor, edite a proposta e corrija os dados antes de avançar.`
                                   );
                                   return;
                                 }
-                                onStatusChange(p.id, 'ENVIADA AO FINANCEIRO');
+                                if (checkIsPagoCartao(p)) {
+                                  onStatusChange(p.id, 'PAGO');
+                                } else {
+                                  onStatusChange(p.id, 'ENVIADA AO FINANCEIRO');
+                                }
                               }}
-                              className="w-full bg-[#e85d04] hover:bg-[#cf5304] text-white text-[10px] font-bold py-1.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
+                              className={`w-full text-white text-[10px] font-bold py-1.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer ${
+                                checkIsPagoCartao(p)
+                                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                                  : 'bg-[#e85d04] hover:bg-[#cf5304]'
+                              }`}
+                              title={checkIsPagoCartao(p) ? 'Proposta paga no Cartão da Corretora - Concluir direto como PAGO' : 'Enviar proposta ao financeiro para fechamento'}
                             >
-                              <span>Enviar p/ Financeiro</span>
-                              <span className="material-symbols-outlined text-[14px]">
-                                arrow_forward
-                              </span>
+                              {checkIsPagoCartao(p) ? (
+                                <>
+                                  <span className="material-symbols-outlined text-[14px]">
+                                    check_circle
+                                  </span>
+                                  <span>Concluir (Pago no Cartão)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>Enviar p/ Financeiro</span>
+                                  <span className="material-symbols-outlined text-[14px]">
+                                    arrow_forward
+                                  </span>
+                                </>
+                              )}
                             </button>
                           )}
 
