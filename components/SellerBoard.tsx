@@ -370,10 +370,20 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                           </div>
                         </div>
 
-                        {/* Client Name */}
-                        <h3 className="text-xs sm:text-[13px] font-bold text-slate-900 mb-2.5 uppercase tracking-tight line-clamp-1">
-                          {p.cliente || 'CLIENTE SEM NOME'}
-                        </h3>
+                        {/* Client Name & CPF/CNPJ */}
+                        <div className="mb-2.5">
+                          <h3 className="text-xs sm:text-[13px] font-bold text-slate-900 uppercase tracking-tight line-clamp-1">
+                            {p.cliente || 'CLIENTE SEM NOME'}
+                          </h3>
+                          <div className="text-[11px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider font-sans">
+                              {(p.cpfCnpj || '').replace(/\D/g, '').length > 11 ? 'CNPJ:' : 'CPF:'}
+                            </span>
+                            <span className="font-semibold text-slate-600">
+                              {p.cpfCnpj && p.cpfCnpj.trim() !== '' ? p.cpfCnpj : 'Não informado'}
+                            </span>
+                          </div>
+                        </div>
 
                         {/* Badges / Tags Row */}
                         <div className="flex flex-wrap items-center gap-1.5 mb-3">
@@ -384,13 +394,6 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                                 credit_card
                               </span>
                               <span>Pago no Cartão</span>
-                            </span>
-                          )}
-
-                          {/* Tipo do Plano Tag */}
-                          {planType && (
-                            <span className="bg-sky-50/80 border border-sky-200/70 text-sky-800 text-[10px] font-semibold px-2 py-0.5 rounded-md uppercase">
-                              {planType}
                             </span>
                           )}
 
@@ -534,25 +537,34 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                           )}
 
                           {p.status === 'ENVIADA AO FINANCEIRO' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const val = validateProposalForAdvance(p);
-                                if (!val.isValid) {
-                                  setAlertMessage(
-                                    `Não é possível confirmar o pagamento da proposta devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nPor favor, edite a proposta e corrija os dados antes de prosseguir.`
-                                  );
-                                  return;
-                                }
-                                onStatusChange(p.id, 'PAGO');
-                              }}
-                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
-                            >
-                              <span className="material-symbols-outlined text-[14px]">
-                                check_circle
-                              </span>
-                              <span>Confirmar Pagamento</span>
-                            </button>
+                            checkIsPagoCartao(p) ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const val = validateProposalForAdvance(p);
+                                  if (!val.isValid) {
+                                    setAlertMessage(
+                                      `Não é possível confirmar a proposta devido às seguintes pendências:\n\n• ${val.errors.join('\n• ')}\n\nPor favor, edite a proposta e corrija os dados antes de prosseguir.`
+                                    );
+                                    return;
+                                  }
+                                  onStatusChange(p.id, 'PAGO');
+                                }}
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold py-1.5 rounded-lg uppercase tracking-wider transition-all flex items-center justify-center gap-1 shadow-2xs active:scale-95 cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">
+                                  check_circle
+                                </span>
+                                <span>Concluir (Cartão)</span>
+                              </button>
+                            ) : (
+                              <div className="w-full bg-amber-50 border border-amber-200/80 text-amber-800 text-[10px] font-bold py-1.5 px-2 rounded-lg text-center flex items-center justify-center gap-1 shadow-2xs">
+                                <span className="material-symbols-outlined text-[14px] text-amber-600">
+                                  account_balance
+                                </span>
+                                <span>Aguardando Lote no Financeiro</span>
+                              </div>
+                            )
                           )}
 
                           {p.status === 'PAGO' && (
