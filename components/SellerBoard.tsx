@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Proposal, ProposalRequirement } from '../types';
+import { PaymentLot, Proposal, ProposalRequirement } from '../types';
 import { validateProposalForAdvance, validateCpfCnpj } from '../lib/validators';
 import { formatBrlCurrency } from '../lib/currency';
 
 interface SellerBoardProps {
   proposals: Proposal[];
   requirements: ProposalRequirement[];
+  lots?: PaymentLot[];
   onStatusChange: (id: string, novoStatus: 'CADASTRADA' | 'ENVIADA AO FINANCEIRO' | 'PAGO') => void;
 }
 
@@ -83,6 +84,7 @@ export function getDiasParaPagamento(
 export const SellerBoard: React.FC<SellerBoardProps> = ({
   proposals = [],
   requirements = [],
+  lots = [],
   onStatusChange
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -558,12 +560,30 @@ export const SellerBoard: React.FC<SellerBoardProps> = ({
                                 <span>Concluir (Cartão)</span>
                               </button>
                             ) : (
-                              <div className="w-full bg-amber-50 border border-amber-200/80 text-amber-800 text-[10px] font-bold py-1.5 px-2 rounded-lg text-center flex items-center justify-center gap-1 shadow-2xs">
-                                <span className="material-symbols-outlined text-[14px] text-amber-600">
-                                  account_balance
-                                </span>
-                                <span>Aguardando Lote no Financeiro</span>
-                              </div>
+                              (() => {
+                                const activeLot = (lots || []).find(l => String(l.id).trim() === String(p.lote_id || '').trim());
+                                if (activeLot) {
+                                  return (
+                                    <div 
+                                      className="w-full bg-blue-50 border border-blue-200/80 text-blue-800 text-[10px] font-bold py-1.5 px-2 rounded-lg text-center flex items-center justify-center gap-1 shadow-2xs"
+                                      title={`Proposta vinculada ao Lote ${activeLot.codigo} (${activeLot.status})`}
+                                    >
+                                      <span className="material-symbols-outlined text-[14px] text-blue-600">
+                                        inventory_2
+                                      </span>
+                                      <span className="truncate">Lote: {activeLot.codigo}</span>
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <div className="w-full bg-amber-50 border border-amber-200/80 text-amber-800 text-[10px] font-bold py-1.5 px-2 rounded-lg text-center flex items-center justify-center gap-1 shadow-2xs">
+                                    <span className="material-symbols-outlined text-[14px] text-amber-600">
+                                      account_balance
+                                    </span>
+                                    <span>Aguardando Lote no Financeiro</span>
+                                  </div>
+                                );
+                              })()
                             )
                           )}
 

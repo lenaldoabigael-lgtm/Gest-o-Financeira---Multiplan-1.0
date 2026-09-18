@@ -2,6 +2,7 @@
 import React from 'react';
 import { User, Tab } from '../types';
 import { MultiplanLogo } from './MultiplanLogo';
+import { useDeviceDetect } from '../lib/useDeviceDetect';
 
 interface LayoutProps {
   user: User;
@@ -14,6 +15,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout, onOpenCorretorPortal, onOpenSolicitarAcesso, children }) => {
+  const device = useDeviceDetect();
   const menuGroups = [
     {
       id: 'dashboard',
@@ -179,9 +181,24 @@ const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout
               </button>
             )}
 
-            <div className="text-right">
-              <p className="text-[9px] font-black text-blue-900/40 uppercase leading-none">Acesso</p>
-              <p className="text-sm font-bold text-blue-900">{user.login}</p>
+            <div className="text-right flex flex-col items-end">
+              <div className="flex items-center gap-1.5">
+                <span 
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                    device.isDesktop 
+                      ? 'bg-slate-100 text-slate-700 border border-slate-200' 
+                      : device.isTablet
+                      ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  }`}
+                  title={`Dispositivo: ${device.deviceLabel} | Navegador: ${device.browser} | Resolução: ${device.viewportWidth}x${device.viewportHeight}${device.hasTouch ? ' | Touch Habilitado' : ''}`}
+                >
+                  <i className={`fa-solid ${device.isDesktop ? 'fa-laptop' : device.isTablet ? 'fa-tablet-screen-button' : 'fa-mobile-screen'}`}></i>
+                  <span>{device.deviceType === 'DESKTOP' ? 'PC' : device.deviceType === 'TABLET' ? 'Tablet' : 'Mobile'}</span>
+                </span>
+                <p className="text-[9px] font-black text-blue-900/40 uppercase leading-none">Acesso</p>
+              </div>
+              <p className="text-sm font-bold text-blue-900 leading-tight">{user.login}</p>
             </div>
             <button
               onClick={onLogout}

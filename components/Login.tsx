@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { MultiplanLogo } from './MultiplanLogo';
+import { useDeviceDetect } from '../lib/useDeviceDetect';
 
 interface LoginProps {
   onLogin: (emailOrLogin: string, pass: string) => Promise<boolean>;
@@ -9,6 +10,7 @@ interface LoginProps {
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
+  const device = useDeviceDetect();
   const [identifier, setIdentifier] = useState('');
   const [senha, setSenha] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -131,6 +133,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, error }) => {
           <p className="text-[11px] text-slate-400 font-medium leading-relaxed mt-1">
             Novos acessos são criados internamente pela equipe e liberados pelo Administrador.
           </p>
+          <div className="mt-3 pt-2.5 border-t border-slate-50 flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-medium">
+            <i className={`fa-solid ${device.isDesktop ? 'fa-laptop' : device.isTablet ? 'fa-tablet-screen-button' : 'fa-mobile-screen'} text-slate-400`}></i>
+            <span>Dispositivo detectado: <strong className="text-slate-600 font-semibold">{device.deviceLabel}</strong> ({device.browser})</span>
+          </div>
         </div>
       </div>
     </div>

@@ -1057,19 +1057,27 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
                     onClick={() => {
                       const isCartao = isCartaoCorretora(activeDropdown.proposal);
                       const targetStatus = isCartao ? 'PAGO' : 'ENVIADA AO FINANCEIRO';
+                      const updatedParcelasStatus = isCartao ? {
+                        ...(activeDropdown.proposal.detalhes?.parcelas_status || activeDropdown.proposal.parcelas_status || {}),
+                        1: 'PAGO'
+                      } : activeDropdown.proposal.parcelas_status;
+                      const updatedParcelasValores = isCartao ? {
+                        ...(activeDropdown.proposal.detalhes?.parcelas_valores || activeDropdown.proposal.parcelas_valores || {}),
+                        1: activeDropdown.proposal.parcelas_valores?.[1] || activeDropdown.proposal.detalhes?.parcelas_valores?.[1] || Number(activeDropdown.proposal.valor) || Number(activeDropdown.proposal.comissao) || 0
+                      } : activeDropdown.proposal.parcelas_valores;
+
                       const updated = {
                         ...activeDropdown.proposal,
                         status: targetStatus,
-                        ...(isCartao ? {
-                          parcelas_status: {
-                            ...(activeDropdown.proposal.parcelas_status || {}),
-                            1: 'PAGO'
-                          },
-                          parcelas_valores: {
-                            ...(activeDropdown.proposal.parcelas_valores || {}),
-                            1: activeDropdown.proposal.parcelas_valores?.[1] || Number(activeDropdown.proposal.valor) || Number(activeDropdown.proposal.comissao) || 0
-                          }
-                        } : {})
+                        parcelas_status: updatedParcelasStatus,
+                        parcelas_valores: updatedParcelasValores,
+                        detalhes: {
+                          ...(activeDropdown.proposal.detalhes || {}),
+                          ...(isCartao ? {
+                            parcelas_status: updatedParcelasStatus,
+                            parcelas_valores: updatedParcelasValores
+                          } : {})
+                        }
                       };
                       onEditProposal(updated as any);
                       setConfirmingSendId(null);

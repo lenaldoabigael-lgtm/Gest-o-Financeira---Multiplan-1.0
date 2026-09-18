@@ -16,6 +16,8 @@ interface FinanceViewProps {
   onReturnPendingProposal?: (proposalId: string) => Promise<void> | void;
   onEditProposal?: (proposal: Proposal) => void;
   onReverseLot?: (lotId: string) => Promise<void> | void;
+  onUnlinkProposal?: (proposalId: string) => Promise<void> | void;
+  onUnlinkAllProposalsFromLot?: (lotId: string) => Promise<void> | void;
 }
 
 const FinanceView: React.FC<FinanceViewProps> = ({ 
@@ -28,9 +30,11 @@ const FinanceView: React.FC<FinanceViewProps> = ({
   onReturnProposal, 
   onReturnPendingProposal,
   onEditProposal,
-  onReverseLot 
+  onReverseLot,
+  onUnlinkProposal,
+  onUnlinkAllProposalsFromLot
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'LOTES' | 'AGUARDANDO'>('AGUARDANDO');
+  const [activeSubTab, setActiveSubTab] = useState<'LOTES' | 'AGUARDANDO' | 'TODAS_FINANCEIRO'>('AGUARDANDO');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [dateFilter, setDateFilter] = useState('Todos');
@@ -51,12 +55,49 @@ const FinanceView: React.FC<FinanceViewProps> = ({
     )
   );
 
-  // Propostas de Cartão da Corretora são quitadas no cartão corporativo e não devem gerar repasse ao corretor via lote
-  const cardProposalsInFinance = proposals.filter(p => p.status === 'ENVIADA AO FINANCEIRO' && !p.lote_id && isCartaoCorretora(p));
-  const pendingProposals = proposals.filter(p => p.status === 'ENVIADA AO FINANCEIRO' && !p.lote_id && !isCartaoCorretora(p));
+  // Verifica se uma proposta está vinculada a um lote ativo e existente no sistema
+  const isLinkedToActiveLot = (p: Proposal): boolean => {
+    if (!p.lote_id) return false;
+    const lid = String(p.lote_id).trim();
+    if (!lid || lid === 'null' || lid === 'undefined') return false;
+    return lots.some(l => String(l.id).trim() === lid);
+  };
+
+  // Encontra o lote associado (se houver)
+  const getProposalLot = (p: Proposal): PaymentLot | undefined => {
+    if (!p.lote_id) return undefined;
+    const lid = String(p.lote_id).trim();
+    return lots.find(l => String(l.id).trim() === lid);
+  };
+
+  // Propostas de Cartão da Corretora no Financeiro (sem lote ativo)
+  const cardProposalsInFinance = proposals.filter(p => {
+    const st = (p.status || '').trim().toUpperCase();
+    return st === 'ENVIADA AO FINANCEIRO' && !isLinkedToActiveLot(p) && isCartaoCorretora(p);
+  });
+
+  // Propostas normais enviadas ao financeiro aguardando geração de lote
+  const pendingProposals = proposals.filter(p => {
+    const st = (p.status || '').trim().toUpperCase();
+    return st === 'ENVIADA AO FINANCEIRO' && !isLinkedToActiveLot(p) && !isCartaoCorretora(p);
+  });
+
+  // Propostas enviadas ao financeiro que já foram agrupadas em lotes ativos
+  const proposalsInActiveLots = proposals.filter(p => {
+    const st = (p.status || '').trim().toUpperCase();
+    return st === 'ENVIADA AO FINANCEIRO' && isLinkedToActiveLot(p);
+  });
+
+  // Todas as propostas que estão no fluxo do financeiro (aguardando lote OU já vinculadas a lotes)
+  const allFinanceProposals = proposals.filter(p => {
+    const st = (p.status || '').trim().toUpperCase();
+    return st === 'ENVIADA AO FINANCEIRO' || isLinkedToActiveLot(p);
+  });
+
   const groupedProposals = pendingProposals.reduce((acc, p) => {
-    if (!acc[p.corretor]) acc[p.corretor] = [];
-    acc[p.corretor].push(p);
+    const corretorKey = (p.corretor || (p.detalhes as any)?.proposta?.corretor || '').trim() || 'Sem Corretor';
+    if (!acc[corretorKey]) acc[corretorKey] = [];
+    acc[corretorKey].push(p);
     return acc;
   }, {} as Record<string, Proposal[]>);
 
@@ -255,10 +296,49 @@ const FinanceView: React.FC<FinanceViewProps> = ({
         >
           Lotes de Pagamento ({lots.length})
         </button>
+        <button 
+          onClick={() => setActiveSubTab('TODAS_FINANCEIRO')} 
+          className={`flex-1 py-2.5 px-4 text-center rounded-lg transition-all cursor-pointer uppercase ${activeSubTab === 'TODAS_FINANCEIRO' ? 'bg-white text-blue-600 shadow-sm font-black' : 'hover:text-slate-800'}`}
+        >
+          Todas no Financeiro ({allFinanceProposals.length})
+        </button>
       </div>
 
       {activeSubTab === 'AGUARDANDO' && (
         <div className="space-y-4">
+          {proposalsInActiveLots.length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-layer-group text-base"></i>
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase text-blue-900 tracking-wider">
+                    {proposalsInActiveLots.length} Proposta(s) já agrupadas em Lotes de Pagamento
+                  </h4>
+                  <p className="text-[11px] text-blue-700 mt-0.5">
+                    Estas propostas já possuem lote gerado no financeiro e aguardam aprovação ou liquidação na aba <strong>Lotes de Pagamento</strong>.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setActiveSubTab('LOTES')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-4 rounded-lg transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <i className="fa-solid fa-eye"></i>
+                  <span>Ver Lotes ({lots.length})</span>
+                </button>
+                <button
+                  onClick={() => setActiveSubTab('TODAS_FINANCEIRO')}
+                  className="bg-white border border-blue-300 hover:bg-blue-50 text-blue-800 text-xs font-bold py-2 px-3 rounded-lg transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                >
+                  <span>Ver Todas ({allFinanceProposals.length})</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {cardProposalsInFinance.length > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 shadow-xs">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -279,11 +359,18 @@ const FinanceView: React.FC<FinanceViewProps> = ({
                   <button
                     onClick={() => {
                       for (const cp of cardProposalsInFinance) {
+                        const updatedParcelasStatus = { ...(cp.detalhes?.parcelas_status || cp.parcelas_status || {}), 1: 'PAGO' };
+                        const updatedParcelasValores = { ...(cp.detalhes?.parcelas_valores || cp.parcelas_valores || {}), 1: cp.parcelas_valores?.[1] || cp.detalhes?.parcelas_valores?.[1] || Number(cp.valor) || Number(cp.comissao) || 0 };
                         onEditProposal({
                           ...cp,
                           status: 'PAGO',
-                          parcelas_status: { ...(cp.parcelas_status || {}), 1: 'PAGO' },
-                          parcelas_valores: { ...(cp.parcelas_valores || {}), 1: cp.parcelas_valores?.[1] || Number(cp.valor) || Number(cp.comissao) || 0 }
+                          parcelas_status: updatedParcelasStatus,
+                          parcelas_valores: updatedParcelasValores,
+                          detalhes: {
+                            ...(cp.detalhes || {}),
+                            parcelas_status: updatedParcelasStatus,
+                            parcelas_valores: updatedParcelasValores
+                          }
                         } as any);
                       }
                       setAlertMessage(`${cardProposalsInFinance.length} proposta(s) do cartão foram movidas diretamente para PAGO.`);
@@ -300,8 +387,38 @@ const FinanceView: React.FC<FinanceViewProps> = ({
 
           {Object.keys(groupedProposals).length === 0 ? (
              <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-12 text-center">
-               <i className="fa-solid fa-folder-open text-4xl text-slate-200 mb-3"></i>
-               <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhuma proposta aguardando geração de lote</p>
+               {proposalsInActiveLots.length > 0 ? (
+                 <>
+                   <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mx-auto mb-3">
+                     <i className="fa-solid fa-check-double text-xl"></i>
+                   </div>
+                   <h4 className="text-slate-800 font-black uppercase text-xs tracking-wider mb-1">
+                     Nenhuma nova proposta pendente de lote
+                   </h4>
+                   <p className="text-slate-500 text-xs max-w-md mx-auto mb-4">
+                     As {proposalsInActiveLots.length} propostas enviadas ao financeiro já foram organizadas em lotes de pagamento. Acesse a aba <strong>Lotes de Pagamento</strong> para conferir ou aprovar.
+                   </p>
+                   <div className="flex justify-center gap-3">
+                     <button
+                       onClick={() => setActiveSubTab('LOTES')}
+                       className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 px-4 rounded-lg transition-all cursor-pointer shadow-xs"
+                     >
+                       Abrir Lotes de Pagamento ({lots.length})
+                     </button>
+                     <button
+                       onClick={() => setActiveSubTab('TODAS_FINANCEIRO')}
+                       className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2 px-4 rounded-lg transition-all cursor-pointer"
+                     >
+                       Ver Todas as Propostas ({allFinanceProposals.length})
+                     </button>
+                   </div>
+                 </>
+               ) : (
+                 <>
+                   <i className="fa-solid fa-folder-open text-4xl text-slate-200 mb-3"></i>
+                   <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhuma proposta aguardando geração de lote</p>
+                 </>
+               )}
              </div>
           ) : (
             Object.entries(groupedProposals).map(([corretor, propsUncached]) => {
@@ -1045,6 +1162,165 @@ const FinanceView: React.FC<FinanceViewProps> = ({
           </table>
         </div>
       </div>
+      )}
+
+      {activeSubTab === 'TODAS_FINANCEIRO' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden space-y-4 p-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <i className="fa-solid fa-list-check text-blue-600"></i>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">
+                  Todas as Propostas no Módulo Financeiro ({allFinanceProposals.length})
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Visão unificada das propostas aguardando lote e das que já foram agrupadas em lotes de pagamento.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input 
+                  type="text" 
+                  placeholder="Buscar por cliente, corretor, contrato..." 
+                  className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                  <th className="px-4 py-3">Contrato</th>
+                  <th className="px-4 py-3">Operadora / Plano</th>
+                  <th className="px-4 py-3">Cliente</th>
+                  <th className="px-4 py-3">Corretor</th>
+                  <th className="px-4 py-3 text-right">Valor / Comissão</th>
+                  <th className="px-4 py-3 text-center">Situação no Financeiro</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {allFinanceProposals
+                  .filter(p => {
+                    const s = searchTerm.toLowerCase();
+                    return (
+                      (p.contrato || '').toLowerCase().includes(s) ||
+                      (p.cliente || '').toLowerCase().includes(s) ||
+                      (p.corretor || '').toLowerCase().includes(s) ||
+                      (p.operadora || '').toLowerCase().includes(s)
+                    );
+                  })
+                  .map(p => {
+                    const lot = getProposalLot(p);
+                    const isPendingGeneration = !lot && p.status === 'ENVIADA AO FINANCEIRO';
+                    return (
+                      <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                          {p.contrato || `PROP-${p.id.slice(0, 6)}`}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-slate-800">{p.operadora}</span>
+                          <span className="text-[10px] text-slate-400 block">{p.categoria}</span>
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-slate-700">
+                          {p.cliente}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 font-medium">
+                          {p.corretor}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                          R$ {Number(p.comissao || p.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {lot ? (
+                            <span 
+                              className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${
+                                lot.status === 'PAGO' 
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              }`}
+                            >
+                              <i className={`fa-solid ${lot.status === 'PAGO' ? 'fa-check' : 'fa-layer-group'}`}></i>
+                              Lote {lot.codigo} ({lot.status})
+                            </span>
+                          ) : isCartaoCorretora(p) ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200">
+                              <i className="fa-solid fa-credit-card"></i> Cartão Corretora
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+                              <i className="fa-solid fa-clock"></i> Aguardando Geração
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {lot && onUnlinkProposal && (
+                              <button
+                                onClick={async () => {
+                                  if (confirm(`Deseja desvincular a proposta ${p.contrato || p.cliente} do lote ${lot.codigo} e retorná-la para a fila de Aguardando Geração?`)) {
+                                    await onUnlinkProposal(p.id);
+                                    setAlertMessage(`Proposta desvinculada do lote com sucesso.`);
+                                  }
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-slate-200 cursor-pointer"
+                                title="Desvincular do Lote"
+                              >
+                                <i className="fa-solid fa-unlink mr-1"></i> Desvincular
+                              </button>
+                            )}
+                            {lot && (
+                              <button
+                                onClick={() => {
+                                  setActiveSubTab('LOTES');
+                                  setExpandedLotId(lot.id);
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-blue-200 cursor-pointer"
+                                title="Visualizar Lote"
+                              >
+                                <i className="fa-solid fa-eye mr-1"></i> Ver Lote
+                              </button>
+                            )}
+                            {isPendingGeneration && onReturnPendingProposal && (
+                              <button
+                                onClick={() => onReturnPendingProposal(p.id)}
+                                className="px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
+                                title="Devolver para CADASTRADA"
+                              >
+                                <i className="fa-solid fa-rotate-left mr-1"></i> Devolver
+                              </button>
+                            )}
+                            {onEditProposal && (
+                              <button
+                                onClick={() => onEditProposal(p)}
+                                className="p-1 text-slate-400 hover:text-blue-600 rounded-lg cursor-pointer"
+                                title="Editar Proposta"
+                              >
+                                <i className="fa-solid fa-pen-to-square"></i>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                {allFinanceProposals.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                      Nenhuma proposta encontrada no módulo financeiro.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {lotToReverse && (

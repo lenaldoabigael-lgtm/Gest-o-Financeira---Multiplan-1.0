@@ -22,6 +22,7 @@ import { ModalSolicitarAcesso } from './components/ModalSolicitarAcesso';
 import { supabase } from './lib/supabase';
 import { calculateLotTotalNet, calculateProposalNetCommission } from './lib/lotCalculations';
 import { isCartaoCorretora } from './lib/validators';
+import { logDeviceSession } from './lib/deviceDetect';
 
 const DEFAULT_USERS: User[] = [
   {
@@ -447,7 +448,12 @@ const App: React.FC = () => {
 
       if (transactionsRes.data) setTransactions(transactionsRes.data);
       if (proposalsRes.data && proposalsRes.data.length > 0) {
-        setProposals(proposalsRes.data);
+        setProposals(proposalsRes.data.map((p: any) => ({
+          ...p,
+          parcelas_status: p.parcelas_status || p.detalhes?.parcelas_status || {},
+          parcelas_valores: p.parcelas_valores || p.detalhes?.parcelas_valores || {},
+          parcelas_repassadas: p.parcelas_repassadas || p.detalhes?.parcelas_repassadas || {}
+        })));
       } else {
         const mockProposals: Proposal[] = [
           { 
@@ -517,14 +523,109 @@ const App: React.FC = () => {
       if (requirementsRes.data) {
         setProposalRequirements(requirementsRes.data);
       }
+      let loadedLots: PaymentLot[] = [];
       if (lotsRes.data) {
+        loadedLots = lotsRes.data;
         setPaymentLots(lotsRes.data);
       } else if (!lotsRes.error) {
         const mockLots: PaymentLot[] = [
           { id: '1', codigo: 'LOTE-2603-042', aprovadoPor: 'Arley (Gestor)', dataAprovacao: '16/03/2026 às 14:30', qtdPropostas: 2, vencimento: '17/03/2026', valorTotal: 946.49, status: 'PENDENTE' },
           { id: '2', codigo: 'LOTE-2603-041', aprovadoPor: 'João (Gestor)', dataAprovacao: '15/03/2026 às 16:15', qtdPropostas: 5, vencimento: 'Hoje', valorTotal: 3946.01, status: 'PENDENTE' },
         ];
+        loadedLots = mockLots;
         setPaymentLots(mockLots);
+      }
+
+      // Auto-cura e consistência de integridade:
+      // 1. Se houver propostas com lote_id preenchido apontando para um lote que NÃO existe mais em payment_lots (lote órfão),
+      // limpa lote_id = null para restaurar as propostas imediatamente na fila de Aguardando Geração.
+      // 2. Se houver propostas vinculadas a um lote cujo status é 'PAGO', mas a proposta ainda está com status diferente de 'PAGO',
+      // sincroniza a proposta imediatamente para 'PAGO' (Concluída).
+      if (proposalsRes.data && proposalsRes.data.length > 0 && loadedLots.length >= 0) {
+        const validLotIds = new Set(loadedLots.map(l => String(l.id).trim()));
+        const paidLotMap = new Map(loadedLots.filter(l => l.status === 'PAGO').map(l => [String(l.id).trim(), l]));
+
+        const orphanProposals = proposalsRes.data.filter((p: any) => {
+          if (!p.lote_id) return false;
+          const lid = String(p.lote_id).trim();
+          return lid !== '' && lid !== 'null' && lid !== 'undefined' && !validLotIds.has(lid);
+        });
+
+        if (orphanProposals.length > 0) {
+          console.warn(`[Auto-Cura] Detectadas ${orphanProposals.length} propostas com lote_id órfão. Limpando lote_id no banco para reexibir no Financeiro...`);
+          const orphanIds = orphanProposals.map((p: any) => p.id);
+          supabase
+            .from('proposals')
+            .update({ lote_id: null })
+            .in('id', orphanIds)
+            .then(({ error }) => {
+              if (error) console.error('Erro ao limpar lote_id órfão no Supabase:', error);
+              else console.log('[Auto-Cura] Propostas órfãs restauradas com sucesso no Supabase.');
+            });
+          
+          setProposals(prev => prev.map(p => {
+            if (orphanIds.includes(p.id)) {
+              return { ...p, lote_id: null };
+            }
+            return p;
+          }));
+        }
+
+        // Sincronização de propostas de lotes já pagos
+        const proposalsInPaidLotsNeedingUpdate = proposalsRes.data.filter((p: any) => {
+          if (!p.lote_id || p.status === 'PAGO') return false;
+          const lid = String(p.lote_id).trim();
+          return paidLotMap.has(lid);
+        });
+
+        if (proposalsInPaidLotsNeedingUpdate.length > 0) {
+          console.log(`[Auto-Sync] Sincronizando ${proposalsInPaidLotsNeedingUpdate.length} propostas cujos lotes já estão liquidados como PAGO...`);
+          const updateIds = proposalsInPaidLotsNeedingUpdate.map((p: any) => p.id);
+          for (const p of proposalsInPaidLotsNeedingUpdate) {
+            const lot = paidLotMap.get(String(p.lote_id).trim());
+            const existingDetalhes = p.detalhes || {};
+            const updatedParcelasStatus = {
+              ...(existingDetalhes.parcelas_status || {}),
+              1: 'PAGO'
+            };
+            const updatedParcelasValores = {
+              ...(existingDetalhes.parcelas_valores || {}),
+              1: existingDetalhes.parcelas_valores?.[1] || Number(p.valor) || Number(p.comissao) || 0
+            };
+            const updatedHistorico = [
+              ...(existingDetalhes.historico || []),
+              {
+                id: Math.random().toString(36).substr(2, 9),
+                data: new Date().toISOString(),
+                responsavel: 'Sistema Financeiro',
+                observacao: `Lote ${lot?.codigo || ''} liquidado como PAGO. Proposta concluída automaticamente.`
+              }
+            ];
+
+            supabase
+              .from('proposals')
+              .update({
+                status: 'PAGO',
+                detalhes: {
+                  ...existingDetalhes,
+                  parcelas_status: updatedParcelasStatus,
+                  parcelas_valores: updatedParcelasValores,
+                  historico: updatedHistorico
+                }
+              })
+              .eq('id', p.id)
+              .then(({ error }) => {
+                if (error) console.error(`Erro ao sincronizar proposta ${p.id} para PAGO:`, error);
+              });
+          }
+
+          setProposals(prev => prev.map(p => {
+            if (updateIds.includes(p.id)) {
+              return { ...p, status: 'PAGO' };
+            }
+            return p;
+          }));
+        }
       }
     } catch (error) {
       console.error('Erro crítico:', error);
@@ -571,6 +672,7 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
+    logDeviceSession();
     const restoreSession = async () => {
       setIsLoading(true);
       try {
@@ -990,9 +1092,12 @@ CREATE TABLE IF NOT EXISTS proposal_requirements (id UUID PRIMARY KEY DEFAULT ge
 CREATE TABLE IF NOT EXISTS proposals (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), contrato TEXT NOT NULL, data DATE NOT NULL, cliente TEXT NOT NULL, "cpfCnpj" TEXT NOT NULL, corretor TEXT NOT NULL, operadora TEXT NOT NULL, categoria TEXT NOT NULL, valor NUMERIC(15,2) NOT NULL, vidas INTEGER NOT NULL, status TEXT NOT NULL, comissao NUMERIC(15,2) NOT NULL, detalhes JSONB, lote_id UUID);
 CREATE TABLE IF NOT EXISTS payment_lots (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), codigo TEXT NOT NULL, "aprovadoPor" TEXT NOT NULL, "dataAprovacao" TIMESTAMP WITH TIME ZONE NOT NULL, "qtdPropostas" INTEGER NOT NULL, vencimento DATE NOT NULL, "valorTotal" NUMERIC(15,2) NOT NULL, status TEXT NOT NULL);
 
-/* 2. ATUALIZAR TABELAS EXISTENTES */
+/* 2. ATUALIZAR TABELAS EXISTENTES (COMPATIBILIDADE TOTAL) */
 ALTER TABLE proposals ADD COLUMN IF NOT EXISTS detalhes JSONB;
 ALTER TABLE proposals ADD COLUMN IF NOT EXISTS lote_id UUID;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS parcelas_status JSONB;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS parcelas_valores JSONB;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS parcelas_repassadas JSONB;
 
 /* 3. DESABILITAR RLS (Segurança para Testes) */
 ALTER TABLE users DISABLE ROW LEVEL SECURITY;
@@ -1038,6 +1143,31 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
     localStorage.removeItem('sis_activeTab');
   };
 
+  const cleanProposalPayloadForSupabase = (prop: Partial<Proposal>) => {
+    const {
+      parcelas_status,
+      parcelas_valores,
+      parcelas_repassadas,
+      ...clean
+    } = (prop || {}) as any;
+
+    const currentDetalhes = clean.detalhes || {};
+    const mergedStatus = parcelas_status || currentDetalhes.parcelas_status;
+    const mergedValores = parcelas_valores || currentDetalhes.parcelas_valores;
+    const mergedRepassadas = parcelas_repassadas || currentDetalhes.parcelas_repassadas;
+
+    if (mergedStatus || mergedValores || mergedRepassadas) {
+      clean.detalhes = {
+        ...currentDetalhes,
+        ...(mergedStatus ? { parcelas_status: mergedStatus } : {}),
+        ...(mergedValores ? { parcelas_valores: mergedValores } : {}),
+        ...(mergedRepassadas ? { parcelas_repassadas: mergedRepassadas } : {})
+      };
+    }
+
+    return clean;
+  };
+
   const handleSaveProposal = async (proposalData: Proposal) => {
     const contratoNumber = proposalData.contrato.trim();
     const isContratoDuplicado = proposals.some(
@@ -1049,31 +1179,36 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
       return;
     }
 
+    // Sanitiza o payload para remover colunas que residem dentro do JSONB detalhes (evita erro PGRST204)
+    const cleanPayload = cleanProposalPayloadForSupabase(proposalData);
+
     if (editingProposal) {
       // Regra Crítica: Não permitir voltar status ou alterar se estiver PAGO
       if (editingProposal.status === 'PAGO') {
         alert('Propostas com status PAGO não podem ser alteradas.');
         return;
       }
-      if (editingProposal.status === 'ENVIADA AO FINANCEIRO' && proposalData.status === 'CADASTRADA') {
-        proposalData.status = 'ENVIADA AO FINANCEIRO';
+      if (editingProposal.status === 'ENVIADA AO FINANCEIRO' && cleanPayload.status === 'CADASTRADA') {
+        cleanPayload.status = 'ENVIADA AO FINANCEIRO';
       }
 
-      const { error } = await supabase.from('proposals').update(proposalData).eq('id', editingProposal.id);
+      const { error } = await supabase.from('proposals').update(cleanPayload).eq('id', editingProposal.id);
       if (error) {
         console.error('Erro ao atualizar proposta:', error);
+        alert('Erro ao atualizar proposta: ' + (error.message || ''));
         setProposals(prev => prev.map(p => p.id === editingProposal.id ? proposalData : p));
       } else {
         fetchData();
       }
     } else {
-      if (proposalData.status !== 'ENVIADA AO FINANCEIRO') {
-        proposalData.status = 'CADASTRADA';
+      if (cleanPayload.status !== 'ENVIADA AO FINANCEIRO') {
+        cleanPayload.status = 'CADASTRADA';
       }
       
-      const { error } = await supabase.from('proposals').insert([proposalData]);
+      const { error } = await supabase.from('proposals').insert([cleanPayload]);
       if (error) {
         console.error('Erro ao salvar proposta:', error);
+        alert('Erro ao salvar proposta: ' + (error.message || ''));
         setProposals(prev => [proposalData, ...prev]);
       } else {
         fetchData();
@@ -1360,6 +1495,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
           <SellerBoard 
             proposals={proposals} 
             requirements={proposalRequirements}
+            lots={paymentLots}
             onStatusChange={async (id, novoStatus) => {
               const p = proposals.find(prop => prop.id === id);
               
@@ -1384,17 +1520,20 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
               };
 
               if (isMovingToPago && p) {
-                // Atualiza 1ª parcela como PAGO
-                updatePayload.parcelas_status = {
-                  ...(p.parcelas_status || {}),
+                // Atualiza 1ª parcela como PAGO (armazenado dentro de detalhes para compatibilidade com o schema Supabase)
+                const updatedParcelasStatus = {
+                  ...(p.detalhes?.parcelas_status || p.parcelas_status || {}),
                   1: 'PAGO'
                 };
-                updatePayload.parcelas_valores = {
-                  ...(p.parcelas_valores || {}),
-                  1: p.parcelas_valores?.[1] || Number(p.valor) || Number(p.comissao) || 0
+                const updatedParcelasValores = {
+                  ...(p.detalhes?.parcelas_valores || p.parcelas_valores || {}),
+                  1: p.parcelas_valores?.[1] || p.detalhes?.parcelas_valores?.[1] || Number(p.valor) || Number(p.comissao) || 0
                 };
+
                 updatePayload.detalhes = {
                   ...(p.detalhes || {}),
+                  parcelas_status: updatedParcelasStatus,
+                  parcelas_valores: updatedParcelasValores,
                   historico: [
                     ...(p.detalhes?.historico || []),
                     {
@@ -1422,7 +1561,8 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                 };
               }
 
-              const { error } = await supabase.from('proposals').update(updatePayload).eq('id', id);
+              const cleanPayload = cleanProposalPayloadForSupabase(updatePayload);
+              const { error } = await supabase.from('proposals').update(cleanPayload).eq('id', id);
               if (error) {
                 console.error('Erro ao atualizar status:', error);
                 alert('Erro ao atualizar status da proposta: ' + (error.message || ''));
@@ -1438,6 +1578,30 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             proposals={proposals}
             requirements={proposalRequirements}
             user={user}
+            onUnlinkProposal={async (proposalId) => {
+              const { error } = await supabase
+                .from('proposals')
+                .update({ lote_id: null })
+                .eq('id', proposalId);
+              if (error) {
+                alert('Erro ao desvincular proposta do lote: ' + error.message);
+                return;
+              }
+              setProposals(prev => prev.map(p => p.id === proposalId ? { ...p, lote_id: null } : p));
+              await fetchData();
+            }}
+            onUnlinkAllProposalsFromLot={async (lotId) => {
+              const { error } = await supabase
+                .from('proposals')
+                .update({ lote_id: null })
+                .eq('lote_id', lotId);
+              if (error) {
+                alert('Erro ao desvincular propostas do lote: ' + error.message);
+                return;
+              }
+              setProposals(prev => prev.map(p => p.lote_id === lotId ? { ...p, lote_id: null } : p));
+              await fetchData();
+            }}
             onEditProposal={(p) => {
               if (p.status === 'PAGO') {
                 alert('Propostas com status PAGO não podem ser alteradas.');
@@ -1585,13 +1749,13 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
 
                   const updatedDetalhes = {
                     ...(p.detalhes || {}),
+                    parcelas_status: updatedParcelasStatus,
+                    parcelas_valores: updatedParcelasValores,
                     historico: updatedHistorico
                   };
 
                   return supabase.from('proposals').update({
                     status: 'PAGO',
-                    parcelas_status: updatedParcelasStatus,
-                    parcelas_valores: updatedParcelasValores,
                     detalhes: updatedDetalhes
                   }).eq('id', p.id);
                 });
@@ -1676,10 +1840,14 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             onUpdateProposal={async (updated: Proposal) => {
               setProposals(prev => prev.map(p => p.id === updated.id ? updated : p));
               try {
-                await supabase.from('proposals').update({
+                const updatedDetalhes = {
+                  ...(updated.detalhes || {}),
                   parcelas_status: updated.parcelas_status,
                   parcelas_valores: updated.parcelas_valores,
                   parcelas_repassadas: updated.parcelas_repassadas
+                };
+                await supabase.from('proposals').update({
+                  detalhes: updatedDetalhes
                 }).eq('id', updated.id);
               } catch (err) {
                 console.error('Erro ao sincronizar atualização de comissões/parcelas no Supabase:', err);
