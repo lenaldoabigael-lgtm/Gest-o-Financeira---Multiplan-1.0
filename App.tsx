@@ -1148,6 +1148,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
       parcelas_status,
       parcelas_valores,
       parcelas_repassadas,
+      observacoes,
       ...clean
     } = (prop || {}) as any;
 
@@ -1155,15 +1156,18 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
     const mergedStatus = parcelas_status || currentDetalhes.parcelas_status;
     const mergedValores = parcelas_valores || currentDetalhes.parcelas_valores;
     const mergedRepassadas = parcelas_repassadas || currentDetalhes.parcelas_repassadas;
+    const mergedObs = observacoes || currentDetalhes.observacoes;
 
-    if (mergedStatus || mergedValores || mergedRepassadas) {
-      clean.detalhes = {
-        ...currentDetalhes,
-        ...(mergedStatus ? { parcelas_status: mergedStatus } : {}),
-        ...(mergedValores ? { parcelas_valores: mergedValores } : {}),
-        ...(mergedRepassadas ? { parcelas_repassadas: mergedRepassadas } : {})
-      };
-    }
+    clean.detalhes = {
+      ...currentDetalhes,
+      ...(mergedStatus ? { parcelas_status: mergedStatus } : {}),
+      ...(mergedValores ? { parcelas_valores: mergedValores } : {}),
+      ...(mergedRepassadas ? { parcelas_repassadas: mergedRepassadas } : {}),
+      ...(mergedObs ? { observacoes: mergedObs } : {})
+    };
+
+    // Remove campos que não são colunas físicas na tabela proposals do Supabase
+    delete clean.observacoes;
 
     return clean;
   };
@@ -1438,6 +1442,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             }}
             onImportProposals={async (importedProposals) => {
               // Sanitiza e mapeia apenas as colunas oficiais da tabela proposals no Supabase
+              // (Evita o erro PGRST204 de coluna inexistente como 'observacoes' no schema cache)
               const sanitizedProposals = importedProposals.map(raw => {
                 const { 
                   _cpfValido, 
@@ -1445,8 +1450,16 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                   _duplicado, 
                   _bloqueios,
                   _avisos,
+                  _cpfMotivo,
+                  observacoes,
                   ...rest 
                 } = (raw || {}) as any;
+
+                const baseDetalhes = (rest.detalhes && typeof rest.detalhes === 'object') ? { ...rest.detalhes } : {};
+                const obsTexto = observacoes || rest.observacoes;
+                if (obsTexto) {
+                  baseDetalhes.observacoes = obsTexto;
+                }
 
                 return {
                   contrato: String(rest.contrato || '').trim(),
@@ -1460,8 +1473,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
                   vidas: Number(rest.vidas) || 1,
                   status: 'CADASTRADA',
                   comissao: Number(rest.comissao) || 0,
-                  detalhes: rest.detalhes || null,
-                  observacoes: rest.observacoes || null
+                  detalhes: Object.keys(baseDetalhes).length > 0 ? baseDetalhes : null
                 };
               });
 

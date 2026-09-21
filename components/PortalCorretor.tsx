@@ -24,8 +24,10 @@ import {
   ClipboardList,
   AlertCircle,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  GraduationCap
 } from 'lucide-react';
+import { AcademiaMultiplanModal } from './AcademiaMultiplanModal';
 
 interface PortalCorretorProps {
   user: User;
@@ -61,6 +63,7 @@ export const PortalCorretor: React.FC<PortalCorretorProps> = ({
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('Todas');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isAcademiaOpen, setIsAcademiaOpen] = useState(false);
   const [selectedProposalDetail, setSelectedProposalDetail] = useState<Proposal | null>(null);
 
   // Filtros de Comissões
@@ -243,16 +246,27 @@ export const PortalCorretor: React.FC<PortalCorretorProps> = ({
             <MultiplanLogo variant="blue" height={26} showText={true} />
           </div>
 
-          {/* Notifications Icon Button */}
-          <div className="relative">
+          {/* Right Actions: Academia & Notifications */}
+          <div className="flex items-center gap-1">
             <button
-              onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-              className="p-2 rounded-xl text-[#001a54] hover:bg-slate-100 active:scale-95 transition-all cursor-pointer relative"
-              aria-label="Notificações"
+              onClick={() => setIsAcademiaOpen(true)}
+              className="p-2 rounded-xl text-[#001a54] hover:bg-slate-100 active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+              title="Academia Multiplan (Tutoriais)"
+              aria-label="Academia Multiplan"
             >
-              <Bell className="w-6 h-6 stroke-[2.5]" />
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white"></span>
+              <GraduationCap className="w-5 h-5 text-[#001a54]" />
             </button>
+
+            {/* Notifications Icon Button */}
+            <div className="relative">
+              <button
+                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                className="p-2 rounded-xl text-[#001a54] hover:bg-slate-100 active:scale-95 transition-all cursor-pointer relative"
+                aria-label="Notificações"
+              >
+                <Bell className="w-6 h-6 stroke-[2.5]" />
+                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-white"></span>
+              </button>
 
             {/* Notifications Popover */}
             {isNotificationsOpen && (
@@ -279,7 +293,8 @@ export const PortalCorretor: React.FC<PortalCorretorProps> = ({
               </div>
             )}
           </div>
-        </header>
+        </div>
+      </header>
 
         {/* DRAWER / SIDE MENU */}
         {isDrawerOpen && (
@@ -355,6 +370,16 @@ export const PortalCorretor: React.FC<PortalCorretorProps> = ({
                   <Calculator className="w-4 h-4" />
                   <span>Cotação de Planos</span>
                 </button>
+
+                <div className="pt-2">
+                  <button
+                    onClick={() => { setIsAcademiaOpen(true); setIsDrawerOpen(false); }}
+                    className="w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-bold transition-all text-amber-900 bg-amber-50 hover:bg-amber-100/70 border border-amber-200/60"
+                  >
+                    <GraduationCap className="w-4 h-4 text-amber-700" />
+                    <span>Academia Multiplan (Guias)</span>
+                  </button>
+                </div>
 
                 {/* Se for admin, permitir alternar para visualização gerencial completa */}
                 {isAdmin && onSwitchToDesktop && (
@@ -1097,6 +1122,13 @@ export const PortalCorretor: React.FC<PortalCorretorProps> = ({
             </div>
           );
         })()}
+
+        {/* Modal da Academia Multiplan */}
+        <AcademiaMultiplanModal
+          isOpen={isAcademiaOpen}
+          onClose={() => setIsAcademiaOpen(false)}
+          contextTab="MOBILE"
+        />
 
       </div>
     </div>

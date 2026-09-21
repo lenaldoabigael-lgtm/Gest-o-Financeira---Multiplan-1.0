@@ -1,8 +1,9 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { User, Tab } from '../types';
 import { MultiplanLogo } from './MultiplanLogo';
 import { useDeviceDetect } from '../lib/useDeviceDetect';
+import { AcademiaMultiplanModal } from './AcademiaMultiplanModal';
 
 interface LayoutProps {
   user: User;
@@ -15,6 +16,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout, onOpenCorretorPortal, onOpenSolicitarAcesso, children }) => {
+  const [isAcademiaOpen, setIsAcademiaOpen] = useState(false);
   const device = useDeviceDetect();
   const menuGroups = [
     {
@@ -159,6 +161,16 @@ const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Botão Fixo e Discreto da Academia Multiplan */}
+            <button
+              onClick={() => setIsAcademiaOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 hover:text-[#001a54] text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+              title="Academia Multiplan - Passo a passo de utilização de cada funcionalidade"
+            >
+              <span className="material-symbols-outlined text-[18px] text-[#001a54]">school</span>
+              <span className="hidden sm:inline">Academia Multiplan</span>
+            </button>
+
             {onOpenSolicitarAcesso && (
               <button
                 onClick={onOpenSolicitarAcesso}
@@ -229,6 +241,13 @@ const Layout: React.FC<LayoutProps> = ({ user, activeTab, setActiveTab, onLogout
         </div>
         {children}
       </main>
+
+      {/* Modal da Academia Multiplan */}
+      <AcademiaMultiplanModal
+        isOpen={isAcademiaOpen}
+        onClose={() => setIsAcademiaOpen(false)}
+        contextTab={activeTab || undefined}
+      />
     </div>
   );
 };

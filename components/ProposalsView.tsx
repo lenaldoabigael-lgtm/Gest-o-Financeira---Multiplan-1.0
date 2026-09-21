@@ -272,7 +272,8 @@ const ProposalsView: React.FC<ProposalsViewProps> = ({ proposals, requirements =
       
       const num = Number(s);
       if (!isNaN(num) && num > 20000 && num < 60000) {
-        const date = new Date(Math.round((num - 25569) * 86400 * 1000));
+        // Offset de meio-dia (+12 horas = 43200000 ms) para evitar que o fuso horário (ex: UTC-3) decremente um dia
+        const date = new Date(Math.round((num - 25569) * 86400 * 1000 + 43200000));
         if (!isNaN(date.getTime())) {
           return date.toISOString().split('T')[0];
         }
