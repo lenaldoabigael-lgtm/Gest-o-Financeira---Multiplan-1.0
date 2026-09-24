@@ -163,3 +163,13 @@ export const MOCK_TRANSACTIONS: Transaction[] = [
     cliente: 'CONDOMINIO BETA'
   }
 ];
+
+export const CONTAS_BANCO: string[] = [
+  'Caixa econômica 26.200',
+  'Infinit pay 26.200',
+  'Inter 26.200',
+  'Inter 58.805',
+  'Inter 22.616',
+  'Nubank 21.877'
+];
+

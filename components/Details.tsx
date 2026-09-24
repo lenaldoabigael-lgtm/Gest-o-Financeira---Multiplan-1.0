@@ -1,14 +1,16 @@
 
 import React, { useState, useMemo } from 'react';
-import { Transaction, CostCenter } from '../types';
+import { Transaction, CostCenter, Status } from '../types';
+import { CONTAS_BANCO } from '../constants';
 
 interface DetailsProps {
   transactions?: Transaction[];
   costCenters?: CostCenter[];
   onUpdate?: (transaction: Transaction) => void;
+  onDelete?: (ids: string[]) => void;
 }
 
-const Details: React.FC<DetailsProps> = ({ transactions = [], costCenters = [], onUpdate }) => {
+const Details: React.FC<DetailsProps> = ({ transactions = [], costCenters = [], onUpdate, onDelete }) => {
   const [activeSubTab, setActiveSubTab] = useState<'PAGAR' | 'RECEBER'>('PAGAR');
   
   // Filter states
@@ -20,14 +22,114 @@ const Details: React.FC<DetailsProps> = ({ transactions = [], costCenters = [], 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Edit Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editFormData, setEditFormData] = useState<{
+    vencimento: string;
+    pagamento: string;
+    descricao: string;
+    valor: string;
+    formaPagamento: string;
+    centroCusto: string;
+    subItem: string;
+    status: Status;
+    conta: string;
+    cliente: string;
+  }>({
+    vencimento: '',
+    pagamento: '',
+    descricao: '',
+    valor: '',
+    formaPagamento: 'PIX',
+    centroCusto: '',
+    subItem: '',
+    status: 'PENDENTE',
+    conta: CONTAS_BANCO[0] || 'Caixa econômica 26.200',
+    cliente: ''
+  });
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   const safeTransactions = transactions || [];
   const safeCostCenters = costCenters || [];
 
-  // Extrair contas únicas das transações para popular o filtro
+  // Extrair contas únicas das transações e mesclar com as contas oficiais
   const availableAccounts = useMemo(() => {
-    const accounts = safeTransactions.map(t => t.conta || 'GERAL');
-    return Array.from(new Set(accounts)).sort();
+    const accounts = safeTransactions.map(t => t.conta).filter(Boolean) as string[];
+    const combined = Array.from(new Set([...CONTAS_BANCO, ...accounts])).filter(Boolean);
+    return combined;
   }, [safeTransactions]);
+
+  // Centros de custo disponíveis de acordo com a aba ativa no modal
+  const availableCostCentersForEdit = useMemo(() => {
+    const targetTipo = (editingTransaction?.type || activeSubTab) === 'PAGAR' ? 'DESPESA' : 'RECEITA';
+    return safeCostCenters.filter(cc => cc.tipo === targetTipo);
+  }, [safeCostCenters, editingTransaction?.type, activeSubTab]);
+
+  // Sub-itens dinâmicos de acordo com o centro de custo selecionado
+  const availableSubItemsForEdit = useMemo(() => {
+    if (!editFormData.centroCusto) return [];
+    const found = safeCostCenters.find(cc => cc.nome === editFormData.centroCusto);
+    return found?.subItens || [];
+  }, [safeCostCenters, editFormData.centroCusto]);
+
+  const handleOpenEdit = (t: Transaction) => {
+    setEditingTransaction(t);
+    setEditFormData({
+      vencimento: t.vencimento || '',
+      pagamento: t.pagamento || '',
+      descricao: t.descricao || '',
+      valor: t.valor !== undefined ? t.valor.toString() : '',
+      formaPagamento: t.formaPagamento || 'PIX',
+      centroCusto: t.centroCusto || '',
+      subItem: t.subItem || '',
+      status: t.status || 'PENDENTE',
+      conta: t.conta || 'GERAL',
+      cliente: t.cliente || ''
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTransaction) return;
+
+    if (!editFormData.descricao.trim()) {
+      alert('Por favor, informe a descrição do lançamento.');
+      return;
+    }
+
+    const parsedVal = parseFloat(editFormData.valor.toString().replace(',', '.'));
+    if (isNaN(parsedVal) || parsedVal < 0) {
+      alert('Por favor, informe um valor monetário válido.');
+      return;
+    }
+
+    const updatedTransaction: Transaction = {
+      ...editingTransaction,
+      vencimento: editFormData.vencimento,
+      pagamento: editFormData.status !== 'PENDENTE' ? (editFormData.pagamento || editFormData.vencimento) : undefined,
+      descricao: editFormData.descricao.trim().toUpperCase(),
+      valor: parsedVal,
+      formaPagamento: editFormData.formaPagamento,
+      centroCusto: editFormData.centroCusto || 'OUTROS',
+      subItem: editFormData.subItem || '',
+      status: editFormData.status,
+      conta: editFormData.conta || 'GERAL',
+      cliente: editFormData.cliente || ''
+    };
+
+    if (onUpdate) {
+      onUpdate(updatedTransaction);
+    }
+
+    setIsEditModalOpen(false);
+    setFeedbackMsg({
+      type: 'success',
+      message: `Lançamento "${updatedTransaction.descricao}" atualizado com sucesso!`
+    });
+    setTimeout(() => setFeedbackMsg(null), 4000);
+  };
 
   const filtered = safeTransactions.filter(t => {
     if (t.type !== activeSubTab) return false;
@@ -236,6 +338,20 @@ const Details: React.FC<DetailsProps> = ({ transactions = [], costCenters = [], 
           </div>
        </div>
 
+       {feedbackMsg && (
+         <div className={`p-4 rounded-xl text-xs font-bold flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-300 ${
+           feedbackMsg.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
+         }`}>
+           <div className="flex items-center gap-2">
+             <i className={`fa-solid ${feedbackMsg.type === 'success' ? 'fa-circle-check text-emerald-600' : 'fa-triangle-exclamation text-red-600'} text-base`}></i>
+             <span>{feedbackMsg.message}</span>
+           </div>
+           <button onClick={() => setFeedbackMsg(null)} className="text-slate-400 hover:text-slate-600">
+             <i className="fa-solid fa-xmark"></i>
+           </button>
+         </div>
+       )}
+
        <div className="overflow-x-auto rounded-xl border border-slate-100">
          <table className="w-full text-[10px] border-collapse">
            <thead>
@@ -270,30 +386,44 @@ const Details: React.FC<DetailsProps> = ({ transactions = [], costCenters = [], 
                  <td className={`p-4 text-right font-black text-sm ${activeSubTab === 'PAGAR' ? 'text-orange-500' : 'text-emerald-600'}`}>
                    R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                  </td>
-                 <td className="p-4 text-center">
-                   {onUpdate && (
-                     <button onClick={() => {
-                       if (t.status === 'PENDENTE') {
-                         onUpdate({
-                           ...t,
-                           status: activeSubTab === 'PAGAR' ? 'PAGO' : 'RECEBIDO',
-                           pagamento: new Date().toISOString().split('T')[0]
-                         });
-                       } else {
-                         onUpdate({
-                           ...t,
-                           status: 'PENDENTE',
-                           pagamento: undefined
-                         });
-                       }
-                     }} className={`p-2 rounded-xl transition-all ${
-                       t.status === 'PENDENTE' 
-                         ? 'text-emerald-600 hover:bg-emerald-50' 
-                         : 'text-amber-600 hover:bg-amber-50'
-                     }`} title={t.status === 'PENDENTE' ? (activeSubTab === 'PAGAR' ? 'Marcar como Pago' : 'Marcar como Recebido') : 'Desfazer Baixa'}>
-                       <i className={`fa-solid ${t.status === 'PENDENTE' ? 'fa-check-circle' : 'fa-arrow-rotate-left'}`}></i>
+                 <td className="p-4 text-center whitespace-nowrap">
+                   <div className="flex items-center justify-center gap-1.5">
+                     {/* Botão de Edição das Contas a Pagar e a Receber */}
+                     <button
+                       type="button"
+                       onClick={() => handleOpenEdit(t)}
+                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#001a54] font-black text-[10px] uppercase tracking-wider transition-all hover:scale-105 active:scale-95 cursor-pointer border border-blue-200/70 shadow-xs"
+                       title={activeSubTab === 'PAGAR' ? 'Editar Conta a Pagar' : 'Editar Conta a Receber'}
+                     >
+                       <i className="fa-solid fa-pen-to-square text-[11px] text-[#001a54]"></i>
+                       <span>Editar</span>
                      </button>
-                   )}
+
+                     {/* Botão de Baixa / Desfazer Baixa */}
+                     {onUpdate && (
+                       <button onClick={() => {
+                         if (t.status === 'PENDENTE') {
+                           onUpdate({
+                             ...t,
+                             status: activeSubTab === 'PAGAR' ? 'PAGO' : 'RECEBIDO',
+                             pagamento: new Date().toISOString().split('T')[0]
+                           });
+                         } else {
+                           onUpdate({
+                             ...t,
+                             status: 'PENDENTE',
+                             pagamento: undefined
+                           });
+                         }
+                       }} className={`p-2 rounded-xl transition-all hover:scale-110 active:scale-95 cursor-pointer ${
+                         t.status === 'PENDENTE' 
+                           ? 'text-emerald-600 hover:bg-emerald-50' 
+                           : 'text-amber-600 hover:bg-amber-50'
+                       }`} title={t.status === 'PENDENTE' ? (activeSubTab === 'PAGAR' ? 'Marcar como Pago' : 'Marcar como Recebido') : 'Desfazer Baixa'}>
+                         <i className={`fa-solid ${t.status === 'PENDENTE' ? 'fa-check-circle' : 'fa-arrow-rotate-left'} text-xs`}></i>
+                       </button>
+                     )}
+                   </div>
                  </td>
                </tr>
              ))}
@@ -315,6 +445,215 @@ const Details: React.FC<DetailsProps> = ({ transactions = [], costCenters = [], 
            )}
          </table>
        </div>
+
+       {/* MODAL DE EDIÇÃO DE LANÇAMENTO */}
+       {isEditModalOpen && editingTransaction && (
+         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+             <div className="bg-[#001a54] p-5 flex justify-between items-center text-white">
+               <div className="flex items-center gap-2.5">
+                 <span className="material-symbols-outlined text-xl">edit_note</span>
+                 <h3 className="text-base font-extrabold tracking-tight">
+                   Editar Lançamento — {editingTransaction.type === 'PAGAR' ? 'Contas a Pagar' : 'Contas a Receber'}
+                 </h3>
+               </div>
+               <button
+                 type="button"
+                 onClick={() => setIsEditModalOpen(false)}
+                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors cursor-pointer"
+               >
+                 <span className="material-symbols-outlined text-lg">close</span>
+               </button>
+             </div>
+
+             <form onSubmit={handleSaveEdit} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                 <div>
+                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                     Data de Vencimento *
+                   </label>
+                   <input
+                     type="date"
+                     required
+                     value={editFormData.vencimento}
+                     onChange={e => setEditFormData({ ...editFormData, vencimento: e.target.value })}
+                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                   />
+                 </div>
+
+                 {editFormData.status !== 'PENDENTE' && (
+                   <div>
+                     <label className="block text-[11px] font-bold text-emerald-800 uppercase mb-1">
+                       Data do Pagamento/Baixa *
+                     </label>
+                     <input
+                       type="date"
+                       required
+                       value={editFormData.pagamento || editFormData.vencimento}
+                       onChange={e => setEditFormData({ ...editFormData, pagamento: e.target.value })}
+                       className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50/50 rounded-xl text-xs text-emerald-900 font-bold focus:ring-2 focus:ring-emerald-500/20 outline-none"
+                     />
+                   </div>
+                 )}
+               </div>
+
+               <div>
+                 <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                   Descrição do Lançamento *
+                 </label>
+                 <input
+                   type="text"
+                   required
+                   placeholder="Ex: PAGAMENTO COMISSÃO / ALUGUEL"
+                   value={editFormData.descricao}
+                   onChange={e => setEditFormData({ ...editFormData, descricao: e.target.value.toUpperCase() })}
+                   className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs uppercase font-bold focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                 />
+               </div>
+
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                 <div>
+                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                     Valor (R$) *
+                   </label>
+                   <input
+                     type="number"
+                     step="0.01"
+                     required
+                     placeholder="0.00"
+                     value={editFormData.valor}
+                     onChange={e => setEditFormData({ ...editFormData, valor: e.target.value })}
+                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-extrabold text-[#001a54] focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                   />
+                 </div>
+
+                 <div>
+                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                     Status da Conta
+                   </label>
+                   <select
+                     value={editFormData.status}
+                     onChange={e => {
+                       const newStatus = e.target.value as Status;
+                       setEditFormData(prev => ({
+                         ...prev,
+                         status: newStatus,
+                         pagamento: newStatus === 'PENDENTE' ? '' : (prev.pagamento || prev.vencimento)
+                       }));
+                     }}
+                     className={`w-full px-3 py-2 border rounded-xl text-xs font-bold outline-none cursor-pointer ${
+                       editFormData.status === 'PENDENTE'
+                         ? 'border-amber-300 bg-amber-50 text-amber-800'
+                         : 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                     }`}
+                   >
+                     <option value="PENDENTE">🟡 PENDENTE</option>
+                     <option value={editingTransaction.type === 'PAGAR' ? 'PAGO' : 'RECEBIDO'}>
+                       🟢 {editingTransaction.type === 'PAGAR' ? 'PAGO' : 'RECEBIDO'}
+                     </option>
+                   </select>
+                 </div>
+               </div>
+
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                 <div>
+                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                     Centro de Custo *
+                   </label>
+                   <select
+                     required
+                     value={editFormData.centroCusto}
+                     onChange={e => setEditFormData({ ...editFormData, centroCusto: e.target.value, subItem: '' })}
+                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none cursor-pointer"
+                   >
+                     <option value="">Selecione o centro de custo...</option>
+                     {availableCostCentersForEdit.map(cc => (
+                       <option key={cc.id} value={cc.nome}>
+                         {cc.nome}
+                       </option>
+                     ))}
+                   </select>
+                 </div>
+
+                 <div>
+                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                     Sub-Item
+                   </label>
+                   {availableSubItemsForEdit.length > 0 ? (
+                     <select
+                       value={editFormData.subItem}
+                       onChange={e => setEditFormData({ ...editFormData, subItem: e.target.value })}
+                       className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none cursor-pointer"
+                     >
+                       <option value="">Selecione o sub-item (opcional)...</option>
+                       {availableSubItemsForEdit.map((si, idx) => (
+                         <option key={idx} value={si}>{si}</option>
+                       ))}
+                     </select>
+                   ) : (
+                     <input
+                       type="text"
+                       placeholder="Ex: CORRETORES / DESPESAS"
+                       value={editFormData.subItem}
+                       onChange={e => setEditFormData({ ...editFormData, subItem: e.target.value.toUpperCase() })}
+                       className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs uppercase focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
+                     />
+                   )}
+                 </div>
+               </div>
+
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                 <div>
+                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                     Forma de Pagamento
+                   </label>
+                   <select
+                     value={editFormData.formaPagamento}
+                     onChange={e => setEditFormData({ ...editFormData, formaPagamento: e.target.value })}
+                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none cursor-pointer"
+                   >
+                     {['PIX', 'BOLETO', 'TRANSFERÊNCIA', 'TED', 'CARTÃO', 'DINHEIRO', 'CHEQUE'].map(f => (
+                       <option key={f} value={f}>{f}</option>
+                     ))}
+                   </select>
+                 </div>
+
+                 <div>
+                   <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                     Conta / Banco
+                   </label>
+                   <select
+                     value={editFormData.conta}
+                     onChange={e => setEditFormData({ ...editFormData, conta: e.target.value })}
+                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none cursor-pointer"
+                   >
+                     {availableAccounts.map(acc => (
+                       <option key={acc} value={acc}>{acc}</option>
+                     ))}
+                   </select>
+                 </div>
+               </div>
+
+               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
+                 <button
+                   type="button"
+                   onClick={() => setIsEditModalOpen(false)}
+                   className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                 >
+                   Cancelar
+                 </button>
+                 <button
+                   type="submit"
+                   className="px-5 py-2.5 rounded-xl bg-[#001a54] hover:bg-[#001138] text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-950/20 transition-all active:scale-95 cursor-pointer flex items-center gap-2"
+                 >
+                   <i className="fa-solid fa-check"></i>
+                   Salvar Alterações
+                 </button>
+               </div>
+             </form>
+           </div>
+         </div>
+       )}
     </div>
   );
 };

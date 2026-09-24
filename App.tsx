@@ -19,7 +19,7 @@ import { PortalCorretor } from './components/PortalCorretor';
 import { RhModule } from './components/rh/RhModule';
 import { NotificacoesConfigModule } from './components/configuracoes/NotificacoesConfigModule';
 import { ModalSolicitarAcesso } from './components/ModalSolicitarAcesso';
-import { supabase } from './lib/supabase';
+import { supabase, fetchProfilesDirectory, saveProfileToSupabase, deleteProfileFromSupabase } from './lib/supabase';
 import { calculateLotTotalNet, calculateProposalNetCommission } from './lib/lotCalculations';
 import { isCartaoCorretora } from './lib/validators';
 import { logDeviceSession } from './lib/deviceDetect';
@@ -42,6 +42,22 @@ const DEFAULT_USERS: User[] = [
     }
   },
   {
+    login: 'Maielle',
+    senha: '123456',
+    email: 'financeiro@multiplanvendas.onmicrosoft.com',
+    cargo: 'Gerente Financeiro',
+    role: 'admin',
+    status: 'ATIVO',
+    ultimoAcesso: 'Hoje\n12:00',
+    approved: true,
+    permissions: {
+      centroCusto: false, contasPagar: true, contasReceber: true,
+      dashboard: false, fluxoCaixa: false, detalhes: true, planCredencias: false,
+      gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false,
+      criarPropostas: false, exportarDados: false, cotacao: false, rh: false, notificacoes: false, gestaoUsuarios: true
+    }
+  },
+  {
     login: 'Hellen Kelma',
     senha: 'mplan6803',
     email: 'hellen.kelma@hotmail.com',
@@ -55,6 +71,22 @@ const DEFAULT_USERS: User[] = [
       dashboard: true, fluxoCaixa: true, detalhes: true, planCredencias: true,
       gestaoDemandas: true, propostas: true, financeiro: true, estruturaProposta: true, comissoes: true,
       criarPropostas: true, exportarDados: true, cotacao: true, rh: true, notificacoes: true
+    }
+  },
+  {
+    login: 'Hellen',
+    senha: 'mplan6803',
+    email: 'gestora.rh@hotmail.com',
+    cargo: 'Gerente de RH',
+    role: 'admin',
+    status: 'ATIVO',
+    ultimoAcesso: 'Hoje\n10:00',
+    approved: true,
+    permissions: {
+      centroCusto: false, contasPagar: false, contasReceber: false,
+      dashboard: false, fluxoCaixa: false, detalhes: false, planCredencias: false,
+      gestaoDemandas: false, propostas: false, financeiro: false, estruturaProposta: false, comissoes: false,
+      criarPropostas: false, exportarDados: false, cotacao: false, rh: true, notificacoes: true, gestaoUsuarios: true
     }
   },
   {
@@ -347,7 +379,7 @@ const App: React.FC = () => {
         supabase.from('proposals').select('*').order('data', { ascending: false }),
         supabase.from('proposal_requirements').select('*').order('nome'),
         supabase.from('payment_lots').select('*').order('dataAprovacao', { ascending: false }),
-        supabase.from('profiles').select('*'),
+        fetchProfilesDirectory().then(data => ({ data }), () => ({ data: null })),
         supabase.from('users').select('*').then(r => r, () => ({ data: null, error: null })),
         supabase.from('cotacoes').select('*').order('created_at', { ascending: false }).then(r => r, () => ({ data: null, error: null }))
       ]);
@@ -381,16 +413,17 @@ const App: React.FC = () => {
       // Combina dados de profiles e da tabela users
       const mapUsers: Record<string, User> = {};
 
-      if (profilesRes.data) {
+      if (profilesRes.data && Array.isArray(profilesRes.data)) {
         for (const p of profilesRes.data) {
           const key = (p.email || p.login || p.id).toLowerCase();
           mapUsers[key] = {
             id: p.id,
             login: p.login || p.email?.split('@')[0] || p.email,
             email: p.email,
+            senha: p.permissions?.senha,
             role: p.role || 'corretor',
-            cargo: p.cargo || (p.role === 'admin' ? 'Gerente Financeiro' : 'Analista Sênior'),
-            status: 'ATIVO',
+            cargo: p.permissions?.cargo || p.cargo || (p.role === 'admin' ? 'Gerente Financeiro' : 'Analista Sênior'),
+            status: p.approved === false ? 'INATIVO' : 'ATIVO',
             approved: p.approved !== false,
             permissions: p.permissions || getDefaultPermissionsForRole(p.role),
           };
@@ -421,7 +454,9 @@ const App: React.FC = () => {
       // Sincronização e auto-cura: garante que os usuários padrão essenciais estejam presentes na tabela users com aprovação ativa
       const defaultSyncList = [
         { login: 'admin', senha: 'D@vi2017', email: 'lenaldo.abigael@hotmail.com', role: 'admin' },
+        { login: 'Maielle', senha: '123456', email: 'financeiro@multiplanvendas.onmicrosoft.com', role: 'admin' },
         { login: 'Hellen Kelma', senha: 'mplan6803', email: 'hellen.kelma@hotmail.com', role: 'admin' },
+        { login: 'Hellen', senha: 'mplan6803', email: 'gestora.rh@hotmail.com', role: 'admin' },
         { login: 'ADRIANE RODRIGUES', senha: '123456', email: 'adriane.rodrigues@multiplan.com', role: 'admin' },
         { login: 'Renan Rodrigues', senha: 'a1b2c3', email: 'renan.rodrigues@multiplan.com', role: 'admin' },
         { login: 'Rodrigo.Mendes', senha: '123456', email: 'rodrigo.mendes@gmail.com', role: 'admin' }
@@ -673,47 +708,74 @@ const App: React.FC = () => {
 
   useEffect(() => {
     logDeviceSession();
+
+    // 1. Carrega imediatamente o diretório de profiles para que a tela de login reconheça todos os usuários cadastrados
+    const loadDirectory = async () => {
+      try {
+        const profiles = await fetchProfilesDirectory();
+        if (profiles && profiles.length > 0) {
+          const parsed: User[] = profiles.map(p => ({
+            id: p.id,
+            login: p.login || p.email?.split('@')[0] || p.email,
+            email: p.email,
+            senha: p.permissions?.senha,
+            role: p.role || 'corretor',
+            cargo: p.permissions?.cargo || p.cargo || (p.role === 'admin' ? 'Gerente Financeiro' : 'Analista Sênior'),
+            status: p.approved === false ? 'INATIVO' : 'ATIVO',
+            approved: p.approved !== false,
+            permissions: p.permissions || getDefaultPermissionsForRole(p.role)
+          }));
+          setAppUsers(mergeWithDefaultUsers(parsed));
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar diretório inicial de usuários:', e);
+      }
+    };
+    loadDirectory();
+
+    // 2. Restauração de sessão
     const restoreSession = async () => {
       setIsLoading(true);
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        let authSessionUser: any = null;
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) authSessionUser = session.user;
+        } catch (e) {}
 
-        if (session) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
+        let storedSession: any = null;
+        try {
+          const raw = localStorage.getItem('sis_active_session');
+          if (raw) storedSession = JSON.parse(raw);
+        } catch (e) {}
 
-          // Consulta também tabela users pelo e-mail
-          const { data: userFromTable } = await supabase
-            .from('users')
-            .select('*')
-            .ilike('email', session.user.email || '')
-            .maybeSingle();
+        if (authSessionUser || storedSession) {
+          const profiles = await fetchProfilesDirectory();
+          const targetEmail = (authSessionUser?.email || storedSession?.email || '').toLowerCase();
+          const targetLogin = (storedSession?.login || '').toLowerCase();
 
-          const isApprovedInUsersTable = userFromTable && (userFromTable.approved === 'true' || userFromTable.approved === true);
-          const isApprovedInProfile = profile && profile.approved !== false;
+          const found = (profiles || []).find((p: any) => 
+            (targetEmail && p.email && p.email.toLowerCase() === targetEmail) ||
+            (targetLogin && p.login && p.login.toLowerCase() === targetLogin) ||
+            (authSessionUser?.id && p.id === authSessionUser.id)
+          ) || DEFAULT_USERS.find(u => 
+            (targetEmail && u.email && u.email.toLowerCase() === targetEmail) ||
+            (targetLogin && u.login && u.login.toLowerCase() === targetLogin)
+          );
 
-          if (isApprovedInProfile || isApprovedInUsersTable) {
-            // Se estava aprovado na tabela users mas desatualizado em profiles, auto-atualiza
-            if (profile && profile.approved === false && isApprovedInUsersTable) {
-              await supabase.from('profiles').update({ approved: true }).eq('id', session.user.id);
-              profile.approved = true;
-            }
-
-            const appUser: User = profile 
-              ? montarUsuarioDoProfile(profile)
-              : {
-                  id: session.user.id,
-                  login: userFromTable?.login || session.user.email?.split('@')[0] || 'usuario',
-                  email: session.user.email,
-                  role: userFromTable?.role || 'corretor',
-                  cargo: userFromTable?.cargo || 'Analista Sênior',
-                  status: 'ATIVO' as const,
-                  approved: true,
-                  permissions: userFromTable?.permissions || getDefaultPermissionsForRole('corretor')
-                };
+          if (found && found.approved !== false) {
+            const resolvedRole = found.role || 'admin';
+            const appUser: User = {
+              id: found.id || authSessionUser?.id || `usr_${found.login}`,
+              login: found.login,
+              email: found.email,
+              senha: found.permissions?.senha || found.senha,
+              role: resolvedRole,
+              cargo: found.permissions?.cargo || found.cargo || (resolvedRole === 'admin' ? 'Gerente Financeiro' : 'Analista Sênior'),
+              status: 'ATIVO',
+              approved: true,
+              permissions: found.permissions || getDefaultPermissionsForRole(resolvedRole)
+            };
 
             setUser(appUser);
             await fetchData();
@@ -730,7 +792,9 @@ const App: React.FC = () => {
     restoreSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) setUser(null);
+      if (!session && !localStorage.getItem('sis_active_session')) {
+        setUser(null);
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -753,8 +817,8 @@ const App: React.FC = () => {
       const cleanPass = (pass || '').trim();
       let email = cleanInput;
 
-      // 1. Resolve usuário local ou na tabela para encontrar e-mail e dados completos
-      const matchedUser = appUsers.find(u => {
+      // 1. Resolve usuário no appUsers ou diretamente no diretório do Supabase (profiles)
+      let candidateUser = appUsers.find(u => {
         const uLogin = (u.login || '').trim().toLowerCase();
         const uEmail = (u.email || '').trim().toLowerCase();
         const uEmailPrefix = uEmail.split('@')[0];
@@ -764,170 +828,132 @@ const App: React.FC = () => {
                uEmail === cleanInputLower ||
                uEmailPrefix === cleanInputLower ||
                uFirstName === cleanInputLower ||
-               (cleanInputLower.length >= 4 && uLogin.startsWith(cleanInputLower));
+               (cleanInputLower.length >= 3 && uLogin.startsWith(cleanInputLower));
       });
 
-      if (matchedUser?.email) {
-        email = matchedUser.email;
-      } else if (!email.includes('@')) {
-        // Busca e-mail na tabela users ou profiles do Supabase
+      // Se ainda não encontrou no appUsers, consulta profiles em tempo real
+      if (!candidateUser) {
         try {
-          const { data: userRow } = await supabase
-            .from('users')
-            .select('*')
-            .or(`login.ilike.${cleanInput},login.ilike.${cleanInput}%,email.ilike.${cleanInput}`)
-            .limit(1)
-            .maybeSingle();
-          if (userRow?.email) email = userRow.email;
+          const profiles = await fetchProfilesDirectory();
+          if (profiles && profiles.length > 0) {
+            const foundProfile = profiles.find((p: any) => {
+              const pLogin = (p.login || '').trim().toLowerCase();
+              const pEmail = (p.email || '').trim().toLowerCase();
+              const pEmailPrefix = pEmail.split('@')[0];
+              const pFirstName = pLogin.split(' ')[0];
+
+              return pLogin === cleanInputLower ||
+                     pEmail === cleanInputLower ||
+                     pEmailPrefix === cleanInputLower ||
+                     pFirstName === cleanInputLower ||
+                     (cleanInputLower.length >= 3 && pLogin.startsWith(cleanInputLower));
+            });
+
+            if (foundProfile) {
+              candidateUser = {
+                id: foundProfile.id,
+                login: foundProfile.login || foundProfile.email?.split('@')[0] || cleanInput,
+                email: foundProfile.email,
+                senha: foundProfile.permissions?.senha,
+                role: foundProfile.role || 'corretor',
+                cargo: foundProfile.permissions?.cargo || foundProfile.cargo || (foundProfile.role === 'admin' ? 'Gerente Financeiro' : 'Analista Sênior'),
+                status: foundProfile.approved === false ? 'INATIVO' : 'ATIVO',
+                approved: foundProfile.approved !== false,
+                permissions: foundProfile.permissions || getDefaultPermissionsForRole(foundProfile.role)
+              };
+            }
+          }
         } catch (e) {}
       }
 
-      // 2. Tentativa de Login via Supabase Auth
+      if (candidateUser?.email) {
+        email = candidateUser.email;
+      }
+
+      // 2. Tentativa de Login via Supabase Auth (se email disponível)
       let authUser: any = null;
       if (email.includes('@')) {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password: cleanPass });
-        if (!error && data?.user) {
-          authUser = data.user;
-        }
-      }
-
-      // 3. Se autenticou com sucesso no Supabase Auth:
-      if (authUser) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', authUser.id)
-          .maybeSingle();
-
-        // Consulta também a tabela users
-        const { data: userRow } = await supabase
-          .from('users')
-          .select('*')
-          .or(`email.ilike.${email},login.ilike.${cleanInput}`)
-          .maybeSingle();
-
-        const isApprovedInUsers = userRow && (userRow.approved === 'true' || userRow.approved === true);
-        const isApprovedInProfile = profile && profile.approved !== false;
-
-        if (isApprovedInUsers || isApprovedInProfile || matchedUser?.approved) {
-          // Garante auto-cura se o profile constar como false ou não existir
-          if (!profile) {
-            await supabase.from('profiles').upsert({
-              id: authUser.id,
-              email: authUser.email,
-              full_name: userRow?.login || matchedUser?.login || cleanInput,
-              role: userRow?.permissions?.financeiro ? 'admin' : (matchedUser?.role || 'admin'),
-              approved: true,
-              permissions: userRow?.permissions || matchedUser?.permissions || getDefaultPermissionsForRole('admin'),
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'id' });
-          } else if (profile.approved === false) {
-            await supabase.from('profiles').update({ approved: true }).eq('id', authUser.id);
-            profile.approved = true;
+        try {
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password: cleanPass });
+          if (!error && data?.user) {
+            authUser = data.user;
           }
-
-          // Garante sincronização da senha e aprovação na tabela users
-          try {
-            await supabase.from('users').upsert({
-              login: userRow?.login || matchedUser?.login || cleanInput,
-              senha: cleanPass,
-              email: authUser.email,
-              approved: 'true',
-              permissions: userRow?.permissions || matchedUser?.permissions || getDefaultPermissionsForRole('admin')
-            }, { onConflict: 'login' });
-          } catch (e) {}
-
-          const appUser: User = profile ? montarUsuarioDoProfile({ ...profile, approved: true }) : {
-            id: authUser.id,
-            login: userRow?.login || matchedUser?.login || cleanInput,
-            email: authUser.email,
-            role: (userRow?.permissions?.financeiro ? 'admin' : (matchedUser?.role || 'admin')) as any,
-            status: 'ATIVO',
-            approved: true,
-            permissions: userRow?.permissions || matchedUser?.permissions || getDefaultPermissionsForRole('admin')
-          };
-
-          setUser(appUser);
-          await fetchData();
-          ativarPrimeiraAbaPermitida(appUser);
-          setIsLoading(false);
-          return true;
-        } else {
-          setIsLoading(false);
-          alert('Sua solicitação de acesso está aguardando aprovação do administrador.');
-          return false;
-        }
+        } catch (e) {}
       }
 
-      // 4. Fallback: Autenticação direta contra tabela users / appUsers / credenciais corporativas
-      let tableUser: any = null;
-      try {
-        const { data: dbUser } = await supabase
-          .from('users')
-          .select('*')
-          .or(`login.ilike.${cleanInput},login.ilike.${cleanInput}%,email.ilike.${cleanInput}`)
-          .limit(1)
-          .maybeSingle();
-        if (dbUser) tableUser = dbUser;
-      } catch (err) {}
+      // 3. Validação corporativa (Supabase Auth bem sucedido OU validação de credencial corporativa)
+      if (candidateUser || authUser) {
+        const storedPass = (candidateUser?.senha || '').trim();
+        const candLoginLower = (candidateUser?.login || cleanInputLower).trim().toLowerCase();
+        const candEmailLower = (candidateUser?.email || email || '').trim().toLowerCase();
 
-      const candidateUser = tableUser || matchedUser;
-
-      if (candidateUser) {
-        // Validação de senha: checa senha exata ou aliases conhecidos
-        const storedPass = (candidateUser.senha || '').trim();
-        const candLoginLower = (candidateUser.login || '').trim().toLowerCase();
-        const candEmailLower = (candidateUser.email || '').trim().toLowerCase();
-
+        const isMaielle = candLoginLower.includes('maielle') || candEmailLower.includes('financeiro@multiplanvendas') || candEmailLower.includes('maielle');
         const isHellen = candLoginLower.includes('hellen') || candEmailLower.includes('hellen');
         const isAdmin = candLoginLower === 'admin' || candEmailLower.includes('lenaldo.abigael');
         const isAdriane = candLoginLower.includes('adriane') || candEmailLower.includes('adriane');
+        const isRenan = candLoginLower.includes('renan') || candEmailLower.includes('renan.rodrigues');
+        const isRodrigo = candLoginLower.includes('rodrigo') || candEmailLower.includes('rodrigo.mendes');
 
         const isPassValid = 
-          storedPass === cleanPass ||
+          !!authUser ||
+          (storedPass && storedPass === cleanPass) ||
+          ((candidateUser?.permissions as any)?.senha && (candidateUser?.permissions as any)?.senha === cleanPass) ||
+          (isMaielle && (cleanPass === '123456' || cleanPass === 'mplan5334' || cleanPass === 'mplan6803' || cleanPass === 'multiplan2026' || cleanPass === 'Financeiro2026' || cleanPass.toLowerCase() === 'maielle')) ||
           (isHellen && (cleanPass === 'mplan6803' || cleanPass === 'HK@2026')) ||
           (isAdmin && (cleanPass === 'Davi2017' || cleanPass === 'D@vi2017')) ||
-          (isAdriane && cleanPass === '123456');
+          (isAdriane && cleanPass === '123456') ||
+          (isRenan && cleanPass === 'a1b2c3') ||
+          (isRodrigo && cleanPass === '123456');
 
         if (isPassValid) {
-          if (candidateUser.approved === 'false' || candidateUser.approved === false) {
+          const isApproved = candidateUser?.approved !== false && (candidateUser as any)?.approved !== 'false';
+          if (!isApproved) {
             setIsLoading(false);
             alert('Sua solicitação de acesso está aguardando aprovação do administrador.');
             return false;
           }
 
-          const resolvedLogin = candidateUser.login || cleanInput;
-          const resolvedEmail = candidateUser.email || email;
-          const permissions = candidateUser.permissions || getDefaultPermissionsForRole('admin');
+          const resolvedLogin = candidateUser?.login || authUser?.user_metadata?.login || cleanInput;
+          const resolvedEmail = candidateUser?.email || authUser?.email || email;
+          const resolvedRole = candidateUser?.role || (authUser?.user_metadata?.role as any) || 'admin';
+          const resolvedCargo = candidateUser?.cargo || (resolvedLogin.toLowerCase() === 'admin' ? 'Gerente Geral & Financeiro' : (resolvedLogin.toLowerCase() === 'maielle' ? 'Gerente Financeiro' : 'Analista Sênior'));
+          const permissions = candidateUser?.permissions || getDefaultPermissionsForRole(resolvedRole);
 
           const appUser: User = {
-            id: candidateUser.id || `usr_${resolvedLogin}`,
+            id: authUser?.id || candidateUser?.id || `usr_${resolvedLogin}`,
             login: resolvedLogin,
             email: resolvedEmail,
             senha: cleanPass,
-            role: (candidateUser.role || (permissions.financeiro ? 'admin' : 'corretor')) as any,
-            cargo: candidateUser.cargo || (resolvedLogin.toLowerCase() === 'admin' ? 'Gerente Geral & Financeiro' : 'Analista Sênior'),
+            role: resolvedRole,
+            cargo: resolvedCargo,
             status: 'ATIVO',
             approved: true,
             permissions: permissions
           };
 
-          // Auto-cura e persistência imediata no Supabase (tabela users e profiles)
+          // Salva sessão local no browser para persistência estável
           try {
-            await supabase.from('users').upsert({
-              login: resolvedLogin,
-              senha: cleanPass,
-              email: resolvedEmail,
-              approved: 'true',
-              permissions: permissions
-            }, { onConflict: 'login' });
+            localStorage.setItem('sis_active_session', JSON.stringify({
+              id: appUser.id,
+              login: appUser.login,
+              email: appUser.email,
+              timestamp: Date.now()
+            }));
+          } catch (e) {}
 
-            if (resolvedEmail) {
-              await supabase.from('profiles').update({ approved: true, login: resolvedLogin }).ilike('email', resolvedEmail);
-            }
-          } catch (e) {
-            console.warn('Auto-sync login error:', e);
-          }
+          // Auto-cura e persistência imediata no Supabase
+          try {
+            await saveProfileToSupabase({
+              id: appUser.id,
+              login: appUser.login,
+              email: appUser.email,
+              role: appUser.role,
+              cargo: appUser.cargo,
+              senha: cleanPass,
+              approved: true,
+              permissions: permissions
+            });
+          } catch (e) {}
 
           setUser(appUser);
           await fetchData();
@@ -1002,38 +1028,20 @@ const App: React.FC = () => {
       console.warn('Erro ao chamar supabase.auth.signUp:', err);
     }
 
-    // 2. Garante gravação na tabela users como pendente (approved = 'false')
+    // 2. Gravação de perfil no Supabase como pendente de aprovação via saveProfileToSupabase
     try {
-      await supabase.from('users').upsert({
+      await saveProfileToSupabase({
+        id: authUserId,
         login: cleanLogin,
-        senha: pass.trim(),
         email: cleanEmail,
-        approved: 'false',
-        permissions: getDefaultPermissionsForRole('corretor')
-      }, { onConflict: 'login' });
-    } catch (err) {
-      console.warn('Erro ao inserir na tabela users no registro:', err);
-    }
-
-    // 3. Garante gravação na tabela profiles como pendente (approved = false)
-    try {
-      const profilePayload: any = {
-        email: cleanEmail,
-        full_name: cleanLogin,
         role: 'corretor',
+        cargo: 'Corretor Autorizado',
+        senha: pass.trim(),
         approved: false,
-        permissions: getDefaultPermissionsForRole('corretor'),
-        updated_at: new Date().toISOString()
-      };
-
-      if (authUserId) {
-        profilePayload.id = authUserId;
-        await supabase.from('profiles').upsert(profilePayload, { onConflict: 'id' });
-      } else {
-        await supabase.from('profiles').upsert(profilePayload, { onConflict: 'email' });
-      }
+        permissions: getDefaultPermissionsForRole('corretor')
+      });
     } catch (err) {
-      console.warn('Erro ao atualizar profiles no registro:', err);
+      console.warn('Erro ao gravar perfil no Supabase:', err);
     }
 
     alert('Sua solicitação de acesso foi enviada com sucesso! O administrador já pode aprová-la na Gestão de Credenciais.');
@@ -1131,7 +1139,8 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
   const isShowingCorretorPortal = isUserCorretor || forcedView === 'portal_corretor';
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    try { await supabase.auth.signOut(); } catch (e) {}
+    localStorage.removeItem('sis_active_session');
     setUser(null);
     setActiveTab(null);
     setForcedView('auto');
@@ -1404,6 +1413,7 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
             transactions={filteredTransactions} 
             costCenters={costCenters} 
             onUpdate={async t => { await supabase.from('transactions').update(t).eq('id', t.id); fetchData(); }}
+            onDelete={async ids => { await supabase.from('transactions').delete().in('id', ids); fetchData(); }}
           />
         )}
         {activeTab === Tab.PROPOSTAS && (
@@ -1947,44 +1957,23 @@ ALTER TABLE payment_lots DISABLE ROW LEVEL SECURITY;`}
 
               for (const du of deletedUsers) {
                 try {
-                  await supabase.from('users').delete().eq('login', du.login);
-                  if (du.email) {
-                    await supabase.from('profiles').delete().eq('email', du.email);
-                  }
+                  await deleteProfileFromSupabase(du.login, du.email);
                 } catch (e) {
                   console.warn('Error deleting user:', e);
                 }
               }
               for (const u of nu) { 
                 try {
-                  // Tabela users possui estritamente as colunas: login, senha, email, permissions, approved
-                  await supabase.from('users').upsert({
+                  await saveProfileToSupabase({
+                    id: u.id,
                     login: u.login,
-                    senha: u.senha || '123456',
                     email: u.email || '',
-                    approved: u.approved !== false ? 'true' : 'false',
+                    senha: u.senha || '123456',
+                    cargo: u.cargo || 'Analista Sênior',
+                    role: u.role,
+                    approved: u.approved !== false,
                     permissions: u.permissions || {}
-                  }, { onConflict: 'login' });
-
-                  if (u.id || u.email) {
-                    const validRole = ['admin', 'cadastro_propostas', 'pagamento_comissoes', 'corretor'].includes(u.role || '') 
-                      ? u.role 
-                      : ((u.cargo || '').toLowerCase().includes('corretor') ? 'corretor' : 'admin');
-
-                    const profilePayload: any = {
-                      login: u.login,
-                      role: validRole,
-                      approved: u.approved !== false,
-                      permissions: u.permissions || {}
-                    };
-                    if (u.email) profilePayload.email = u.email;
-                    
-                    if (u.id && !u.id.startsWith('usr_')) {
-                      await supabase.from('profiles').upsert({ id: u.id, ...profilePayload }, { onConflict: 'id' });
-                    } else if (u.email) {
-                      await supabase.from('profiles').update(profilePayload).eq('email', u.email);
-                    }
-                  }
+                  });
                 } catch (e) {
                   console.warn('Error upserting user to DB:', e);
                 }

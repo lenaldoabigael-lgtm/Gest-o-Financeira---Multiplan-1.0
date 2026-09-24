@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Transaction, TransactionType, Status, CostCenter } from '../types';
+import { CONTAS_BANCO } from '../constants';
 
 interface TransactionTableProps {
   type: TransactionType;
@@ -31,6 +32,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('TODOS');
   const [filterPeriod, setFilterPeriod] = useState<string>('TODOS');
   const [filterCentroCusto, setFilterCentroCusto] = useState<string>('TODOS');
+  const [filterConta, setFilterConta] = useState<string>('TODOS');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Sorting
@@ -65,7 +67,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
     centroCusto: '',
     subItem: '',
     status: 'PENDENTE' as Status,
-    conta: 'GERAL',
+    conta: CONTAS_BANCO[0],
     comprovanteUrl: ''
   });
 
@@ -84,14 +86,19 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
     conta: string;
     status: Status;
   }>>([
-    { id: '1', vencimento: new Date().toISOString().split('T')[0], descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: 'GERAL', status: 'PENDENTE' },
-    { id: '2', vencimento: new Date().toISOString().split('T')[0], descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: 'GERAL', status: 'PENDENTE' },
-    { id: '3', vencimento: new Date().toISOString().split('T')[0], descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: 'GERAL', status: 'PENDENTE' },
+    { id: '1', vencimento: new Date().toISOString().split('T')[0], descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: CONTAS_BANCO[0], status: 'PENDENTE' },
+    { id: '2', vencimento: new Date().toISOString().split('T')[0], descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: CONTAS_BANCO[0], status: 'PENDENTE' },
+    { id: '3', vencimento: new Date().toISOString().split('T')[0], descricao: '', valor: '', formaPagamento: 'PIX', centroCusto: '', subItem: '', conta: CONTAS_BANCO[0], status: 'PENDENTE' },
   ]);
 
   const availableCostCenters = useMemo(() => {
     return costCenters.filter(cc => cc.tipo === (type === 'RECEBER' ? 'RECEITA' : 'DESPESA'));
   }, [costCenters, type]);
+
+  const availableAccounts = useMemo(() => {
+    const fromTx = transactions.map(t => t.conta).filter(Boolean) as string[];
+    return Array.from(new Set([...CONTAS_BANCO, ...fromTx])).filter(Boolean);
+  }, [transactions]);
 
   const availableSubItems = useMemo(() => {
     return availableCostCenters.find(cc => cc.nome === formData.centroCusto)?.subItens || [];
@@ -152,9 +159,14 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
         if (t.centroCusto !== filterCentroCusto) return false;
       }
 
+      // Conta / Banco filter
+      if (filterConta !== 'TODOS') {
+        if ((t.conta || '') !== filterConta) return false;
+      }
+
       return true;
     });
-  }, [transactions, searchTerm, filterStatus, filterPeriod, filterCentroCusto, todayStr]);
+  }, [transactions, searchTerm, filterStatus, filterPeriod, filterCentroCusto, filterConta, todayStr]);
 
   const sortedTransactions = useMemo(() => {
     return [...filteredTransactions].sort((a, b) => {
@@ -200,6 +212,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
     setFilterStatus('TODOS');
     setFilterPeriod('TODOS');
     setFilterCentroCusto('TODOS');
+    setFilterConta('TODOS');
     setSearchTerm('');
     setCurrentPage(1);
   };
@@ -246,7 +259,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
       centroCusto: '',
       subItem: '',
       status: 'PENDENTE',
-      conta: 'GERAL',
+      conta: CONTAS_BANCO[0] || 'Caixa econômica 26.200',
       comprovanteUrl: ''
     });
     setIsRecurring(false);
@@ -266,7 +279,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
       centroCusto: t.centroCusto,
       subItem: t.subItem || '',
       status: t.status,
-      conta: t.conta || 'GERAL',
+      conta: t.conta || CONTAS_BANCO[0] || 'Caixa econômica 26.200',
       comprovanteUrl: t.cliente || ''
     });
     setIsRecurring(false);
@@ -320,7 +333,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
           status: i === 0 ? formData.status : 'PENDENTE',
           centroCusto: formData.centroCusto || 'OUTROS',
           subItem: formData.subItem || '',
-          conta: formData.conta || 'GERAL',
+          conta: formData.conta || CONTAS_BANCO[0],
           cliente: formData.comprovanteUrl || ''
         });
       }
@@ -342,7 +355,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
         status: formData.status,
         centroCusto: formData.centroCusto || 'OUTROS',
         subItem: formData.subItem || '',
-        conta: formData.conta || 'GERAL',
+        conta: formData.conta || CONTAS_BANCO[0],
         cliente: formData.comprovanteUrl || ''
       };
 
@@ -373,7 +386,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
       status: r.status || 'PENDENTE',
       centroCusto: r.centroCusto || 'OUTROS',
       subItem: r.subItem || '',
-      conta: r.conta || 'GERAL'
+      conta: r.conta || CONTAS_BANCO[0]
     }));
 
     if (onBulkAdd) {
@@ -708,6 +721,22 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
             </select>
           </div>
 
+          {/* Conta / Banco Dropdown */}
+          <div className="flex items-center gap-1.5">
+            <select
+              value={filterConta}
+              onChange={e => handleFilterChange(setFilterConta, e.target.value)}
+              className="bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] transition-all cursor-pointer max-w-[200px] truncate"
+            >
+              <option value="TODOS">Conta: Todas</option>
+              {availableAccounts.map(c => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Search box inline */}
           <div className="relative">
             <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[16px]">
@@ -731,7 +760,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
           </div>
 
           {/* Limpar Filtros */}
-          {(filterStatus !== 'TODOS' || filterPeriod !== 'TODOS' || filterCentroCusto !== 'TODOS' || searchTerm) && (
+          {(filterStatus !== 'TODOS' || filterPeriod !== 'TODOS' || filterCentroCusto !== 'TODOS' || filterConta !== 'TODOS' || searchTerm) && (
             <button
               onClick={handleClearFilters}
               className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline transition-all cursor-pointer"
@@ -896,18 +925,26 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
 
                       {/* Descrição */}
                       <td className="py-3.5 px-4 font-bold text-slate-800 tracking-tight">
-                        <div className="flex items-center gap-2">
-                          <span className="uppercase">{t.descricao}</span>
-                          {t.cliente && (
-                            <a
-                              href={t.cliente}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-500 hover:text-blue-700"
-                              title="Ver anexo / comprovante"
-                            >
-                              <span className="material-symbols-outlined text-[14px]">link</span>
-                            </a>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="uppercase">{t.descricao}</span>
+                            {t.cliente && (
+                              <a
+                                href={t.cliente}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:text-blue-700"
+                                title="Ver anexo / comprovante"
+                              >
+                                <span className="material-symbols-outlined text-[14px]">link</span>
+                              </a>
+                            )}
+                          </div>
+                          {t.conta && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400">
+                              <i className="fa-solid fa-building-columns text-[9px]"></i>
+                              <span>{t.conta}</span>
+                            </span>
                           )}
                         </div>
                       </td>
@@ -1237,11 +1274,14 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                     onChange={e => setFormData({ ...formData, conta: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#001a54]/20 focus:border-[#001a54] outline-none"
                   >
-                    <option value="GERAL">GERAL / CAIXA</option>
-                    <option value="INTER">BANCO INTER</option>
-                    <option value="BRADESCO">BRADESCO</option>
-                    <option value="CAIXA">CAIXA ECONÔMICA</option>
-                    <option value="INFINIT">INFINIT</option>
+                    {availableAccounts.map(c => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                    {formData.conta && !availableAccounts.includes(formData.conta) && (
+                      <option value={formData.conta}>{formData.conta}</option>
+                    )}
                   </select>
                 </div>
               </div>
